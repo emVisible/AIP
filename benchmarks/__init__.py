@@ -1,0 +1,1 @@
+"""AIP cost benchmark (SPEC App. E). Run from repo root: python3 -m benchmarks.run"""

@@ -1,0 +1,61 @@
+{
+  "group": "S",
+  "name": "Sequence & ordering (per-stream)",
+  "tests": [
+    {
+      "id": "S1",
+      "kind": "behavior",
+      "description": "Per-stream (session, source) sequences are accepted in order.",
+      "steps": [
+        { "send": { "v": 1, "type": "event", "id": "evt_101", "session": "s_conformance", "seq": 1, "source": "rpa_001", "payload": { "name": "task.started" } } },
+        { "send": { "v": 1, "type": "event", "id": "evt_102", "session": "s_conformance", "seq": 2, "source": "rpa_001", "payload": { "name": "button.appeared", "data": { "id": "confirm" } } } }
+      ],
+      "expect": { "applied": 2, "errors": [] }
+    },
+    {
+      "id": "S2",
+      "kind": "behavior",
+      "description": "A duplicate message (same id + seq) is ignored and must not cause a second execution (I2).",
+      "steps": [
+        { "send": { "v": 1, "type": "action", "id": "act_201", "session": "s_conformance", "seq": 1, "source": "agent_001", "payload": { "name": "browser.click", "target": "confirm" } } },
+        { "send": { "v": 1, "type": "action", "id": "act_201", "session": "s_conformance", "seq": 1, "source": "agent_001", "payload": { "name": "browser.click", "target": "confirm" } } }
+      ],
+      "expect": { "applied": 1, "executions": 1, "outcome": "duplicate_ignored" }
+    },
+    {
+      "id": "S3",
+      "kind": "behavior",
+      "description": "A stale sequence is SEQ_OUT_OF_ORDER (or DUPLICATE_MESSAGE when that id was already applied).",
+      "steps": [
+        { "send": { "v": 1, "type": "event", "id": "evt_301", "session": "s_conformance", "seq": 2, "source": "rpa_001", "payload": { "name": "page.changed", "data": { "page": "payment" } } } },
+        { "send": { "v": 1, "type": "event", "id": "evt_302", "session": "s_conformance", "seq": 1, "source": "rpa_001", "payload": { "name": "page.changed", "data": { "page": "checkout" } } } }
+      ],
+      "expect": { "applied": 1, "errors": ["SEQ_OUT_OF_ORDER"] }
+    },
+    {
+      "id": "S4",
+      "kind": "behavior",
+      "description": "A sequence gap is SEQ_OUT_OF_ORDER; the receiver must not buffer silently.",
+      "steps": [
+        { "send": { "v": 1, "type": "event", "id": "evt_401", "session": "s_conformance", "seq": 1, "source": "rpa_001", "payload": { "name": "task.started" } } },
+        { "send": { "v": 1, "type": "event", "id": "evt_402", "session": "s_conformance", "seq": 3, "source": "rpa_001", "payload": { "name": "button.appeared", "data": { "id": "confirm" } } } }
+      ],
+      "expect": { "applied": 1, "errors": ["SEQ_OUT_OF_ORDER"], "buffering": false }
+    },
+    {
+      "id": "S5",
+      "kind": "behavior",
+      "description": "Two senders in one session keep independent sequences; no global sequence exists (I7).",
+      "steps": [
+        { "send": { "v": 1, "type": "event", "id": "evt_501", "session": "s_conformance", "seq": 1, "source": "rpa_001", "payload": { "name": "task.started" } } },
+        { "send": { "v": 1, "type": "action", "id": "act_501", "session": "s_conformance", "seq": 1, "source": "agent_001", "payload": { "name": "browser.click", "target": "confirm" } } },
+        { "send": { "v": 1, "type": "result", "id": "res_501", "in_reply_to": "act_501", "session": "s_conformance", "seq": 2, "source": "rpa_001", "payload": { "status": "ok" } } },
+        { "send": { "v": 1, "type": "action", "id": "act_502", "session": "s_conformance", "seq": 2, "source": "agent_001", "payload": { "name": "browser.navigate", "params": { "url": "https://example.com/order" } } } }
+      ],
+      "expect": {
+        "applied": { "rpa_001": 2, "agent_001": 2 },
+        "errors": []
+      }
+    }
+  ]
+}

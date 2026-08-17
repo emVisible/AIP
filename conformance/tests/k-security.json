@@ -1,0 +1,56 @@
+{
+  "group": "K",
+  "name": "Security & invariants",
+  "tests": [
+    {
+      "id": "K1",
+      "kind": "behavior",
+      "description": "A source not matching the authenticated principal is rejected (I9, SPEC §8.4).",
+      "setup": { "side": "executor" },
+      "scenario": "The connection authenticates as principal rpa_001. A message arrives with source: \"rpa_007\". The harness MUST reject it (auth failure), never process it, and log the rejection to audit.",
+      "steps": [
+        { "send": { "v": 1, "type": "event", "id": "evt_k1", "session": "s_conformance", "seq": 1, "ts": 1, "source": "rpa_007", "payload": { "name": "task.started" } } }
+      ],
+      "expect": { "outcome": "rejected", "applied": 0 }
+    },
+    {
+      "id": "K2",
+      "kind": "behavior",
+      "description": "Messages on an expired session are answered with SESSION_EXPIRED (SPEC §4.6).",
+      "setup": { "expire_session": true },
+      "scenario": "A message arrives for a session whose TTL has passed and that has not been resumed. The harness MUST reply with an error message carrying code SESSION_EXPIRED and must not execute anything.",
+      "steps": [
+        { "send": { "v": 1, "type": "event", "id": "evt_k2", "session": "s_conformance", "seq": 1, "ts": 1, "source": "rpa_001", "payload": { "name": "task.started" } } }
+      ],
+      "expect": { "error": "SESSION_EXPIRED" }
+    },
+    {
+      "id": "K3",
+      "kind": "behavior",
+      "description": "Credential-like content in ordinary payloads is rejected (I10, SPEC §8.1).",
+      "scenario": "Send an event whose data contains patterns such as \"Bearer <token>\", \"password=...\", \"Authorization: ...\", or an api_key field. The harness MUST NOT forward such payloads to the decision engine; it rejects the message and logs a security event. (Bootstrap credentials via the application-level secure mechanism are the only exception.)",
+      "steps": [
+        { "send": { "v": 1, "type": "event", "id": "evt_k3", "session": "s_conformance", "seq": 1, "ts": 1, "source": "rpa_001", "payload": { "name": "session.debug", "data": { "password": "hunter2", "note": "do not forward" } } } }
+      ],
+      "expect": { "outcome": "rejected", "invariant": "I10", "patterns": ["Bearer ", "password=", "Authorization:", "api_key"] }
+    },
+    {
+      "id": "K4",
+      "kind": "behavior",
+      "description": "A policy violation yields a terminal rejected result, never execution (SPEC §8.3, §9.4).",
+      "setup": { "policy": { "require_approval": ["erp.order.approve"] } },
+      "scenario": "Policy max_risk = L2 and require_approval = [\"erp.order.approve\"]. The decision engine sends erp.order.approve without approval. The gateway MUST respond with a terminal result status=rejected and MUST NOT forward to the executor.",
+      "steps": [
+        { "send": { "v": 1, "type": "action", "id": "act_k4", "session": "s_conformance", "seq": 1, "ts": 1, "source": "agent_001", "payload": { "name": "erp.order.approve", "target": "order_1" } } }
+      ],
+      "expect": { "outcome": "rejected", "executions": 0, "status": "rejected" }
+    },
+    {
+      "id": "K5",
+      "kind": "behavior",
+      "description": "Timestamps must never establish ordering (I8, SPEC §5.5).",
+      "scenario": "Send two events on the same stream where the second has an EARLIER ts than the first but a HIGHER seq. The harness MUST apply them in seq order. A harness that reorders by ts fails conformance.",
+      "expect": { "applied_order": ["seq1", "seq2"], "invariant": "I8" }
+    }
+  ]
+}

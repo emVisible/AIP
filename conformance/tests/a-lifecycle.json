@@ -1,0 +1,78 @@
+{
+  "group": "A",
+  "name": "Action lifecycle & idempotency",
+  "tests": [
+    {
+      "id": "A1",
+      "kind": "behavior",
+      "description": "accepted -> running -> ok is a valid lifecycle for a long-running action (SPEC §6.2).",
+      "steps": [
+        { "send": { "v": 1, "type": "action", "id": "act_101", "session": "s_conformance", "seq": 1, "ts": 1, "source": "agent_001", "payload": { "name": "browser.navigate", "params": { "url": "https://example.com/order" } } } },
+        { "send": { "v": 1, "type": "result", "id": "res_101", "in_reply_to": "act_101", "session": "s_conformance", "seq": 1, "ts": 1, "source": "rpa_001", "payload": { "status": "accepted" } } },
+        { "send": { "v": 1, "type": "result", "id": "res_102", "in_reply_to": "act_101", "session": "s_conformance", "seq": 2, "ts": 1, "source": "rpa_001", "payload": { "status": "running" } } },
+        { "send": { "v": 1, "type": "result", "id": "res_103", "in_reply_to": "act_101", "session": "s_conformance", "seq": 3, "ts": 1, "source": "rpa_001", "payload": { "status": "ok", "data": { "page": "order" } } } }
+      ],
+      "expect": { "final_state": "SUCCESS", "outcome": "ok" }
+    },
+    {
+      "id": "A2",
+      "kind": "behavior",
+      "description": "A terminal result must not be followed by further results for the same action (I6).",
+      "steps": [
+        { "send": { "v": 1, "type": "action", "id": "act_201", "session": "s_conformance", "seq": 1, "source": "agent_001", "payload": { "name": "browser.click", "target": "confirm" } } },
+        { "send": { "v": 1, "type": "result", "id": "res_201", "in_reply_to": "act_201", "session": "s_conformance", "seq": 1, "source": "rpa_001", "payload": { "status": "ok" } } },
+        { "send": { "v": 1, "type": "result", "id": "res_202", "in_reply_to": "act_201", "session": "s_conformance", "seq": 2, "source": "rpa_001", "payload": { "status": "running" } } }
+      ],
+      "expect": { "outcome": "rejected", "invariant": "I6" }
+    },
+    {
+      "id": "A3",
+      "kind": "behavior",
+      "description": "A duplicate action id returns the previously recorded terminal outcome (SPEC §6.3-3).",
+      "steps": [
+        { "send": { "v": 1, "type": "action", "id": "act_301", "session": "s_conformance", "seq": 1, "source": "agent_001", "payload": { "name": "erp.order.approve", "target": "order_1" } } },
+        { "send": { "v": 1, "type": "result", "id": "res_301", "in_reply_to": "act_301", "session": "s_conformance", "seq": 1, "source": "rpa_001", "payload": { "status": "ok" } } },
+        { "send": { "v": 1, "type": "action", "id": "act_301", "session": "s_conformance", "seq": 2, "source": "agent_001", "payload": { "name": "erp.order.approve", "target": "order_1" } } }
+      ],
+      "expect": {
+        "executions": 1,
+        "duplicate_reply": { "status": "ok", "duplicate": true, "original_result_id": "res_301" }
+      }
+    },
+    {
+      "id": "A4",
+      "kind": "behavior",
+      "description": "Duplicate action id for an idempotency:none action still must not cause a second execution (I2).",
+      "steps": [
+        { "send": { "v": 1, "type": "action", "id": "act_401", "session": "s_conformance", "seq": 1, "source": "agent_001", "payload": { "name": "browser.click", "target": "confirm" } } },
+        { "send": { "v": 1, "type": "result", "id": "res_401", "in_reply_to": "act_401", "session": "s_conformance", "seq": 1, "source": "rpa_001", "payload": { "status": "ok" } } },
+        { "send": { "v": 1, "type": "action", "id": "act_401", "session": "s_conformance", "seq": 2, "source": "agent_001", "payload": { "name": "browser.click", "target": "confirm" } } }
+      ],
+      "expect": { "executions": 1, "duplicate_reply": { "status": "ok", "duplicate": true, "original_result_id": "res_401" } }
+    },
+    {
+      "id": "A5",
+      "kind": "behavior",
+      "description": "Timeout for idempotency:none must not retry once execution may have started (SPEC §6.5).",
+      "scenario": "agent sends browser.click (idempotency:none per registry). Executor replies accepted, then no terminal result arrives within the timeout window. The gateway MUST NOT retry; it marks the action TIMEOUT.",
+      "steps": [
+        { "send": { "v": 1, "type": "action", "id": "act_501", "session": "s_conformance", "seq": 1, "ts": 1, "source": "agent_001", "payload": { "name": "browser.click", "target": "confirm" } } },
+        { "send": { "v": 1, "type": "result", "id": "res_501", "in_reply_to": "act_501", "session": "s_conformance", "seq": 1, "ts": 1, "source": "rpa_001", "payload": { "status": "accepted" } } },
+        { "fault": "advance", "ms": 6000 }
+      ],
+      "expect": { "retries": 0, "final_state": "TIMEOUT", "executions": 1 }
+    },
+    {
+      "id": "A6",
+      "kind": "behavior",
+      "description": "Retry of idempotency:required reuses the same action id (SPEC §6.5).",
+      "scenario": "agent sends erp.order.set_status (idempotency:required, retries:1 per registry). No result arrives within the timeout window. Gateway retries with the SAME action id; on the second timeout it gives up.",
+      "steps": [
+        { "send": { "v": 1, "type": "action", "id": "act_601", "session": "s_conformance", "seq": 1, "ts": 1, "source": "agent_001", "payload": { "name": "erp.order.set_status", "params": { "status": "approved" } } } },
+        { "fault": "advance", "ms": 6000 },
+        { "fault": "advance", "ms": 6000 }
+      ],
+      "expect": { "retries": 1, "ids_used": ["act_601", "act_601"], "final_state": "TIMEOUT" }
+    }
+  ]
+}

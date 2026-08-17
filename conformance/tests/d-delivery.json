@@ -1,0 +1,73 @@
+{
+  "group": "D",
+  "name": "Delivery, cursors & resume",
+  "tests": [
+    {
+      "id": "D1",
+      "kind": "behavior",
+      "description": "The binding-level hello handshake carries per-stream cursors (SPEC §7.4).",
+      "scenario": "On (re)connect, each peer sends a binding-level hello: {\"hello\": {\"session\": \"s_001\", \"cursors\": {\"rpa_001\": 102, \"agent_001\": 51}}}. The harness MUST accept per-stream cursors and not require a single global number.",
+      "steps": [
+        { "send": { "v": 1, "type": "event", "id": "evt_d1a", "session": "s_conformance", "seq": 1, "ts": 1, "source": "rpa_001", "payload": { "name": "task.started" } } },
+        { "send": { "v": 1, "type": "event", "id": "evt_d1b", "session": "s_conformance", "seq": 2, "ts": 1, "source": "rpa_001", "payload": { "name": "button.appeared", "data": { "id": "confirm" } } } },
+        { "send": { "v": 1, "type": "action", "id": "act_d1", "session": "s_conformance", "seq": 1, "ts": 1, "source": "agent_001", "payload": { "name": "browser.click", "target": "confirm" } } }
+      ],
+      "expect": { "cursors_accepted": { "rpa_001": 2, "agent_001": 1 } }
+    },
+    {
+      "id": "D2",
+      "kind": "behavior",
+      "description": "Resume re-sends from cursor + 1, keeping original id and seq (SPEC §7.4).",
+      "scenario": "The decision engine applied rpa_001 up to seq 3 and reports cursor 3 in hello. The gateway MUST re-deliver only seqs 4 and 5, with their ORIGINAL ids and seqs. Messages 1-3 must not be re-sent.",
+      "steps": [
+        { "send": { "v": 1, "type": "event", "id": "evt_d2a", "session": "s_conformance", "seq": 1, "ts": 1, "source": "rpa_001", "payload": { "name": "task.started" } } },
+        { "send": { "v": 1, "type": "event", "id": "evt_d2b", "session": "s_conformance", "seq": 2, "ts": 1, "source": "rpa_001", "payload": { "name": "button.appeared", "data": { "id": "confirm" } } } },
+        { "send": { "v": 1, "type": "event", "id": "evt_d2c", "session": "s_conformance", "seq": 3, "ts": 1, "source": "rpa_001", "payload": { "name": "page.changed", "data": { "page": "checkout" } } } },
+        { "send": { "v": 1, "type": "event", "id": "evt_d2d", "session": "s_conformance", "seq": 4, "ts": 1, "source": "rpa_001", "payload": { "name": "page.changed", "data": { "page": "payment" } } } },
+        { "send": { "v": 1, "type": "event", "id": "evt_d2e", "session": "s_conformance", "seq": 5, "ts": 1, "source": "rpa_001", "payload": { "name": "order.requires_review", "data": { "context": "ctx_1" } } } },
+        { "fault": "reconnect", "side": "agent", "cursors": { "rpa_001": 3 } }
+      ],
+      "expect": { "resumed": [4, 5], "ids_preserved": true }
+    },
+    {
+      "id": "D3",
+      "kind": "behavior",
+      "description": "After resume, settled actions return stored outcomes, never re-execution (SPEC §7.4, §6.3).",
+      "scenario": "Before the drop, act_020 was executed and its terminal result recorded by the executor but the decision engine never applied it. After resume, the decision engine re-sends act_020 (same id and seq). The executor MUST return the stored terminal outcome with duplicate:true and original_result_id, and MUST NOT execute again.",
+      "steps": [
+        { "send": { "v": 1, "type": "action", "id": "act_020", "session": "s_conformance", "seq": 1, "ts": 1, "source": "agent_001", "payload": { "name": "erp.order.approve", "target": "order_1" } } },
+        { "send": { "v": 1, "type": "result", "id": "res_020", "in_reply_to": "act_020", "session": "s_conformance", "seq": 1, "ts": 1, "source": "rpa_001", "payload": { "status": "ok" } } },
+        { "fault": "disconnect", "side": "agent" },
+        { "fault": "reconnect", "side": "agent" },
+        { "send": { "v": 1, "type": "action", "id": "act_020", "session": "s_conformance", "seq": 1, "ts": 1, "source": "agent_001", "payload": { "name": "erp.order.approve", "target": "order_1" } } }
+      ],
+      "expect": { "executions": 1, "duplicate_reply": { "status": "ok", "duplicate": true, "original_result_id": "res_020" } }
+    },
+    {
+      "id": "D4",
+      "kind": "behavior",
+      "description": "Heartbeat does not advance application sequence (SPEC §7.3).",
+      "scenario": "Send ping/pong frames between application messages. The harness MUST NOT assign or consume application seq numbers for ping/pong.",
+      "steps": [
+        { "fault": "ping" },
+        { "send": { "v": 1, "type": "event", "id": "evt_d4a", "session": "s_conformance", "seq": 1, "ts": 1, "source": "rpa_001", "payload": { "name": "task.started" } } },
+        { "fault": "ping" },
+        { "send": { "v": 1, "type": "event", "id": "evt_d4b", "session": "s_conformance", "seq": 2, "ts": 1, "source": "rpa_001", "payload": { "name": "button.appeared", "data": { "id": "confirm" } } } }
+      ],
+      "expect": { "seq_advanced_by_heartbeat": false, "applied": 2 }
+    },
+    {
+      "id": "D5",
+      "kind": "behavior",
+      "description": "A connection drop mid-action does not change execution state (I3).",
+      "scenario": "action act_090 is ACCEPTED, executor is RUNNING. Connection drops. On resume, action state must still be ACCEPTED (not reset to PENDING, not lost), and the flow continues.",
+      "steps": [
+        { "send": { "v": 1, "type": "action", "id": "act_090", "session": "s_conformance", "seq": 1, "ts": 1, "source": "agent_001", "payload": { "name": "browser.click", "target": "confirm" } } },
+        { "send": { "v": 1, "type": "result", "id": "res_090", "in_reply_to": "act_090", "session": "s_conformance", "seq": 1, "ts": 1, "source": "rpa_001", "payload": { "status": "accepted" } } },
+        { "fault": "disconnect", "side": "executor" },
+        { "fault": "reconnect", "side": "executor" }
+      ],
+      "expect": { "state_preserved": true, "executions": 1, "invariant": "I3" }
+    }
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "group": "E",
+  "name": "Envelope & wire",
+  "tests": [
+    {
+      "id": "E1",
+      "kind": "schema",
+      "description": "A message with all required fields parses as a valid event.",
+      "input": {
+        "v": 1,
+        "type": "event",
+        "id": "evt_123",
+        "session": "s_001",
+        "seq": 1,
+        "ts": 1786944500123,
+        "source": "rpa_001",
+        "payload": { "name": "button.appeared", "data": { "id": "confirm", "enabled": true } }
+      },
+      "expect": { "valid": true }
+    },
+    {
+      "id": "E2",
+      "kind": "schema",
+      "description": "An unknown message type is INVALID_MESSAGE.",
+      "input": {
+        "v": 1,
+        "type": "telemetry",
+        "id": "msg_001",
+        "session": "s_001",
+        "seq": 1,
+        "source": "rpa_001",
+        "payload": { "x": 1 }
+      },
+      "expect": { "valid": false, "error": "INVALID_MESSAGE" }
+    },
+    {
+      "id": "E3",
+      "kind": "schema",
+      "description": "An unsupported protocol version is UNSUPPORTED_VERSION.",
+      "input": {
+        "v": 2,
+        "type": "event",
+        "id": "evt_001",
+        "session": "s_001",
+        "seq": 1,
+        "source": "rpa_001",
+        "payload": { "name": "task.started" }
+      },
+      "expect": { "valid": false, "error": "UNSUPPORTED_VERSION" }
+    },
+    {
+      "id": "E4",
+      "kind": "schema",
+      "description": "A message missing a required envelope field is INVALID_MESSAGE.",
+      "input": {
+        "v": 1,
+        "type": "event",
+        "id": "evt_001",
+        "seq": 1,
+        "source": "rpa_001",
+        "payload": { "name": "task.started" }
+      },
+      "expect": { "valid": false, "error": "INVALID_MESSAGE" }
+    },
+    {
+      "id": "E5",
+      "kind": "behavior",
+      "description": "One JSON object per text frame, UTF-8 (WebSocket binding).",
+      "scenario": "Send two JSON objects in one frame; then send a frame with trailing garbage after a valid object; then send a non-UTF-8 byte sequence. The harness MUST treat the first two as INVALID_MESSAGE and the last as a transport-level failure.",
+      "expect": {
+        "outcome": "INVALID_MESSAGE",
+        "invariant": "I4"
+      }
+    }
+  ]
+}

@@ -1,0 +1,222 @@
+{
+  "group": "M",
+  "name": "Messages (event / action / result / error)",
+  "tests": [
+    {
+      "id": "M1",
+      "kind": "schema",
+      "description": "Events carry a semantic name and MUST NOT carry in_reply_to (SPEC §4.1, §5.3).",
+      "cases": [
+        {
+          "input": {
+            "v": 1,
+            "type": "event",
+            "id": "evt_010",
+            "session": "s_001",
+            "seq": 10,
+            "source": "rpa_001",
+            "payload": { "name": "payment.required", "data": { "amount": 15000 } }
+          },
+          "expect": { "valid": true }
+        },
+        {
+          "input": {
+            "v": 1,
+            "type": "event",
+            "id": "evt_011",
+            "in_reply_to": "act_005",
+            "session": "s_001",
+            "seq": 11,
+            "source": "rpa_001",
+            "payload": { "name": "payment.required" }
+          },
+          "expect": { "valid": false, "error": "INVALID_MESSAGE" }
+        },
+        {
+          "input": {
+            "v": 1,
+            "type": "event",
+            "id": "evt_012",
+            "session": "s_001",
+            "seq": 12,
+            "source": "rpa_001",
+            "payload": { "data": { "page": "checkout" } }
+          },
+          "expect": { "valid": false, "error": "INVALID_MESSAGE" }
+        }
+      ]
+    },
+    {
+      "id": "M2",
+      "kind": "schema",
+      "description": "Actions carry a name and MUST NOT carry idempotency/risk overrides (Registry-owned, SPEC §4.2, §9.3).",
+      "cases": [
+        {
+          "input": {
+            "v": 1,
+            "type": "action",
+            "id": "act_020",
+            "in_reply_to": "evt_010",
+            "session": "s_001",
+            "seq": 20,
+            "source": "agent_001",
+            "payload": {
+              "name": "browser.click",
+              "target": "confirm",
+              "expect": { "event": "page.changed" }
+            }
+          },
+          "expect": { "valid": true }
+        },
+        {
+          "input": {
+            "v": 1,
+            "type": "action",
+            "id": "act_021",
+            "session": "s_001",
+            "seq": 21,
+            "source": "agent_001",
+            "payload": { "name": "browser.click", "idempotency": "none" }
+          },
+          "expect": { "valid": false, "error": "INVALID_MESSAGE" }
+        },
+        {
+          "input": {
+            "v": 1,
+            "type": "action",
+            "id": "act_022",
+            "session": "s_001",
+            "seq": 22,
+            "source": "agent_001",
+            "payload": { "target": "confirm" }
+          },
+          "expect": { "valid": false, "error": "INVALID_MESSAGE" }
+        }
+      ]
+    },
+    {
+      "id": "M3",
+      "kind": "schema",
+      "description": "Results MUST reference the action.id they answer (SPEC §4.3, §5.3).",
+      "cases": [
+        {
+          "input": {
+            "v": 1,
+            "type": "result",
+            "id": "res_030",
+            "in_reply_to": "act_020",
+            "session": "s_001",
+            "seq": 30,
+            "source": "rpa_001",
+            "payload": { "status": "accepted" }
+          },
+          "expect": { "valid": true }
+        },
+        {
+          "input": {
+            "v": 1,
+            "type": "result",
+            "id": "res_031",
+            "session": "s_001",
+            "seq": 31,
+            "source": "rpa_001",
+            "payload": { "status": "ok" }
+          },
+          "expect": { "valid": false, "error": "INVALID_MESSAGE" }
+        },
+        {
+          "input": {
+            "v": 1,
+            "type": "result",
+            "id": "res_032",
+            "in_reply_to": "act_020",
+            "session": "s_001",
+            "seq": 32,
+            "source": "rpa_001",
+            "payload": { "status": "ok", "duplicate": true }
+          },
+          "expect": { "valid": false, "error": "INVALID_MESSAGE" }
+        }
+      ]
+    },
+    {
+      "id": "M4",
+      "kind": "schema",
+      "description": "Result statuses are exactly accepted|running|ok|failed|timeout|rejected (SPEC §4.4, §6.2).",
+      "cases": [
+        {
+          "input": {
+            "v": 1,
+            "type": "result",
+            "id": "res_040",
+            "in_reply_to": "act_020",
+            "session": "s_001",
+            "seq": 33,
+            "source": "rpa_001",
+            "payload": { "status": "ok", "data": { "page": "payment" } }
+          },
+          "expect": { "valid": true }
+        },
+        {
+          "input": {
+            "v": 1,
+            "type": "result",
+            "id": "res_041",
+            "in_reply_to": "act_020",
+            "session": "s_001",
+            "seq": 34,
+            "source": "rpa_001",
+            "payload": { "status": "pending" }
+          },
+          "expect": { "valid": false, "error": "INVALID_MESSAGE" }
+        }
+      ]
+    },
+    {
+      "id": "M5",
+      "kind": "schema",
+      "description": "Error codes are restricted to the 10 kernel codes; business failures belong on result.failed, not error (SPEC §4.5, §4.6).",
+      "cases": [
+        {
+          "input": {
+            "v": 1,
+            "type": "error",
+            "id": "err_050",
+            "in_reply_to": "act_020",
+            "session": "s_001",
+            "seq": 35,
+            "source": "rpa_001",
+            "payload": { "code": "SEQ_OUT_OF_ORDER", "retry": { "allowed": false } }
+          },
+          "expect": { "valid": true }
+        },
+        {
+          "input": {
+            "v": 1,
+            "type": "error",
+            "id": "err_051",
+            "in_reply_to": "act_020",
+            "session": "s_001",
+            "seq": 36,
+            "source": "rpa_001",
+            "payload": { "code": "TARGET_NOT_FOUND" }
+          },
+          "expect": { "valid": false, "error": "INVALID_MESSAGE" }
+        },
+        {
+          "input": {
+            "v": 1,
+            "type": "result",
+            "id": "res_052",
+            "in_reply_to": "act_020",
+            "session": "s_001",
+            "seq": 37,
+            "source": "rpa_001",
+            "payload": { "status": "failed", "code": "target_not_found", "retry": { "allowed": false } }
+          },
+          "expect": { "valid": true }
+        }
+      ]
+    }
+  ]
+}

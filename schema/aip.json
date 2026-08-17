@@ -1,0 +1,230 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AIP Kernel v0.1 — Message Schema",
+  "description": "JSON Schema for the AIP (AI Interaction Protocol) Kernel v0.1 (SPEC.md). Validates the shared envelope and the four message types: event, action, result, error. Enforces: 4 message types only; no in_reply_to on events; no idempotency/risk overrides on actions; result MUST reference an action id; terminal result statuses; the 10 kernel error codes. The binding-level hello/ping/pong frames are NOT application messages and are intentionally not covered here.",
+  "type": "object",
+  "allOf": [
+    { "$ref": "#/definitions/envelope" },
+    {
+      "oneOf": [
+        { "$ref": "#/definitions/eventMessage" },
+        { "$ref": "#/definitions/actionMessage" },
+        { "$ref": "#/definitions/resultMessage" },
+        { "$ref": "#/definitions/errorMessage" }
+      ]
+    }
+  ],
+  "definitions": {
+    "envelope": {
+      "type": "object",
+      "required": ["v", "type", "id", "session", "seq", "source", "payload"],
+      "properties": {
+        "v": {
+          "type": "integer",
+          "enum": [1],
+          "description": "Protocol version. Kernel v0.1 = 1. Anything else: UNSUPPORTED_VERSION."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["event", "action", "result", "error"],
+          "description": "Exactly these four. Anything else: INVALID_MESSAGE."
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Message ID, unique within the (session, source) stream at minimum; SHOULD be a ULID/UUID. Resent messages keep their original id."
+        },
+        "in_reply_to": {
+          "type": ["string", "null"],
+          "description": "ID of the message this message answers. MUST be absent on events (SPEC §5.3)."
+        },
+        "session": { "type": "string", "minLength": 1 },
+        "seq": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Monotonically increasing within the (session, source) stream (SPEC §5.4, I7). No global sequence."
+        },
+        "ts": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Epoch milliseconds. Informational only; MUST NOT be used for ordering or timeouts (I8)."
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Participant identity, bound to an authenticated principal at transport level (I9)."
+        },
+        "payload": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+
+    "eventMessage": {
+      "type": "object",
+      "not": { "required": ["in_reply_to"] },
+      "properties": {
+        "type": { "const": "event" },
+        "payload": { "$ref": "#/definitions/eventPayload" }
+      }
+    },
+    "eventPayload": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Semantic event name (dot-namespaced). Business state change, never raw telemetry (SPEC §11.3)."
+        },
+        "data": {
+          "type": "object",
+          "description": "Minimum state required to decide. For large state, send a reference instead (context profile, SPEC §9.2)."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "actionMessage": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "action" },
+        "in_reply_to": { "type": ["string", "null"] },
+        "payload": { "$ref": "#/definitions/actionPayload" }
+      }
+    },
+    "actionPayload": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Named capability invocation, e.g. browser.click, erp.order.approve. The Kernel defines zero actions (SPEC §9.3)."
+        },
+        "target": {
+          "type": "string",
+          "description": "Reference to an entity from an earlier event's data."
+        },
+        "params": { "type": "object" },
+        "expect": { "$ref": "#/definitions/expect" }
+      },
+      "additionalProperties": false,
+      "not": {
+        "anyOf": [
+          { "required": ["idempotency"] },
+          { "required": ["risk"] },
+          { "required": ["level"] }
+        ]
+      },
+      "description": "Actions MUST NOT carry idempotency or risk metadata; those are Registry/policy properties, never per-call parameters (SPEC §4.2, §9.3, §9.4)."
+    },
+    "expect": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Bare reference: the event the decision engine asserts should follow. Matching semantics are profile material (SPEC §9.8)."
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "resultMessage": {
+      "type": "object",
+      "required": ["in_reply_to"],
+      "properties": {
+        "type": { "const": "result" },
+        "in_reply_to": {
+          "type": "string",
+          "minLength": 1,
+          "description": "MUST reference the action.id this result answers (SPEC §5.3)."
+        },
+        "payload": { "$ref": "#/definitions/resultPayload" }
+      }
+    },
+    "resultPayload": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "enum": ["accepted", "running", "ok", "failed", "timeout", "rejected"],
+          "description": "accepted/running are non-terminal; ok/failed/timeout/rejected are terminal (SPEC §6.2)."
+        },
+        "code": {
+          "type": "string",
+          "description": "Executor-defined failure code (lower-case, namespaced, e.g. target_not_found) for status=failed. MUST NOT collide with kernel error codes (SPEC §4.6)."
+        },
+        "message": { "type": "string" },
+        "data": { "type": "object" },
+        "duplicate": {
+          "type": "boolean",
+          "description": "True when this result replays a previously settled action; MUST carry original_result_id (SPEC §6.3)."
+        },
+        "original_result_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ID of the original terminal result when duplicate=true."
+        },
+        "retry": { "$ref": "#/definitions/retryPolicy" }
+      },
+      "additionalProperties": false,
+      "if": {
+        "properties": { "duplicate": { "const": true } },
+        "required": ["duplicate"]
+      },
+      "then": {
+        "required": ["original_result_id"],
+        "properties": {
+          "status": { "enum": ["ok", "failed", "timeout", "rejected"] }
+        }
+      }
+    },
+
+    "errorMessage": {
+      "type": "object",
+      "properties": {
+        "type": { "const": "error" },
+        "in_reply_to": { "type": ["string", "null"] },
+        "payload": { "$ref": "#/definitions/errorPayload" }
+      }
+    },
+    "errorPayload": {
+      "type": "object",
+      "required": ["code"],
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_MESSAGE",
+            "INVALID_ACTION",
+            "UNSUPPORTED_VERSION",
+            "UNAUTHORIZED",
+            "SEQ_OUT_OF_ORDER",
+            "DUPLICATE_MESSAGE",
+            "SESSION_EXPIRED",
+            "AGENT_UNAVAILABLE",
+            "RPA_UNAVAILABLE",
+            "INTERNAL_ERROR"
+          ],
+          "description": "Kernel error registry, exhaustive (SPEC §4.6). Extension codes live in their own namespace (e.g. context.not_found) and are not part of this schema."
+        },
+        "message": { "type": "string" },
+        "retry": { "$ref": "#/definitions/retryPolicy" }
+      },
+      "additionalProperties": false
+    },
+
+    "retryPolicy": {
+      "type": "object",
+      "required": ["allowed"],
+      "properties": {
+        "allowed": {
+          "type": "boolean",
+          "description": "Retryability is declared by the sender of the error/result, never guessed by the receiver (SPEC §4.5, C.7)."
+        },
+        "after_ms": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

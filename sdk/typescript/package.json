@@ -1,0 +1,31 @@
+{
+  "name": "@aip/protocol",
+  "version": "0.1.0",
+  "description": "AIP (AI Interaction Protocol) Kernel v0.1 — TypeScript SDK",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test \"dist/test/*.test.js\"",
+    "test:schema": "npm run build && node --test dist/test/schema-conformance.test.js",
+    "test:e5": "npm run build && node --test dist/test/e5-framing.test.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "ajv": "^8.17.1",
+    "typescript": "^5.7.0"
+  },
+  "license": "MIT"
+}

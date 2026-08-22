@@ -11,12 +11,15 @@
       "import": "./dist/src/index.js"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node --test \"dist/test/*.test.js\"",
-    "test:schema": "npm run build && node --test dist/test/schema-conformance.test.js",
-    "test:e5": "npm run build && node --test dist/test/e5-framing.test.js"
+    "test": "pnpm run build && node --test \"dist/test/*.test.js\"",
+    "test:schema": "pnpm run build && node --test dist/test/schema-conformance.test.js",
+    "test:e5": "pnpm run build && node --test dist/test/e5-framing.test.js"
   },
   "dependencies": {
     "ws": "^8.18.0"

@@ -25,6 +25,7 @@ from aip import (
     Session,
     make_error,
     make_event,
+    now_ms,
     make_result,
     validate_message,
 )
@@ -72,7 +73,7 @@ class RetryScheduler:
         self.retry_events = 0
 
     def now(self) -> int:
-        return self.clock.now_ms() if self.clock else 0
+        return self.clock.now_ms() if self.clock else now_ms()
 
     def schedule(self, action_msg: Message, entry) -> None:
         if entry is None or not entry.timeout_ms:
@@ -268,7 +269,8 @@ class APAGateway:
         return self._fail(side, msg, "INVALID_MESSAGE", "unknown type")
 
     def _now(self) -> int:
-        return self.clock.now_ms() if self.clock else 0
+        # 无注入时钟时回退真实墙钟（独立部署的时间性语义依赖此路径）
+        return self.clock.now_ms() if self.clock else now_ms()
 
     def _touch_activity(self) -> None:
         self._last_activity_ms = self._now()

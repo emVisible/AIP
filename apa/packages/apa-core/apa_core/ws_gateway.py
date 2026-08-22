@@ -54,9 +54,12 @@ class WsGatewayServer:
         port: int = 8765,
         ssl_context: Optional["ssl.SSLContext"] = None,
         hello_token: Optional[str] = None,
+        tick_interval_s: float = 1.0,
     ) -> None:
         """ssl_context 非 None 时以 wss:// 监听（§12.1 第一层）；
-        hello_token 配置后 hello 帧必须携带匹配 token（与 TLS 正交）。"""
+        hello_token 配置后 hello 帧必须携带匹配 token（与 TLS 正交）。
+        tick_interval_s：后台调度循环节奏 —— 驱动 RetryScheduler 超时重试、
+        session TTL 等时间性语义，使独立部署无需外部 tick 驱动。"""
         if websockets is None:
             raise ImportError("pip install websockets")
         if gateways is None:
@@ -68,6 +71,7 @@ class WsGatewayServer:
         self.port_requested = port
         self.ssl_context = ssl_context
         self.hello_token = hello_token
+        self.tick_interval_s = max(0.05, float(tick_interval_s))
 
         # 每会话独立：出站队列 / 连接表
         self._queues: Dict[str, Dict[str, asyncio.Queue]] = {
@@ -105,7 +109,15 @@ class WsGatewayServer:
         for sid in self.gateways:
             for side in _SIDES:
                 self._tasks.append(asyncio.create_task(self._pump(sid, side)))
+        # 后台调度循环：驱动超时/重试/TTL（§8.3、§10.1）
+        self._tasks.append(asyncio.create_task(self._tick_loop()))
         return self.port()
+
+    async def _tick_loop(self) -> None:
+        while True:
+            await asyncio.sleep(self.tick_interval_s)
+            for gw in self.gateways.values():
+                gw.tick()
 
     def port(self) -> int:
         if self._server is None or not self._server.sockets:

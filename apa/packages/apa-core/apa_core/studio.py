@@ -131,14 +131,23 @@ class StudioHandler(BaseHTTPRequestHandler):
     def log_message(self, *a):  # 静默
         pass
 
-    def _send(self, body: bytes, ctype: str) -> None:
-        self.send_response(200)
+    def _authorized(self) -> bool:
+        want = self.studio.token
+        if not want:
+            return True
+        return self.headers.get("Authorization", "") == f"Bearer {want}"
+
+    def _send(self, body: bytes, ctype: str, code: int = 200) -> None:
+        self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
     def do_GET(self):
+        if not self._authorized():
+            self._send(b'{"error":"unauthorized"}', "application/json", 401)
+            return
         st = self.studio
         if self.path == "/api/sessions":
             self._send(json.dumps(st.sessions(), ensure_ascii=False).encode(),
@@ -162,6 +171,9 @@ class StudioHandler(BaseHTTPRequestHandler):
                        "text/html; charset=utf-8")
 
     def do_POST(self):
+        if not self._authorized():
+            self._send(b'{"error":"unauthorized"}', "application/json", 401)
+            return
         # /api/tasks/<task_id>/resolve  → 需要注册的 resolver 回调
         parts = self.path.strip("/").split("/")
         if len(parts) == 4 and parts[0] == "api" and parts[1] == "tasks" \
@@ -180,12 +192,15 @@ class StudioServer:
     def __init__(self, journals: List[str], *, port: int = 8686,
                  audit_tail_size: int = 30,
                  tenant: Optional[str] = None,
+                 token: Optional[str] = None,
                  resolve_task=None) -> None:
         # 惰性展开：journal 文件可能在服务启动后才产生（HITL 交互场景）
         self.journal_patterns = list(journals)
         self.port = port
         self.audit_tail_size = audit_tail_size
         self.tenant = tenant          # 多租户过滤（§12.1）
+        # token 配置后所有请求须带 Authorization: Bearer <token>（§12.1）
+        self.token = token
         self._resolve = resolve_task
         self._httpd: Optional[ThreadingHTTPServer] = None
 

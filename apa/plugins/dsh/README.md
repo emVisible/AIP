@@ -48,7 +48,7 @@ asyncio.run(main())
 ```bash
 cd /path/to/deepseek-harness
 pnpm install                       # cordis 等依赖
-pnpm --filter @apa/dsh-plugin build   # 或在插件目录 npm run build
+pnpm --filter @apa/dsh-plugin build   # 或在插件目录 pnpm build
 ```
 
 在 composition 的 cordis.yml 中加入：
@@ -103,9 +103,9 @@ per-stream seq 跨语言一致、params.target 与 Registry schema 对齐。
 ```bash
 # 协议核心（无需 cordis，本地可验证）
 npx tsc -p tsconfig.check.json
-# 完整编译（需 npm/pnpm install 提供 cordis 类型；离线环境不可用时
+# 完整编译（需 pnpm install 提供 cordis 类型；离线环境不可用时
 # 以 e2e_client.mjs 运行时验证替代——上节已通过）
-npm run build
+pnpm build
 ```
 
 ## 已知边界（诚实声明）

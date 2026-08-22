@@ -1,0 +1,16 @@
+{"kind": "state", "ts": 1787375831580, "session": "s_hitl_001", "tenant": "demo", "to": "RUNNING"}
+{"kind": "cursor", "ts": 1787375831581, "session": "s_hitl_001", "tenant": "demo", "source": "bot_01", "seq": 1}
+{"kind": "cursor", "ts": 1787375831582, "session": "s_hitl_001", "tenant": "demo", "source": "rule_01", "seq": 1}
+{"kind": "action", "ts": 1787375831599, "session": "s_hitl_001", "tenant": "demo", "action_id": "act_e6ec0c99f23d", "name": "doc.extract_fields", "source": "rule_01", "risk": "L0", "verdict": "permitted"}
+{"kind": "cursor", "ts": 1787375831599, "session": "s_hitl_001", "tenant": "demo", "source": "bot_01", "seq": 2}
+{"kind": "cursor", "ts": 1787375831600, "session": "s_hitl_001", "tenant": "demo", "source": "bot_01", "seq": 3}
+{"kind": "action_result", "ts": 1787375831600, "session": "s_hitl_001", "tenant": "demo", "action_id": "act_e6ec0c99f23d", "status": "ok", "name": "doc.extract_fields"}
+{"kind": "cursor", "ts": 1787375831600, "session": "s_hitl_001", "tenant": "demo", "source": "rule_01", "seq": 2}
+{"kind": "state", "ts": 1787375831601, "session": "s_hitl_001", "tenant": "demo", "to": "SUSPENDED"}
+{"kind": "task", "ts": 1787375831601, "session": "s_hitl_001", "tenant": "demo", "task_id": "ht_act_1ecacc237975", "status": "open", "task_type": "approval"}
+{"kind": "cursor", "ts": 1787375831809, "session": "s_hitl_001", "tenant": "demo", "source": "bot_01", "seq": 4}
+{"kind": "state", "ts": 1787375831810, "session": "s_hitl_001", "tenant": "demo", "to": "RUNNING"}
+{"kind": "cursor", "ts": 1787375831810, "session": "s_hitl_001", "tenant": "demo", "source": "rule_01", "seq": 3}
+{"kind": "state", "ts": 1787375831810, "session": "s_hitl_001", "tenant": "demo", "to": "COMPLETING"}
+{"kind": "state", "ts": 1787375831810, "session": "s_hitl_001", "tenant": "demo", "to": "COMPLETED"}
+{"kind": "task", "ts": 1787375831810, "session": "s_hitl_001", "tenant": "demo", "task_id": "ht_act_1ecacc237975", "status": "resolved", "outcome": "reject"}

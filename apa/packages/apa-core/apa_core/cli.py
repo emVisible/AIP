@@ -17,7 +17,7 @@ import sys
 def _cmd_studio(args) -> int:
     from .studio import StudioServer
     server = StudioServer(args.journals, port=args.port,
-                          tenant=args.tenant)
+                          tenant=args.tenant, token=args.token)
     print(f"APA-Studio → http://127.0.0.1:{args.port}")
     server.serve_forever()
     return 0
@@ -67,6 +67,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_studio.add_argument("--journals", nargs="+", required=True)
     p_studio.add_argument("--port", type=int, default=8686)
     p_studio.add_argument("--tenant", default=None)
+    p_studio.add_argument("--token", default=None,
+                          help="启用 Bearer 认证（客户端须携带同值）")
     p_studio.set_defaults(fn=_cmd_studio)
 
     p_ana = sub.add_parser("analytics", help="运行指标报告")

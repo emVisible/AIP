@@ -45,12 +45,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Build & test AIP TS SDK
+          cache: pnpm
+          cache-dependency-path: sdk/typescript/pnpm-lock.yaml
+      - name: Build & test AIP TS SDK (pnpm)
         working-directory: sdk/typescript
-        run: npm install --no-audit --no-fund && npm test
+        run: |
+          pnpm import 2>/dev/null || true   # 由既有 package-lock 迁移锁文件
+          pnpm install --no-frozen-lockfile
+          pnpm test
 
   cross-language:
     runs-on: ubuntu-latest

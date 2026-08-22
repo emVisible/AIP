@@ -49,10 +49,15 @@ class LLMClient:
         model: Optional[str] = None,
         timeout_s: float = 60.0,
     ) -> None:
-        self.base_url = (base_url or os.environ.get("APA_LLM_BASE_URL")
+        from .config import env_first
+        # DeepSeek 优先：APA_LLM_* 与 DEEPSEEK_* 双命名（.env 以 DeepSeek 为底座）
+        self.base_url = (base_url
+                         or env_first("APA_LLM_BASE_URL", "DEEPSEEK_BASE_URL")
                          or "https://api.deepseek.com").rstrip("/")
-        self.api_key = api_key or os.environ.get("APA_LLM_API_KEY", "")
-        self.model = model or os.environ.get("APA_LLM_MODEL", "deepseek-chat")
+        self.api_key = api_key or env_first("APA_LLM_API_KEY",
+                                            "DEEPSEEK_API_KEY")
+        self.model = (model or env_first("APA_LLM_MODEL", "DEEPSEEK_MODEL")
+                      or "deepseek-chat")
         self.timeout_s = timeout_s
         if not self.api_key:
             raise LLMError("APA_LLM_API_KEY not set (or pass api_key=...)")

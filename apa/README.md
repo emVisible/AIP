@@ -255,3 +255,15 @@ Vault 多租户。dsh 插件的 cordis 运行时联调需在 dsh 仓库侧执行
 ## License
 
 Apache 2.0（衍生需署名）。协议基础 AIP Kernel v0.1 — MIT (emVisible/AIP)。
+## 环境配置（.env，DeepSeek 底座）
+
+复制模板并填入真实 Key（`.env` 已 gitignore）：
+
+```bash
+cp .env.example .env
+# 填入 DEEPSEEK_API_KEY 后，LLM 决策级联与 VLM 感知即可用
+```
+
+加载规则：`APA_LLM_*` / `APA_VISION_*` 优先，缺省回退 `DEEPSEEK_API_KEY` /
+`DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL`；不覆盖已有环境变量。
+包管理统一使用 pnpm（CI 与 dsh 插件构建均已对齐）。

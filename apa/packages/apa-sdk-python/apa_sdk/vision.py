@@ -56,10 +56,15 @@ class OpenAICompatibleVisionAdapter(VisionAdapter):
                  api_key: Optional[str] = None,
                  model: Optional[str] = None,
                  timeout_s: float = 30.0) -> None:
-        self.base_url = (base_url or os.environ.get("APA_VISION_BASE_URL")
+        from apa_core.config import env_first
+        self.base_url = (base_url
+                         or env_first("APA_VISION_BASE_URL", "DEEPSEEK_BASE_URL")
                          or "https://api.deepseek.com").rstrip("/")
-        self.api_key = api_key or os.environ.get("APA_VISION_API_KEY", "")
-        self.model = model or os.environ.get("APA_VISION_MODEL", "")
+        self.api_key = api_key or env_first("APA_VISION_API_KEY",
+                                            "DEEPSEEK_API_KEY")
+        self.model = model or env_first("APA_VISION_MODEL",
+                                        "DEEPSEEK_VISION_MODEL",
+                                        "deepseek-vl2")
         if not self.model:
             raise VisionError("APA_VISION_MODEL is required")
         if not self.api_key:

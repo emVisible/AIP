@@ -7,4 +7,5 @@ build/
 *.egg-info/
 node_modules/
 package-lock.json
-benchmarks/result.json
+benchmarks/result.jsonapa/examples/human-approval/.session.jsonl
+apa/tests/_p6b.jsonl

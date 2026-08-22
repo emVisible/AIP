@@ -151,6 +151,7 @@ server = WsGatewayServer(
 
 | 交互方式 | 命令 / 地址 |
 |---|---|
+| **一键 WebUI** | `./webui.sh`（自动建 venv/装依赖，可选 `--demo` 灌演示数据、`--token` 认证、`--tenant` 过滤） |
 | 真实浏览器自动化演示 | `python examples/hello-rpa/run.py`（Chromium 自动审批） |
 | **网页人工审批（HITL）** | `python examples/human-approval/run.py` → 打开 `http://127.0.0.1:8690` 点「批准/驳回」，挂起的会话实时恢复并继续流转 |
 | Studio 监控面板 | `python -m apa_core.studio --journals 'data/*.jsonl' [--tenant corp_x]` |

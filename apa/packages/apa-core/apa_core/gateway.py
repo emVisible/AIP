@@ -362,15 +362,15 @@ class APAGateway:
 
         # ⓪ 速率限制：按来源滑动窗口（60s）
         if self.rate_limit_per_minute is not None:
-            now_ms = self._now()
+            rl_now = self._now()
             window = self._action_times.setdefault(msg.source, deque())
-            while window and now_ms - window[0] > 60_000:
+            while window and rl_now - window[0] > 60_000:
                 window.popleft()
             if len(window) >= self.rate_limit_per_minute:
                 self.rejections.append(("RATE", msg.id, msg.source))
                 return [make_result(self.session_id, "gateway", "rejected",
                                     msg.id, code="rate_limited")]
-            window.append(now_ms)
+            window.append(rl_now)
 
         # ① Registry 查找
         entry = self.registry.get(name)
@@ -419,6 +419,8 @@ class APAGateway:
         if name == "session.complete":
             outcome = params.get("outcome", "success")
             self.sm.complete(outcome)
+            self._journal("outcome", outcome=outcome,
+                          reason=params.get("summary", ""))
             self._audit_action(msg, entry, verdict="permitted", rule="session_control")
             return [make_result(self.session_id, "gateway", "ok", msg.id,
                                 data={"outcome": outcome})]
@@ -456,8 +458,7 @@ class APAGateway:
         self.retry_scheduler.schedule(msg, entry)
         if entry.expect:
             self.pending_expects[msg.id] = entry.expect  # AIP §4.2
-        if self.clock:
-            self._action_started_ms[msg.id] = self._now()
+        self._action_started_ms[msg.id] = now_ms()
         self._journal("action", action_id=msg.id, name=name,
                       source=msg.source, risk=entry.risk, verdict="permitted")
         self._forward(msg)
@@ -527,7 +528,7 @@ class APAGateway:
         if status in ("ok", "failed", "timeout", "rejected"):
             self.retry_scheduler.cancel(action_id)
             started = self._action_started_ms.pop(action_id, None)
-            duration = (self._now() - started) if started is not None else None
+            duration = (now_ms() - started) if started is not None else None
             action_name = ""
             act_meta = self.session.actions.actions.get(action_id) or {}
             action_name = act_meta.get("name", "")

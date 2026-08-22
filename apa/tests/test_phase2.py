@@ -155,7 +155,8 @@ class TestPersistence:
         records = load_journal(path)
         kinds = {r["kind"] for r in records}
         assert {"cursor", "state"} <= kinds
-        assert records[-1]["to"] == "COMPLETED"
+        last_state = [r for r in records if r["kind"] == "state"][-1]
+        assert last_state["to"] == "COMPLETED"
 
         # 恢复：新 gateway 从日志重建
         gw2 = recover(SESSION, path, registry=gw.gateway.registry,

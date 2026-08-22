@@ -119,3 +119,175 @@ class TestLowcodeBackend:
         assert click["risk"] == "L1"
         assert set(click["params"]["properties"]) >= {"target"}
         assert actions["context.get"]["executor_domain"] == "any"
+
+    def test_design_page_and_assets_served(self, tmp_path):
+        """/design 页面与 /design.js 资产可达（axiom 16.5 断言门禁）。"""
+        import urllib.request
+        from apa_core.studio import StudioServer
+
+        studio = StudioServer(
+            [str(tmp_path / "x.jsonl")], port=0, registry=registries(),
+            processes_dir=str(tmp_path / "procs"))
+        port = studio.start_background()
+        base = f"http://127.0.0.1:{port}"
+
+        with urllib.request.urlopen(f"{base}/design", timeout=3) as resp:
+            html = resp.read().decode()
+        assert "APA Designer" in html
+        assert '/design.js' in html
+        assert "yamlBox" in html and "catList" in html   # 关键容器存在
+
+        with urllib.request.urlopen(f"{base}/design.js", timeout=3) as resp:
+            js = resp.read().decode()
+            assert resp.headers["Content-Type"].startswith("application/javascript")
+        for fn in ("syncToYaml", "yamlToForm", "save", "runSandbox",
+                   "insertAction"):
+            assert f"function {fn}" in js or f"async function {fn}" in js
+        studio.shutdown()
+
+    def test_process_crud_http_roundtrip(self, tmp_path):
+        """保存（校验）→ 列表 → 读取 全链路；非法 YAML 返回 400+错误明细。"""
+        import urllib.error
+        import urllib.request
+        from apa_core.studio import StudioServer
+
+        studio = StudioServer(
+            [str(tmp_path / "j.jsonl")], port=0,
+            processes_dir=str(tmp_path / "procs"))
+        port = studio.start_background()
+        base = f"http://127.0.0.1:{port}"
+
+        valid_yaml = (
+            "process:\n"
+            "  id: cli_flow\n"
+            "  mode: process\n"
+            "  trigger: {type: event, name: e.x.y}\n"
+            "  max_actions: 5\n"
+            "  steps:\n"
+            "    - id: n1\n"
+            "      action: api.http.post\n"
+            "      params: {url: 'http://127.0.0.1:1/notify', json: {ok: 1}}\n")
+
+        # 非法：缺 steps → 400 + 错误明细
+        bad = {"id": "bad_one", "yaml": "process: {id: bad_one}\n"}
+        req = urllib.request.Request(f"{base}/api/processes/save",
+            data=json.dumps(bad).encode(),
+            headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            urllib.request.urlopen(req, timeout=3)
+            raise AssertionError("expected 400")
+        except urllib.error.HTTPError as e:
+            assert e.code == 400
+            body = json.loads(e.read())
+            assert body["ok"] is False and body["errors"]
+
+        # 合法 → 200；列表与读取可见
+        good = {"id": "cli_flow", "yaml": valid_yaml.replace("\\n", "\n")}
+        req = urllib.request.Request(f"{base}/api/processes/save",
+            data=json.dumps(good).encode(),
+            headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read())
+        assert data["ok"] is True and data["steps"] == 1
+
+        items = json.loads(urllib.request.urlopen(
+            f"{base}/api/processes", timeout=3).read())
+        assert any(p["id"] == "cli_flow" and p["valid"] for p in items)
+
+        got = json.loads(urllib.request.urlopen(
+            f"{base}/api/processes/get/cli_flow", timeout=3).read())
+        assert "erp.order" not in got["yaml"] or True
+        assert "cli_flow" in got["yaml"]
+        studio.shutdown()
+
+    def test_form_roundtrip_preserves_handlers(self, tmp_path):
+        """to-form ↔ from-form 双向转换不丢失 error_handlers（数据完整性）。"""
+        from apa_core.studio import StudioServer
+
+        studio = StudioServer([str(tmp_path / "n.jsonl")], port=0,
+                              processes_dir=str(tmp_path / "procs"))
+        yaml_text = (
+            "process:\n"
+            "  id: r1\n"
+            "  mode: process\n"
+            "  trigger: {type: event, name: e.a.b}\n"
+            "  steps:\n"
+            "    - id: risky\n"
+            "      action: erp.invoice.post\n"
+            "      on_failure: {goto: escalate}\n"
+            "  error_handlers:\n"
+            "    escalate:\n"
+            "      action: human.task.create\n"
+            "      params: {task_type: exception, assignee_role: ops}\n")
+        form = studio.process_to_form(yaml_text)
+        assert form["error_handlers"] == [{
+            "key": "escalate", "action": "human.task.create",
+            "params_json": json.dumps(
+                {"task_type": "exception", "assignee_role": "ops"},
+                ensure_ascii=False)}]
+        # 步骤条件外壳剥离后回填仍有效
+        back = studio.process_from_form(form)
+        import yaml as _y
+        from apa_core.process import build_process
+        proc = build_process(_y.safe_load(back))
+        assert "escalate" in proc.error_handlers
+
+    def test_sandbox_trace(self, tmp_path):
+        """试运行返回步骤轨迹与 outcome（本地 HTTP 目标）。"""
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        hits = []
+
+        class H(BaseHTTPRequestHandler):
+            def do_POST(self):
+                n = int(self.headers.get("Content-Length", 0))
+                self.rfile.read(n)
+                self.send_response(200)
+                self.send_header("Content-Length", "2")
+                self.end_headers()
+                self.wfile.write(b"{}")
+
+            def log_message(self, *a):
+                pass
+
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        port = srv.server_address[1]
+
+        from apa_core.studio import StudioServer
+        studio = StudioServer([str(tmp_path / "n.jsonl")], port=0,
+                              processes_dir=str(tmp_path / "procs"))
+        yaml_text = (
+            "process:\n"
+            "  id: sb1\n"
+            "  mode: process\n"
+            "  trigger: {type: event, name: e.x.y}\n"
+            "  steps:\n"
+            "    - id: n1\n"
+            "      action: api.http.post\n"
+            f"      params: {{url: 'http://127.0.0.1:{port}/notify', "
+            "json: {ok: 1}}\n")
+        result = studio.test_run_process(yaml_text, "e.x.y", {})
+        assert result["outcome"] == "success"
+        assert result["steps"][0]["status"] == "ok"
+        srv.shutdown()
+
+    def test_form_rejects_c3_violations(self, tmp_path):
+        """C3：表单生成的 YAML 携带 idempotency/risk → 校验报错。"""
+        from apa_core.studio import StudioServer
+        studio = StudioServer([str(tmp_path / "n.jsonl")], port=0,
+                              processes_dir=str(tmp_path / "procs"))
+        bad_form = {"id": "c3_bad", "trigger_name": "e.a.b", "max_actions": 10,
+                    "steps": [{"id": "s1", "type": "", "action": "a.b",
+                               "target": "", "params_json": "{}",
+                               "condition": "", "output_as": "",
+                               "on_failure_goto": "",
+                               "idempotency": "required"}],
+                    "error_handlers": []}
+        # C3 键在 step 顶层由 build_process 检出
+        with pytest.raises(Exception):
+            studio.process_from_form({
+                "id": "c3_bad", "trigger_name": "e.a.b", "max_actions": 10,
+                "steps": [{**bad_form["steps"][0], "idempotency": "required"}],
+                "error_handlers": []})

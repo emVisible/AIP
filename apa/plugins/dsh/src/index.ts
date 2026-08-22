@@ -12,32 +12,36 @@
  *       allowedActions:
  *         - context.get
  *         - browser.click
- *         - erp.order.approve
  *         - human.task.create
  *
  * The plugin adapts dsh's `llm` service to the minimal LlmLike interface and
  * starts one ApaDecisionAgent. See ./README.md for a full walkthrough.
+ *
+ * 类型策略：不 import cordis 的命名导出（4.0 rc 的 d.ts 存在 TS2694 发布缺陷，
+ * 见 git history）。cordis 运行时只要求本包导出 name/inject/apply —— 用结构化
+ * 最小上下文类型即可获得完整 DX 与运行时正确性。
  */
-import type { Context } from "cordis";
 import { ApaDecisionAgent, type LlmLike } from "./agent.js";
 
 export const name = "apa-decision";
 export const inject = ["llm"];
 
-export interface ApaDecisionPluginConfig {
+export interface ApaPluginConfig {
   gatewayUrl: string;
   sessionId: string;
   source: string;
   allowedActions: string[];
+  /** 走 L2 深度推理的事件名集合 */
   thinkEvents?: string[];
+  /** 单会话 LLM 决策预算（防失控），默认 20 */
   maxLlmDecisions?: number;
 }
 
-/** Minimal shape of dsh's llm service used here. Adapt if the surface moves. */
+/** dsh `llm` 服务被使用到的最小形状（演进时只需调整 adapt）。 */
 interface DshLlmService {
   complete(input: {
     messages: Array<{ role: "system" | "user"; content: string }>;
-  }): Promise<{ text?: string; content?: string }> | Promise<string>;
+  }): Promise<{ text?: string; content?: string } | string>;
 }
 
 function adapt(llm: unknown): LlmLike {
@@ -52,7 +56,14 @@ function adapt(llm: unknown): LlmLike {
   };
 }
 
-export function apply(ctx: Context, config: ApaDecisionPluginConfig): void {
+/** cordis Context 的结构化最小面（避免依赖 rc 版命名导出）。 */
+interface MinimalCtx {
+  llm: unknown;
+  logger: { info: (...args: unknown[]) => void };
+  on(event: string, cb: () => void): void;
+}
+
+export function apply(ctx: MinimalCtx, config: ApaPluginConfig): void {
   const agent = new ApaDecisionAgent(config, adapt(ctx.llm), {
     onStep: (step) => ctx.logger.info("[apa] %s", step),
     onDone: () => ctx.logger.info("[apa] decision engine stopped"),

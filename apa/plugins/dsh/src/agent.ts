@@ -61,6 +61,15 @@ export function parseDecision(text: string): Decision {
   }
 }
 
+/** 防御性分类：绑定层帧之外的异常不致崩溃连接。 */
+function peerSafeHandle(peer: AIPPeer, m: Message) {
+  try {
+    return peer.handle(m);
+  } catch (e) {
+    return { kind: "gap" as const, message: m };
+  }
+}
+
 export class ApaDecisionAgent {
   readonly peer: AIPPeer;
   private transport: WsClientTransport & { sendRaw?: (t: string) => void };
@@ -100,7 +109,12 @@ export class ApaDecisionAgent {
   }
 
   private onMessage(m: Message): void {
-    const { kind, message } = this.peer.handle(m);
+    // 绑定层控制帧（不消耗 seq）不进入决策流（D1/D4）
+    if ((m.type as string) === "pong" || (m.type as string) === "hello"
+        || m.source === "gateway") {
+      return;   // 网关自有回执不进入决策流（结果回执走 result 类型）
+    }
+    const { kind, message } = peerSafeHandle(this.peer, m);
     if (kind !== "accept") return; // duplicate/stale/gap handled upstream
     if (message.type === "event") void this.decide(message);
     else if (message.type === "result") this.onResult(message);

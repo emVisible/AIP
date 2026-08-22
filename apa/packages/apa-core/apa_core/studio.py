@@ -166,6 +166,10 @@ class StudioHandler(BaseHTTPRequestHandler):
             data = summarize(st.journal_paths, tenant=st.tenant)
             self._send(json.dumps(data, ensure_ascii=False).encode(),
                        "application/json")
+        elif self.path == "/api/registry/actions":
+            self._send(json.dumps(st.registry_actions(),
+                                  ensure_ascii=False).encode(),
+                       "application/json")
         else:
             self._send(render_html(st.sessions(), st.audit_tail()).encode(),
                        "text/html; charset=utf-8")
@@ -193,6 +197,7 @@ class StudioServer:
                  audit_tail_size: int = 30,
                  tenant: Optional[str] = None,
                  token: Optional[str] = None,
+                 registry=None,
                  resolve_task=None) -> None:
         # 惰性展开：journal 文件可能在服务启动后才产生（HITL 交互场景）
         self.journal_patterns = list(journals)
@@ -201,6 +206,7 @@ class StudioServer:
         self.tenant = tenant          # 多租户过滤（§12.1）
         # token 配置后所有请求须带 Authorization: Bearer <token>（§12.1）
         self.token = token
+        self.registry = registry      # 低代码设计器：动作目录数据源
         self._resolve = resolve_task
         self._httpd: Optional[ThreadingHTTPServer] = None
 
@@ -218,6 +224,23 @@ class StudioServer:
             return {sid: s for sid, s in all_sessions.items()
                     if s.get("tenant") == self.tenant}
         return all_sessions
+
+    def registry_actions(self) -> Dict[str, dict]:
+        """低代码设计器数据源：动作名 → {description, risk, domain, params}。"""
+        if self.registry is None:
+            return {}
+        out: Dict[str, dict] = {}
+        for name in sorted(self.registry.names()):
+            e = self.registry.get(name)
+            out[name] = {
+                "description": getattr(e, "description", ""),
+                "risk": getattr(e, "risk", ""),
+                "executor_domain": getattr(e, "executor_domain", ""),
+                "idempotency": getattr(e, "idempotency", ""),
+                "params": getattr(e, "params", None),
+                "deprecated": getattr(e, "deprecated", False),
+            }
+        return out
 
     def audit_tail(self) -> List[dict]:
         out: List[dict] = []

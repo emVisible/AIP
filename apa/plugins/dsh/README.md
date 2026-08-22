@@ -78,6 +78,15 @@ pnpm --filter @apa/dsh-plugin build   # 或在插件目录 pnpm build
 - **DE-5** LLM 输出 uncertain 或越权动作名 → 自动转 `human.task.create`，
   Session SUSPENDED，等待人工
 
+## ✅ 运行时验证（v0.5 已完成）
+
+`apply()` 全链路已在 CI 级测试中实测通过（`tests/test_phase10.py::TestDshGlueRuntime`）：
+编译产物 dist/index.js → apply(ctx) → WsClientTransport 连接 Python 网关 →
+事件到达 → llm.complete({messages}) 被调用 → 防御性解析散文包裹的 JSON 决策 →
+allowedActions 校验 → sendAction 执行器真实点击。类型层面：完整 tsc 编译
+通过（cordis 4.0.0-rc.8 实装；其 d.ts 存在 TS2694 发布缺陷，胶水层改用
+结构化最小上下文绕开——见 src/index.ts 顶部注释）。
+
 ## 跨语言联调验证（已通过）
 
 `tests/e2e_client.mjs` 使用与插件**完全相同**的协议核心
@@ -110,10 +119,6 @@ pnpm build
 
 ## 已知边界（诚实声明）
 
-- `index.ts` 的 dsh 服务适配基于公开 README 的接口形态编写，dsh llm 服务
-  面演进时需同步调整（`adapt()` 单点适配）。
-- 本仓库 CI 无法安装 cordis（离线环境），运行时联调分两层完成：
-  ① 协议核心经 e2e_client.mjs 对 Python 网关实测通过（见上）；
-  ② cordis 挂载需在 dsh 侧执行：先起 Python 网关，再以 headless profile
-  加载本插件观察 `[apa] cascade[*]` 日志。
+- `adapt()` 基于 cordis/dsh 公开接口形态编写；dsh llm 服务面演进时单点调整。
 - 多 Session 并行需为每个 session 启动独立 agent 实例（POC 单连接单会话）。
+- cordis 4.0 尚为 rc 版：类型经结构化绕开（不影响运行时），待正式版后可回迁命名导入。

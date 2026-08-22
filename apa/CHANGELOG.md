@@ -1,5 +1,17 @@
 # APA CHANGELOG
 
+## v1.0+ Phase 10 — dsh 底座接入 + 低代码起步
+
+- **dsh 插件运行时打通**：pnpm 安装 cordis 4.0.0-rc.8（卡点原为版本标签）；
+  完整 tsc 编译通过；apply() 经 dist 产物对 Python 网关完成真实决策闭环
+  （事件→llm.complete→解析→sendAction→执行器点击），pytest 锁定为回归
+- agent.ts 加固：绑定层帧（hello-ack/pong/gateway 回执）不进入决策流；
+  peer.handle 异常防御
+- Studio 低代码起步：/api/registry/actions 动作目录 API（表单数据源）
+- pnpm 全面替代 npm（CI/scripts/docs）；DeepSeek .env 接口（config.py +
+  .env.example）；WS 后台调度循环修复无 clock 时超时/TTL 失效缺陷；
+  Studio Bearer 认证
+
 poc 分支演进记录（设计文档 §16.2 版本规划 + 补全阶段）。
 
 ## v1.0+ Phase 8 — 控制平面补全

@@ -1,0 +1,128 @@
+# ============================================================
+# API / 集成域 — api.*（§9.3 子集）
+# ============================================================
+api.http.get:
+  executor_domain: api
+  description: "HTTP GET"
+  params:
+    type: object
+    required: [url]
+    properties:
+      url: { type: string, format: uri }
+      headers: { type: object, additionalProperties: { type: string } }
+      timeout_ms: { type: number }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 3
+  audit_fields: [url]
+
+api.http.post:
+  executor_domain: api
+  description: "HTTP POST（默认不幂等）"
+  params:
+    type: object
+    required: [url]
+    properties:
+      url: { type: string, format: uri }
+      json: { type: object }
+      headers: { type: object, additionalProperties: { type: string } }
+  idempotency: none
+  risk: L2
+  timeout_ms: 30000
+  retries: 0
+  audit_fields: [url]
+
+api.http.put:
+  executor_domain: api
+  description: "HTTP PUT"
+  params:
+    type: object
+    required: [url]
+    properties:
+      url: { type: string, format: uri }
+      json: { type: object }
+      headers: { type: object, additionalProperties: { type: string } }
+  idempotency: required
+  risk: L2
+  timeout_ms: 30000
+  retries: 2
+  audit_fields: [url]
+
+api.http.delete:
+  executor_domain: api
+  description: "HTTP DELETE（高风险）"
+  params:
+    type: object
+    required: [url]
+    properties:
+      url: { type: string, format: uri }
+      headers: { type: object, additionalProperties: { type: string } }
+  idempotency: required
+  risk: L3
+  timeout_ms: 30000
+  retries: 0
+  requires_approval_at: L3
+  audit_fields: [url]
+
+api.http.patch:
+  executor_domain: api
+  description: "HTTP PATCH"
+  params:
+    type: object
+    required: [url]
+    properties:
+      url: { type: string, format: uri }
+      json: { type: object }
+      headers: { type: object, additionalProperties: { type: string } }
+  idempotency: optional
+  risk: L2
+  timeout_ms: 30000
+  retries: 0
+  audit_fields: [url]
+
+# ERP 业务域 — 推荐规范，POC 演示用（hello-rpa 订单审批）
+erp.order.approve:
+  executor_domain: api
+  description: "批准 ERP 采购订单"
+  params:
+    type: object
+    required: [order_id]
+    properties:
+      order_id: { type: string }
+      approver: { type: string }
+  idempotency: required
+  risk: L2
+  timeout_ms: 60000
+  retries: 1
+  audit_fields: [order_id, approver]
+
+erp.order.reject:
+  executor_domain: api
+  description: "驳回 ERP 采购订单"
+  params:
+    type: object
+    required: [order_id]
+    properties:
+      order_id: { type: string }
+      reason_code: { type: string }
+  idempotency: required
+  risk: L2
+  timeout_ms: 30000
+  retries: 0
+  audit_fields: [order_id, reason_code]
+
+# 会话控制（Gateway 处理，不转发 Executor）
+session.complete:
+  executor_domain: any
+  description: "完成会话"
+  params:
+    type: object
+    properties:
+      outcome: { enum: [success, failure, cancelled] }
+      summary: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 1
+  audit_fields: [outcome]

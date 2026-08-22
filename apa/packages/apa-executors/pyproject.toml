@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "apa-executors"
+version = "0.1.0"
+description = "APA standard executors: browser (Playwright), API (httpx)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "apa-core>=0.1.0",
+    "apa-sdk-python>=0.1.0",
+    "aip>=0.1.0",
+]
+[project.optional-dependencies]
+browser = ["playwright>=1.40"]
+api = ["httpx>=0.25"]
+
+[tool.setuptools.packages.find]
+include = ["apa_executors*"]

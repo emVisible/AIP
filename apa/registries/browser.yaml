@@ -1,0 +1,171 @@
+# ============================================================
+# Browser Action Registry — browser.*（§9.3 子集）
+# ============================================================
+browser.navigate:
+  executor_domain: browser
+  description: "导航到 URL"
+  params:
+    type: object
+    required: [url]
+    properties:
+      url: { type: string, format: uri }
+      wait_for: { enum: [load, domcontentloaded, networkidle] }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 3
+  audit_fields: [url]
+  expect: "browser.page.loaded"
+
+browser.click:
+  executor_domain: browser
+  description: "点击目标元素"
+  params:
+    type: object
+    required: [target]
+    properties:
+      target: { type: string }
+      force: { type: boolean }
+  idempotency: none
+  risk: L1
+  timeout_ms: 10000
+  retries: 0
+  audit_fields: [target]
+
+browser.input:
+  executor_domain: browser
+  description: "向输入框填充值（clear+fill 幂等）"
+  params:
+    type: object
+    required: [target, value]
+    properties:
+      target: { type: string }
+      value: { type: string }
+      clear_first: { type: boolean }
+  idempotency: required
+  risk: L1
+  timeout_ms: 5000
+  retries: 2
+  audit_fields: [target]
+  audit_mask_fields: [value]
+
+browser.select_option:
+  executor_domain: browser
+  description: "选择下拉选项"
+  params:
+    type: object
+    required: [target, value]
+    properties:
+      target: { type: string }
+      value: { type: string }
+  idempotency: required
+  risk: L1
+  timeout_ms: 5000
+  retries: 2
+  audit_fields: [target, value]
+
+browser.extract:
+  executor_domain: browser
+  description: "按选择器提取文本到 ContextStore"
+  params:
+    type: object
+    required: [selectors]
+    properties:
+      selectors:
+        type: object
+        additionalProperties: { type: string }
+      output_context: { type: string, pattern: "^ctx_[A-Za-z0-9_]+$" }
+  idempotency: required
+  risk: L0
+  timeout_ms: 15000
+  retries: 2
+  audit_fields: [selectors]
+
+browser.wait_element:
+  executor_domain: browser
+  description: "等待元素出现"
+  params:
+    type: object
+    required: [target]
+    properties:
+      target: { type: string }
+      timeout_ms: { type: number }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 1
+  audit_fields: [target]
+
+browser.scroll:
+  executor_domain: browser
+  description: "滚动页面"
+  params:
+    type: object
+    required: [direction]
+    properties:
+      direction: { enum: [up, down, to_top, to_bottom] }
+  idempotency: optional
+  risk: L0
+  timeout_ms: 3000
+  retries: 0
+  audit_fields: [direction]
+
+browser.upload_file:
+  executor_domain: browser
+  description: "上传文件"
+  params:
+    type: object
+    required: [target, filename]
+    properties:
+      target: { type: string }
+      filename: { type: string }
+  idempotency: none
+  risk: L2
+  timeout_ms: 120000
+  retries: 0
+  audit_fields: [target, filename]
+
+browser.download_file:
+  executor_domain: browser
+  description: "触发并等待文件下载"
+  params:
+    type: object
+    required: [target]
+    properties:
+      target: { type: string }
+      save_dir: { type: string }
+  idempotency: required
+  risk: L1
+  timeout_ms: 180000
+  retries: 1
+  audit_fields: [target]
+
+browser.run_script:
+  executor_domain: browser
+  description: "在页面执行 JS（高风险，禁止自动执行）"
+  params:
+    type: object
+    required: [script]
+    properties:
+      script: { type: string }
+  idempotency: none
+  risk: L3
+  timeout_ms: 10000
+  retries: 0
+  requires_approval_at: L3
+  audit_fields: [script_hash]
+
+browser.take_screenshot:
+  executor_domain: browser
+  description: "截图存入 ContextStore，ref 写入 result（C6，不传输原始字节）"
+  params:
+    type: object
+    required: [output_context]
+    properties:
+      output_context: { type: string, pattern: "^ctx_[A-Za-z0-9_]+$" }
+      full_page: { type: boolean }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+  audit_fields: [output_context]

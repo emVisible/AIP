@@ -1,0 +1,35 @@
+# APA hello-rpa 语义适配器 Schema（设计文档 §6.2）
+# 声明元素模式 → 把物理页面翻译成 AIP 语义事件
+app:
+  name: "采购订单待办页"
+  url_pattern: "index.html"
+
+semantic_patterns:
+  # 页面加载完成
+  page_loaded:
+    trigger:
+      url_pattern: "*index.html*"
+    emit:
+      event: "browser.page.loaded"
+      data_mapping:
+        url: { selector: "__url__" }
+        title: { selector: "__title__" }
+        order_count: { selector: "[data-apa-id='order-row-2']", transform: "parse_int" }
+
+  # 首个订单的审批对话框
+  approval_dialog:
+    trigger:
+      element: { role: "heading", text_pattern: "待审批" }
+    emit:
+      event: "erp.order.approval_requested"
+      data_mapping:
+        order_id: { selector: "[data-order-id]" }
+        amount:   { selector: ".order-amount", transform: "parse_currency" }
+        vendor:   { selector: ".vendor-name" }
+      available_actions:
+        - name: "approve"
+          trigger: { role: "button", text_pattern: "批准" }
+          maps_to_action: "erp.order.approve"
+        - name: "reject"
+          trigger: { role: "button", text_pattern: "驳回" }
+          maps_to_action: "erp.order.reject"

@@ -1,0 +1,37 @@
+# APA hello-rpa 规则（设计文档 §7.2 L0，0 Token）
+# 流程：导航 → 语义适配器发现审批对话框 → 点击批准 → 读取结果 → 完成
+# once: true 表示该规则整个 Session 只执行一次（防重复触发）
+rules:
+  - name: approve_small_order
+    once: true
+    if:
+      event: erp.order.approval_requested
+      data:
+        amount: { lt: 100000 }
+    then:
+      action: browser.click
+      params:
+        target: "approve-btn-1"
+
+  - name: read_result
+    once: true
+    if:
+      action_result: browser.click
+      status: ok
+    then:
+      action: browser.extract
+      params:
+        selectors:
+          result: "[data-apa-id='result']"
+        output_context: "ctx_s_hello_001_result"
+
+  - name: complete
+    once: true
+    if:
+      action_result: browser.extract
+      status: ok
+    then:
+      action: session.complete
+      params:
+        outcome: success
+        summary: "已审批订单 {{order_id}}"

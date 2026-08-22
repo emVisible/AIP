@@ -1,0 +1,91 @@
+# ============================================================
+# Core Action Registry — context.* / human.*
+# 设计文档 §9.3。idempotency/risk 的唯一来源（C3）。
+# ============================================================
+context.get:
+  executor_domain: any
+  description: "按需获取 ContextStore 中特定字段（CoD-2，禁止 fields: [\"*\"]）"
+  params:
+    type: object
+    required: [ref, fields]
+    properties:
+      ref: { type: string, pattern: "^ctx_[A-Za-z0-9_]+$" }
+      fields:
+        type: array
+        items: { type: string }
+        minItems: 1
+        not:
+          enum: ["*"]
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 3
+  audit_fields: [ref, fields]
+
+context.update:
+  executor_domain: any
+  description: "更新 ContextStore 中的字段"
+  params:
+    type: object
+    required: [ref, fields]
+    properties:
+      ref: { type: string, pattern: "^ctx_[A-Za-z0-9_]+$" }
+      fields: { type: object }
+  idempotency: required
+  risk: L1
+  timeout_ms: 5000
+  retries: 2
+  audit_fields: [ref]
+
+# ============================================================
+# 人工干预域（human.*）— 通知操作，业务副作用来自后续 action
+# ============================================================
+human.task.create:
+  executor_domain: any
+  description: "创建人工审批/复核/异常任务（Session 挂起）"
+  params:
+    type: object
+    required: [task_type, assignee_role, context_ref]
+    properties:
+      task_type: { enum: [approval, review, exception] }
+      assignee_role: { type: string }
+      context_ref: { type: string, pattern: "^ctx_[A-Za-z0-9_]+$" }
+      available_outcomes: { type: array, items: { type: string } }
+      due_at: { type: number }
+      priority: { enum: [low, normal, high, urgent] }
+  idempotency: required
+  risk: L1
+  timeout_ms: 5000
+  retries: 2
+  audit_fields: [task_type, assignee_role, context_ref]
+
+human.task.cancel:
+  executor_domain: any
+  description: "取消人工任务并恢复/结束挂起的 Session"
+  params:
+    type: object
+    required: [task_id, reason]
+    properties:
+      task_id: { type: string }
+      reason: { type: string }
+  idempotency: required
+  risk: L1
+  timeout_ms: 5000
+  retries: 1
+  audit_fields: [task_id, reason]
+
+human.task.reassign:
+  executor_domain: any
+  description: "将人工任务转派给其他角色"
+  params:
+    type: object
+    required: [task_id, to_assignee]
+    properties:
+      task_id: { type: string }
+      from_assignee: { type: string }
+      to_assignee: { type: string }
+  idempotency: required
+  risk: L1
+  timeout_ms: 5000
+  retries: 1
+  audit_fields: [task_id, from_assignee, to_assignee]

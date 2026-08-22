@@ -1,0 +1,108 @@
+# ============================================================
+# Desktop Action Registry — desktop.*（§9.3 子集，POC）
+# ============================================================
+desktop.window.activate:
+  executor_domain: desktop
+  description: "激活指定窗口"
+  params:
+    type: object
+    required: [title]
+    properties:
+      app_name: { type: string }
+      title: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 8000
+  retries: 2
+  audit_fields: [app_name, title]
+
+desktop.window.close:
+  executor_domain: desktop
+  description: "关闭窗口"
+  params:
+    type: object
+    required: [app_name]
+    properties:
+      app_name: { type: string }
+      title: { type: string }
+  idempotency: required
+  risk: L1
+  timeout_ms: 5000
+  retries: 0
+  audit_fields: [app_name]
+
+desktop.keyboard.input:
+  executor_domain: desktop
+  description: "键盘输入"
+  params:
+    type: object
+    required: [target, text]
+    properties:
+      target: { type: string }
+      text: { type: string }
+  idempotency: required
+  risk: L1
+  timeout_ms: 5000
+  retries: 1
+  audit_fields: [target]
+  audit_mask_fields: [text]
+
+desktop.file.copy:
+  executor_domain: desktop
+  description: "复制文件"
+  params:
+    type: object
+    required: [source, dest]
+    properties:
+      source: { type: string }
+      dest: { type: string }
+  idempotency: required
+  risk: L1
+  timeout_ms: 60000
+  retries: 2
+  audit_fields: [source, dest]
+
+desktop.process.launch:
+  executor_domain: desktop
+  description: "启动进程"
+  params:
+    type: object
+    required: [executable]
+    properties:
+      executable: { type: string }
+      args_hash: { type: string }
+  idempotency: none
+  risk: L2
+  timeout_ms: 30000
+  retries: 0
+  audit_fields: [executable, args_hash]
+
+desktop.file.move:
+  executor_domain: desktop
+  description: "移动文件"
+  params:
+    type: object
+    required: [source, dest]
+    properties:
+      source: { type: string }
+      dest: { type: string }
+  idempotency: required
+  risk: L2
+  timeout_ms: 30000
+  retries: 1
+  audit_fields: [source, dest]
+
+desktop.file.delete:
+  executor_domain: desktop
+  description: "删除文件（高风险，需人工确认）"
+  params:
+    type: object
+    required: [path]
+    properties:
+      path: { type: string }
+  idempotency: required
+  risk: L3
+  timeout_ms: 10000
+  retries: 0
+  requires_approval_at: L3
+  audit_fields: [path]

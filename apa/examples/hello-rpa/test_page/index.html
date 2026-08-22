@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>APA 演示 — 采购订单待办</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; }
+    h1 { font-size: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
+    button { padding: 6px 14px; margin: 4px; }
+    .approve { background: #2e7d32; color: #fff; }
+    .reject { background: #c62828; color: #fff; }
+  </style>
+</head>
+<body>
+  <h1 data-apa-id="page-title">待审批采购订单</h1>
+
+  <table>
+    <thead>
+      <tr><th>订单号</th><th>金额</th><th>供应商</th><th>操作</th></tr>
+    </thead>
+    <tbody>
+      <tr data-apa-id="order-row-1" data-order-id="PO-5678">
+        <td>PO-5678</td>
+        <td class="order-amount" data-apa-id="order-amount-1">¥45,000.00</td>
+        <td class="vendor-name" data-apa-id="vendor-1">示例供应商A</td>
+        <td>
+          <button class="approve" data-apa-id="approve-btn-1" role="button">批准</button>
+          <button class="reject" data-apa-id="reject-btn-1" role="button">驳回</button>
+        </td>
+      </tr>
+      <tr data-apa-id="order-row-2" data-order-id="PO-5679">
+        <td>PO-5679</td>
+        <td class="order-amount" data-apa-id="order-amount-2">¥350,000.00</td>
+        <td class="vendor-name" data-apa-id="vendor-2">示例供应商B</td>
+        <td>
+          <button class="approve" data-apa-id="approve-btn-2" role="button">批准</button>
+          <button class="reject" data-apa-id="reject-btn-2" role="button">驳回</button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div id="result" data-apa-id="result" style="margin-top: 24px; padding: 12px; border: 1px solid #ddd;">
+    审批结果：待处理
+  </div>
+
+  <script>
+    // 简单模拟审批动作：点击"批准"后更新结果区
+    document.querySelectorAll('.approve').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row = btn.closest('tr');
+        const orderId = row.getAttribute('data-order-id');
+        document.querySelector('[data-apa-id="result"]').textContent =
+          `已批准订单 ${orderId}`;
+      });
+    });
+    document.querySelectorAll('.reject').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row = btn.closest('tr');
+        const orderId = row.getAttribute('data-order-id');
+        document.querySelector('[data-apa-id="result"]').textContent =
+          `已驳回订单 ${orderId}`;
+      });
+    });
+  </script>
+</body>
+</html>

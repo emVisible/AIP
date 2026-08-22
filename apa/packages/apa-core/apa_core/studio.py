@@ -163,6 +163,8 @@ class StudioHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/audit":
             self._send(json.dumps(st.audit_tail(), ensure_ascii=False).encode(),
                        "application/json")
+        elif self.path.startswith("/api/journal/stream"):
+            self._stream_journal()
         elif self.path == "/api/analytics":
             from .analytics import summarize
             data = summarize(st.journal_paths, tenant=st.tenant)
@@ -509,6 +511,29 @@ class StudioServer:
             form_proc["process"]["error_handlers"] = handlers
         build_process(form_proc)   # 校验（含 C3 检查），不通过即抛错
         return _yaml.safe_dump(form_proc, allow_unicode=True, sort_keys=False)
+
+    def _stream_journal(self) -> None:
+        """SSE：text/event-stream 增量推送 journal 记录（按 ts 水位）。"""
+        import time as _t
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        last_ts = 0.0
+        try:
+            while True:
+                for path in self.journal_paths:
+                    for rec in journal_records(path):
+                        ts = float(rec.get("ts", 0))
+                        if ts > last_ts:
+                            last_ts = ts
+                            payload = json.dumps(rec, ensure_ascii=False)
+                            self.wfile.write(f"data: {payload}\n\n".encode())
+                self.wfile.write(b": keepalive\n\n")
+                self.wfile.flush()
+                _t.sleep(1.0)
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # 客户端断开 → 线程自然结束
 
     def registry_actions(self) -> Dict[str, dict]:
         """低代码设计器数据源：动作名 → {description, risk, domain, params}。"""

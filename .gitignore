@@ -13,3 +13,5 @@ apa/tests/_p6b.jsonl
 uv.lock
 # APA secrets（勿提交）
 .env
+desktop/node_modules/
+apa/data/runs/

@@ -7,6 +7,7 @@ recover() 重放日志重建 Gateway 状态（游标精确恢复，断线不丢�
 from __future__ import annotations
 
 import json
+import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -30,6 +31,67 @@ class SessionJournal:
         return list(self._records)
 
 
+class SqliteJournal:
+    """SQLite 持久化后端（stdlib sqlite3，单文件、事务写入）。
+
+    与 SessionJournal 同接口（record/all），可互换：
+        journal = open_journal("data/s.sqlite")   # 按扩展名选择后端
+    """
+
+    def __init__(self, path: str | Path) -> None:
+        import sqlite3
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(str(self.path), check_same_thread=False)
+        self._lock = threading.Lock()
+        with self._lock:
+            self._conn.execute(
+                "CREATE TABLE IF NOT EXISTS records ("
+                " id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                " ts INTEGER NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL)")
+            self._conn.commit()
+
+    def record(self, kind: str, **fields) -> dict:
+        import json as _json
+        rec = {"kind": kind, "ts": now_ms(), **fields}
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO records (ts, kind, payload) VALUES (?, ?, ?)",
+                (rec["ts"], kind, _json.dumps(rec, ensure_ascii=False)))
+            self._conn.commit()
+        return rec
+
+    def all(self) -> List[dict]:
+        import json as _json
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT payload FROM records ORDER BY id").fetchall()
+        return [_json.loads(r[0]) for r in rows]
+
+    def close(self) -> None:
+        self._conn.close()
+
+
+def open_journal(path: str | Path) -> Any:
+    """按扩展名选择 journal 后端：.jsonl → SessionJournal；
+    .sqlite/.sqlite3/.db → SqliteJournal。"""
+    p = Path(path)
+    suffix = p.suffix.lower()
+    if suffix in (".sqlite", ".sqlite3", ".db"):
+        return SqliteJournal(p)
+    return SessionJournal(p)
+
+
+def journal_records(source: Any) -> List[dict]:
+    """统一读取：接受路径（自动选后端）或任意实现 .all() 的 journal 对象。"""
+    if hasattr(source, "all"):
+        return list(source.all())
+    p = Path(source)
+    if p.suffix.lower() in (".sqlite", ".sqlite3", ".db"):
+        return SqliteJournal(p).all()
+    return load_journal(p)
+
+
 def load_journal(path: str | Path) -> List[dict]:
     """读取 JSONL 日志（文件不存在返回空）。"""
     p = Path(path)
@@ -49,7 +111,7 @@ def load_journal(path: str | Path) -> List[dict]:
 
 def recover(
     session_id: str,
-    journal_path: str | Path,
+    journal: str | Path | Any,
     *,
     registry=None,
     policy=None,
@@ -67,9 +129,14 @@ def recover(
     """
     from .embedded import EmbeddedGateway
 
-    records = load_journal(journal_path)
-    journal = SessionJournal(journal_path)
-    journal._records = list(records)
+    if isinstance(journal, (str, Path)):
+        records = journal_records(journal)          # 从盘读取（按后端）
+        writer = open_journal(journal)              # 继续追加的写句柄
+    else:
+        records = journal_records(journal)
+        writer = journal
+    if hasattr(writer, "_records"):
+        writer._records = list(records)
 
     gw = EmbeddedGateway(
         session_id,
@@ -80,7 +147,7 @@ def recover(
         clock=clock,
         process_id=process_id,
         tenant_id=tenant_id,
-        journal=journal,
+        journal=writer,
     )
     g = gw.gateway
 
@@ -134,7 +201,7 @@ def release_expired(journal_path: str | Path, ttl_minutes: int = 30) -> int:
     """
     import time
     p = Path(journal_path)
-    records = load_journal(p)
+    records = journal_records(p)
     if not records:
         return 0
     terminal = {"COMPLETED", "FAILED", "CANCELLED"}
@@ -157,6 +224,8 @@ def release_expired(journal_path: str | Path, ttl_minutes: int = 30) -> int:
         else:
             keep.extend(rs)
     if archive:
+        if p.suffix.lower() in (".sqlite", ".sqlite3", ".db"):
+            return released  # sqlite 后端不做文件级归档
         with open(p.with_suffix(p.suffix + ".archive"), "a", encoding="utf-8") as fh:
             for r in archive:
                 fh.write(json.dumps(r, ensure_ascii=False) + "\n")

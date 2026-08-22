@@ -115,6 +115,27 @@ rules:
 支持事件条件与 action_result 条件、金额比较（lt/le/gt/ge/eq/ne）、
 `{{field}}` 模板插值。L1/L2（小模型/大模型）与 dsh 接入为后续阶段。
 
+## 生产加固（Phase 7）
+
+| 能力 | 说明 |
+|---|---|
+| **TLS 传输安全**（§12.1 第一层） | `WsGatewayServer(ssl_context=...)` 以 wss:// 监听；`generate_dev_certs()` 一键生成开发自签证书；客户端配套 `client_ssl_context_insecure()`（仅测试） |
+| **应用级令牌准入** | `WsGatewayServer(hello_token=...)`：hello 帧须携带匹配 token，错/缺 → UNAUTHORIZED（与 TLS 正交，可叠加租户/I9 校验） |
+| **多会话池** | `WsGatewayServer(gateways={sid: gw, ...})` 单服务并发承载多个会话；hello.session 路由、连接表/出站泵按会话隔离、未知会话显式拒绝 |
+| **SQLite 持久化后端** | `SqliteJournal`（stdlib sqlite3，事务写入）；`open_journal(path)` 按扩展名自动选择 JSONL/SQLite；recover/studio/analytics/human_loop 统一读取层全部兼容 |
+| **延迟基准**（§14.4） | `python -m benchmarks.latency --n 200` —— 内嵌回路动作往返 p50≈0.03ms / 吞吐 ≈3600 ops/s（Apple Silicon 实测），CI 可作回归阈值 |
+
+```python
+# 生产部署示例：TLS + 令牌 + 多会话
+certs = generate_dev_certs("certs")            # 生产用受信 CA 替换
+server = WsGatewayServer(
+    gateways={"sess_A": gw_a.gateway, "sess_B": gw_b.gateway},
+    port=8765,
+    ssl_context=server_ssl_context(*certs),
+    hello_token="ops-secret",                  # 客户端 hello 携带 token
+)
+```
+
 ## 可交互入口
 
 | 交互方式 | 命令 / 地址 |

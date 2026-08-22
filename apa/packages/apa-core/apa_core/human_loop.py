@@ -53,7 +53,7 @@ class HumanTaskManager:
 
 def main() -> int:  # pragma: no cover
     import argparse
-    from .persist import load_journal
+    from .persist import journal_records
 
     parser = argparse.ArgumentParser(prog="human_loop",
                                      description="APA 人工任务 CLI")
@@ -66,7 +66,7 @@ def main() -> int:  # pragma: no cover
     p_res.add_argument("--outcome", default="retry")
     args = parser.parse_args()
 
-    records = load_journal(args.journal)
+    records = journal_records(args.journal)
     open_tasks = [r for r in records if r.get("kind") == "task" and r.get("status") == "open"]
     resolved_ids = {r["task_id"] for r in records if r.get("kind") == "task" and r.get("status") == "resolved"}
     open_tasks = [t for t in open_tasks if t["task_id"] not in resolved_ids]

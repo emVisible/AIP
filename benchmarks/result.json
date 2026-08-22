@@ -1,0 +1,91 @@
+{
+  "task": "erp_submit_order",
+  "steps": 9,
+  "pricing": {
+    "llm": {
+      "input": 5.0,
+      "output": 15.0
+    },
+    "small": {
+      "input": 0.25,
+      "output": 1.25
+    }
+  },
+  "results": [
+    {
+      "model": "A: traditional long-context agent",
+      "calls": 9,
+      "tier_calls": {
+        "llm": 9,
+        "small": 0
+      },
+      "input_tokens": 18925,
+      "output_tokens": 540,
+      "total_tokens": 19465,
+      "avg_context_per_decision": 2102.8,
+      "cost_usd_per_task": 0.102725,
+      "cost_per_successful_task": 0.102725,
+      "success_rate": 1.0
+    },
+    {
+      "model": "B: MCP agent",
+      "calls": 9,
+      "tier_calls": {
+        "llm": 9,
+        "small": 0
+      },
+      "input_tokens": 41219,
+      "output_tokens": 540,
+      "total_tokens": 41759,
+      "avg_context_per_decision": 4579.9,
+      "cost_usd_per_task": 0.214195,
+      "cost_per_successful_task": 0.214195,
+      "success_rate": 1.0
+    },
+    {
+      "model": "C: AIP + Context-on-Demand",
+      "calls": 9,
+      "tier_calls": {
+        "llm": 9,
+        "small": 0
+      },
+      "input_tokens": 790,
+      "output_tokens": 270,
+      "total_tokens": 1060,
+      "avg_context_per_decision": 87.8,
+      "cost_usd_per_task": 0.008,
+      "cost_per_successful_task": 0.008,
+      "success_rate": 1.0
+    },
+    {
+      "model": "D: AIP + small model",
+      "calls": 9,
+      "tier_calls": {
+        "llm": 1,
+        "small": 8
+      },
+      "input_tokens": 790,
+      "output_tokens": 270,
+      "total_tokens": 1060,
+      "avg_context_per_decision": 87.8,
+      "cost_usd_per_task": 0.001394,
+      "cost_per_successful_task": 0.001394,
+      "success_rate": 1.0
+    },
+    {
+      "model": "E: AIP + rule + small + LLM cascade",
+      "calls": 4,
+      "tier_calls": {
+        "llm": 1,
+        "small": 3
+      },
+      "input_tokens": 360,
+      "output_tokens": 120,
+      "total_tokens": 480,
+      "avg_context_per_decision": 90.0,
+      "cost_usd_per_task": 0.001099,
+      "cost_per_successful_task": 0.001099,
+      "success_rate": 1.0
+    }
+  ]
+}

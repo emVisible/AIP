@@ -1,0 +1,20 @@
+{"kind": "state", "ts": 1787372060066, "session": "s_hitl_001", "tenant": "demo", "to": "RUNNING"}
+{"kind": "cursor", "ts": 1787372060068, "session": "s_hitl_001", "tenant": "demo", "source": "bot_01", "seq": 1}
+{"kind": "cursor", "ts": 1787372060068, "session": "s_hitl_001", "tenant": "demo", "source": "rule_01", "seq": 1}
+{"kind": "action", "ts": 1787372060085, "session": "s_hitl_001", "tenant": "demo", "action_id": "act_0437efdd8e5d", "name": "doc.extract_fields", "source": "rule_01", "risk": "L0", "verdict": "permitted"}
+{"kind": "cursor", "ts": 1787372060085, "session": "s_hitl_001", "tenant": "demo", "source": "bot_01", "seq": 2}
+{"kind": "cursor", "ts": 1787372060086, "session": "s_hitl_001", "tenant": "demo", "source": "bot_01", "seq": 3}
+{"kind": "action_result", "ts": 1787372060086, "session": "s_hitl_001", "tenant": "demo", "action_id": "act_0437efdd8e5d", "status": "ok", "name": "doc.extract_fields"}
+{"kind": "cursor", "ts": 1787372060086, "session": "s_hitl_001", "tenant": "demo", "source": "rule_01", "seq": 2}
+{"kind": "state", "ts": 1787372060086, "session": "s_hitl_001", "tenant": "demo", "to": "SUSPENDED"}
+{"kind": "task", "ts": 1787372060086, "session": "s_hitl_001", "tenant": "demo", "task_id": "ht_act_a85c9cc4a69f", "status": "open", "task_type": "approval"}
+{"kind": "cursor", "ts": 1787372060296, "session": "s_hitl_001", "tenant": "demo", "source": "bot_01", "seq": 4}
+{"kind": "state", "ts": 1787372060296, "session": "s_hitl_001", "tenant": "demo", "to": "RUNNING"}
+{"kind": "cursor", "ts": 1787372060296, "session": "s_hitl_001", "tenant": "demo", "source": "rule_01", "seq": 3}
+{"kind": "action", "ts": 1787372060296, "session": "s_hitl_001", "tenant": "demo", "action_id": "act_6542e6a0ac0a", "name": "erp.invoice.create", "source": "rule_01", "risk": "L2", "verdict": "permitted"}
+{"kind": "cursor", "ts": 1787372060299, "session": "s_hitl_001", "tenant": "demo", "source": "bot_01", "seq": 5}
+{"kind": "action_result", "ts": 1787372060299, "session": "s_hitl_001", "tenant": "demo", "action_id": "act_6542e6a0ac0a", "status": "ok", "name": "erp.invoice.create"}
+{"kind": "cursor", "ts": 1787372060299, "session": "s_hitl_001", "tenant": "demo", "source": "rule_01", "seq": 4}
+{"kind": "state", "ts": 1787372060299, "session": "s_hitl_001", "tenant": "demo", "to": "COMPLETING"}
+{"kind": "state", "ts": 1787372060299, "session": "s_hitl_001", "tenant": "demo", "to": "COMPLETED"}
+{"kind": "task", "ts": 1787372060299, "session": "s_hitl_001", "tenant": "demo", "task_id": "ht_act_a85c9cc4a69f", "status": "resolved", "outcome": "approve"}

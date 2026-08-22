@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from .persist import load_journal
+from .persist import journal_records
 
 _HTML = """<!doctype html><html lang="zh"><head><meta charset="utf-8">
 <title>APA Studio</title>
@@ -47,7 +47,7 @@ __BODY__
 def collect_sessions(journal_paths: List[str]) -> Dict[str, dict]:
     sessions: Dict[str, dict] = {}
     for path in journal_paths:
-        for rec in load_journal(path):
+        for rec in journal_records(path):
             sid = rec.get("session", "")
             if not sid:
                 continue
@@ -212,7 +212,7 @@ class StudioServer:
             records: List[dict] = []
             for target in (archive, p):
                 if target.exists():
-                    records.extend(load_journal(target))
+                    records.extend(journal_records(target))
             for rec in records:
                 if rec.get("kind") not in ("cursor",):
                     rec = dict(rec)

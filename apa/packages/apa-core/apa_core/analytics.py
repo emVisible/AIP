@@ -11,7 +11,7 @@ import glob
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from .persist import load_journal
+from .persist import journal_records
 
 
 def summarize(journal_paths: List[str], *, tenant: Optional[str] = None) -> dict:
@@ -25,7 +25,7 @@ def summarize(journal_paths: List[str], *, tenant: Optional[str] = None) -> dict
     tasks_resolved = 0
 
     for path in expanded:
-        for rec in load_journal(path):
+        for rec in journal_records(path):
             if tenant and rec.get("tenant") != tenant:
                 continue
             kind = rec.get("kind")

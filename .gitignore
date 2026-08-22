@@ -7,9 +7,9 @@ build/
 *.egg-info/
 node_modules/
 package-lock.json
-benchmarks/result.jsonapa/examples/human-approval/.session.jsonl
+benchmarks/result.json
+apa/examples/human-approval/.session.jsonl
 apa/tests/_p6b.jsonl
 uv.lock
-
 # APA secrets（勿提交）
 .env

@@ -15,5 +15,8 @@ dependencies = [
     "jsonschema>=4.0",
 ]
 
+[project.scripts]
+apa = "apa_core.cli:main"
+
 [tool.setuptools.packages.find]
 include = ["apa_core*"]

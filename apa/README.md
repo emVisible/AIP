@@ -115,6 +115,17 @@ rules:
 支持事件条件与 action_result 条件、金额比较（lt/le/gt/ge/eq/ne）、
 `{{field}}` 模板插值。L1/L2（小模型/大模型）与 dsh 接入为后续阶段。
 
+## 控制平面补全（Phase 8：Scheduler / Launcher / 统一 CLI）
+
+- [x] **apa-scheduler**（§13.1）：`cron.py` 标准 5 字段表达式（纯 stdlib）+
+  `scheduler.Scheduler` —— Cron 触发（同分钟去重）/ Event 订阅（data 过滤），
+  处理器可直接调用 `launcher.run_process` 一键起会话跑流程
+- [x] **流程启动器泛化**：`launcher.run_process(process.yaml, event, data,
+  executors=..., seed_contexts=...)` —— 任意复合执行器规格 + CoD 预置 +
+  自动 session.complete 收尾；po-approval 验收场景已迁移复用
+- [x] **统一 `apa` CLI**：`apa studio / analytics / tasks / latency`
+  （console script：`pip install -e apa/packages/apa-core`）
+
 ## 生产加固（Phase 7）
 
 | 能力 | 说明 |

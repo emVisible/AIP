@@ -5,10 +5,13 @@ from .analytics import report as analytics_report
 from .analytics import summarize as analytics_summarize
 from .cascade import CascadingAgent
 from .context import APAContextStore, ContextRefError
+from .cron import CronError, CronExpr, is_due as cron_is_due
 from .embedded import EmbeddedGateway
 from .gateway import APAGateway, MAX_EVENT_DATA_BYTES, RetryScheduler
 from .human_loop import HumanTaskManager
+from .launcher import ProcessRunner, run_process
 from .llm import FakeLLMClient, LLMClient, LLMError, parse_decision
+from .scheduler import Scheduler, SchedulerError
 from .mock_erp import MockERP
 from .persist import SessionJournal, load_journal, recover, release_expired
 from .policy import PolicyConfig, PolicyDecision
@@ -48,6 +51,8 @@ __all__ = [
     "AuditService",
     "CascadingAgent",
     "ContextRefError",
+    "CronExpr",
+    "CronError",
     "EmbeddedGateway",
     "EncryptedFileVault",
     "EnvVault",
@@ -62,6 +67,7 @@ __all__ = [
     "MockERP",
     "PolicyConfig",
     "PolicyDecision",
+    "ProcessRunner",
     "ProcessDef",
     "ProcessDefinitionError",
     "ProcessEngine",
@@ -73,6 +79,8 @@ __all__ = [
     "RetryScheduler",
     "RuleBasedAgent",
     "RuleEngine",
+    "Scheduler",
+    "SchedulerError",
     "SessionJournal",
     "SessionRecord",
     "SessionStateMachine",
@@ -81,6 +89,8 @@ __all__ = [
     "VaultManager",
     "analytics_report",
     "analytics_summarize",
+    "cron_is_due",
+    "run_process",
     "interpolate",
     "load_registries",
     "load_journal",

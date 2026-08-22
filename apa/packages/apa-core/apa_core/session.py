@@ -71,12 +71,17 @@ class SessionRecord:
 
 
 class SessionStateMachine:
-    """持有 SessionRecord 并驱动状态迁移。"""
+    """持有 SessionRecord 并驱动状态迁移。
+
+    on_transition: 可选回调列表，签名 (to_state, from_state)。持久化层用。
+    """
 
     def __init__(self, session_id: str, *, process_id: str | None = None,
-                 tenant_id: str | None = None, clock=None) -> None:
+                 tenant_id: str | None = None, clock=None,
+                 on_transition: list | None = None) -> None:
         self.clock = clock
         now = clock.now_ms() if clock else 0
+        self.on_transition: list = list(on_transition or [])
         self.record = SessionRecord(
             session_id=session_id, process_id=process_id, tenant_id=tenant_id,
             created_ms=now, updated_ms=now,
@@ -91,9 +96,20 @@ class SessionStateMachine:
             self.record.updated_ms = self.clock.now_ms()
 
     def transition(self, to: str) -> str:
+        frm = self.record.state
         self.record.transition(to)
         self._touch()
+        for cb in self.on_transition:
+            cb(to, frm)
         return self.record.state
+
+    def force_state(self, to: str) -> None:
+        """仅用于恢复：不经校验直接置位。"""
+        frm = self.record.state
+        self.record.state = to
+        self._touch()
+        for cb in self.on_transition:
+            cb(to, frm)
 
     def start(self) -> None:
         if self.state == "INITIALIZING":

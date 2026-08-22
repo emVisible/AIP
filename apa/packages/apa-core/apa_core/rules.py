@@ -34,15 +34,20 @@ except ImportError:  # pragma: no cover
 TEMPLATE_RE = re.compile(r"\{\{([a-zA-Z0-9_.]+)\}\}")
 
 
+def lookup(ctx: Dict[str, Any], dotted: str) -> Any:
+    """按 a.b.c 路径取值；缺失返回 None。"""
+    value: Any = ctx
+    for part in dotted.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return None
+        value = value[part]
+    return value
+
+
 def interpolate(template: str, ctx: Dict[str, Any]) -> str:
     def _lookup(m: re.Match) -> str:
-        path = m.group(1).split(".")
-        value: Any = ctx
-        for part in path:
-            if not isinstance(value, dict) or part not in value:
-                return m.group(0)
-            value = value[part]
-        return str(value) if value is not None else m.group(0)
+        value = lookup(ctx, m.group(1))
+        return m.group(0) if value is None else str(value)
     return TEMPLATE_RE.sub(_lookup, template)
 
 
@@ -118,6 +123,11 @@ class RuleEngine:
             if key in cond and cond[key] not in data.get(field_map[key], ""):
                 return False
         for k, v in cond.get("data", {}).items():
+            # {"present": true}：字段存在且非空
+            if isinstance(v, dict) and v.get("present") is True:
+                if k not in data or data[k] in (None, "", []):
+                    return False
+                continue
             if k not in data or not _compare(data[k], v):
                 return False
         return True
@@ -231,7 +241,13 @@ class RuleBasedAgent:
         out: Dict[str, Any] = {}
         for k, v in params.items():
             if isinstance(v, str):
-                out[k] = interpolate(v, self.ctx)
+                m = TEMPLATE_RE.fullmatch(v)
+                if m is not None:
+                    # 整值模板：保留原生类型（number/bool/list…）
+                    native = lookup(self.ctx, m.group(1))
+                    out[k] = v if native is None else native
+                else:
+                    out[k] = interpolate(v, self.ctx)
             elif isinstance(v, dict):
                 out[k] = self._interpolate_params(v)
             else:

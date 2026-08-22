@@ -1,0 +1,23 @@
+{
+  "name": "@apa/dsh-plugin",
+  "version": "0.2.0",
+  "description": "APA decision-engine plugin for DeepSeek Harness (dsh): connects a cordis agent to an APA gateway over the AIP WebSocket binding",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.noEmit.json"
+  },
+  "dependencies": {
+    "@aip/protocol": "link:../../../sdk/typescript"
+  },
+  "peerDependencies": {
+    "cordis": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

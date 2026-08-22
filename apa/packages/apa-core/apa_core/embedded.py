@@ -40,6 +40,7 @@ class EmbeddedGateway:
         clock=None,
         process_id: Optional[str] = None,
         tenant_id: Optional[str] = None,
+        journal=None,
     ) -> None:
         self.gateway = APAGateway(
             session_id,
@@ -50,6 +51,7 @@ class EmbeddedGateway:
             clock=clock,
             process_id=process_id,
             tenant_id=tenant_id,
+            journal=journal,
         )
 
     def attach_executor(self, executor, source: str) -> AIPPeer:

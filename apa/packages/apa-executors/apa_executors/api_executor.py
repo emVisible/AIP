@@ -17,17 +17,18 @@ except ImportError:  # pragma: no cover
 
 class APIExecutor(AIPExecutor):
     def __init__(self, source: str, session_id: str, transport=None, *,
-                 client=None, context_store=None) -> None:
+                 client=None, context_store=None, base_url: str = "") -> None:
         super().__init__(source, session_id, transport, context_store=context_store)
         if httpx is None:
             raise RuntimeError("httpx is required: pip install httpx")
         self.client = client or httpx.Client(timeout=30.0)
+        self.base_url = base_url.rstrip("/")
 
     def start_observation(self) -> None:
         """API 执行器无主动感知，事件由外部注入（如定时任务触发轮询）。"""
 
     def _execute_action(self, name: str, params: dict) -> Tuple[bool, dict]:
-        url = params["url"]
+        url = params.get("url", "")
         headers = params.get("headers") or {}
         match name:
             case "api.http.get":
@@ -65,6 +66,16 @@ class APIExecutor(AIPExecutor):
                 resp = self.client.post(
                     f"{url.rstrip('/')}/reject",
                     json={"order_id": order_id, "reason_code": params.get("reason_code", "")},
+                    headers=headers,
+                )
+                return self._result(resp)
+
+            case "erp.invoice.create":
+                # base_url 来自执行器配置（凭据/端点不经协议，C4）
+                resp = self.client.post(
+                    f"{self.base_url}/invoices",
+                    json={k: params[k] for k in ("invoice_no", "date", "vendor", "total")
+                          if k in params},
                     headers=headers,
                 )
                 return self._result(resp)

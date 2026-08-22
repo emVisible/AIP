@@ -34,7 +34,10 @@ apa/
 │   ├── apa-core/            # Gateway / Registry / Policy / Session / Audit / Rules
 │   ├── apa-sdk-python/      # Executor 基类 / 自愈 / DryRun / 语义适配器 / 测试工具
 │   └── apa-executors/       # BrowserExecutor (Playwright) / APIExecutor (httpx)
-├── examples/hello-rpa/      # 最小可运行示例（真实浏览器 + 规则引擎，0 LLM）
+├── examples/
+│   ├── hello-rpa/           # 最小可运行示例（真实浏览器 + 规则引擎，0 LLM）
+│   └── invoice-processing/  # v0.2 验收场景：发票 → 提取 → 写 ERP
+├── plugins/dsh/             # dsh（DeepSeek Harness）决策引擎插件（TypeScript）
 ├── conformance/run.py       # APA-Profile 合规套件（20 用例）
 └── tests/                   # pytest 单元 + 端到端
 ```
@@ -121,8 +124,26 @@ rules:
 - [x] 自定义 Executor 文档（本页「自定义 Executor」+ QUICK_START）
 - [x] pytest 测试（单元 + MockPage 端到端 + 子进程冒烟）
 
-**v0.1 显式不包含**：Desktop/API Executor 的完整感知层、LLM 决策引擎、dsh 插件、
-流程编排（Process Mode）、Credential Vault、多租户、APA-Studio 完整版。
+## v0.2 范围（§16.2：LLM 接口 / Human-in-Loop / 持久化 / 文档域）
+
+- [x] **LLM 决策接口**：OpenAI-compatible 客户端（默认 DeepSeek，`APA_LLM_*`
+  环境变量）+ `parse_decision` 防御性解析
+- [x] **Zero-LLM Cascade**（§7.2）：`CascadingAgent` L0 规则 → L1/L2 模型 →
+  DE-5 不确定自动转人工；决策分布统计；预算保护
+- [x] **WebSocket 独立网关**（§13）：`ws_gateway.WsGatewayServer` —— 绑定层
+  hello/cursors/ping-pong（D1/D4），外部决策引擎经 WS 接入
+- [x] **dsh 插件参考实现**：[`plugins/dsh/`](plugins/dsh/)（TypeScript +
+  cordis，AIP TS SDK 直连网关，协议核心本地可 typecheck）
+- [x] **Human-in-the-Loop 完整闭环**（§4.3）：human.task.create → SUSPENDED →
+  `resolve_human_task` → RUNNING；任务 CLI
+- [x] **Session 持久化**（§10.1）：JSONL 日志、游标精确恢复、终态 TTL 释放
+- [x] **DocumentExecutor**（doc.extract_text/extract_fields/classify）+
+  [`examples/invoice-processing`](examples/invoice-processing/)（发票 → 提取 →
+  写 ERP，v0.2 验收场景）
+- [x] 整值模板插值保留原生类型（number 参数直达 schema 校验）
+
+**v0.2 显式不包含**：OCR/VLM 文档感知层、Desktop Executor、Process Mode 编排、
+Vault 多租户。dsh 插件的 cordis 运行时联调需在 dsh 仓库侧执行（见插件 README）。
 
 ## License
 

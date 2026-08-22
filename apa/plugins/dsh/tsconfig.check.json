@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true, "types": [] },
+  "exclude": ["src/index.ts", "dist"]
+}

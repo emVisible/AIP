@@ -1,0 +1,38 @@
+# 发票处理规则（L0）
+rules:
+  - name: extract_invoice_fields
+    once: true
+    if:
+      event: document.processing.started
+    then:
+      action: doc.extract_fields
+      params:
+        document_ref: "{{path}}"
+        output_context: "ctx_s_inv_001_fields"
+
+  - name: create_invoice_in_erp
+    once: true
+    if:
+      action_result: doc.extract_fields
+      status: ok
+      data:
+        invoice_no: { present: true }
+        total_num: { present: true }
+    then:
+      action: erp.invoice.create
+      params:
+        invoice_no: "{{invoice_no}}"
+        date: "{{date}}"
+        vendor: "{{vendor}}"
+        total: "{{total_num}}"
+
+  - name: complete
+    once: true
+    if:
+      action_result: erp.invoice.create
+      status: ok
+    then:
+      action: session.complete
+      params:
+        outcome: success
+        summary: "发票 {{invoice_no}} 已入 ERP"

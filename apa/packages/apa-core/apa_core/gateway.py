@@ -22,13 +22,16 @@ from aip import (
     Receiver,
     Session,
     make_error,
+    make_event,
     make_result,
     validate_message,
 )
 
 from .audit import AuditService
+from .human_loop import HumanTaskManager
 from .policy import PolicyConfig, PolicyDecision
 from .registry import ActionRegistry
+from .sequence_compat import RecoverableReceiver
 from .session import SessionStateMachine
 
 CREDENTIAL_PATTERNS = [
@@ -119,18 +122,22 @@ class APAGateway:
         clock: Optional[Clock] = None,
         process_id: Optional[str] = None,
         tenant_id: Optional[str] = None,
+        journal=None,
     ) -> None:
         self.session_id = session_id
         self.session = Session(session_id)
-        self.session.receiver = Receiver()
+        self.session.receiver = RecoverableReceiver()
         self.session.actions = ActionStore()
         self.registry = registry or ActionRegistry()
         self.policy = policy or PolicyConfig()
         self.identities = identities or {}
         self.audit = audit or AuditService()
         self.clock = clock
+        self.journal = journal
+        self.human = HumanTaskManager()
         self.sm = SessionStateMachine(
-            session_id, process_id=process_id, tenant_id=tenant_id, clock=clock)
+            session_id, process_id=process_id, tenant_id=tenant_id, clock=clock,
+            on_transition=[self._on_transition] if journal else [])
 
         self.handlers: Dict[str, Callable[[dict], None]] = {}
         self.outbound: Dict[str, List[dict]] = {"executor": [], "agent": []}
@@ -143,6 +150,14 @@ class APAGateway:
         self.retry_scheduler = RetryScheduler(self, clock)
         self.emitted: List[Message] = []
         self.human_task_outcomes: Dict[str, str] = {}
+
+    # --- journal（Session 持久化，§10.1） ---------------------------------------
+    def _on_transition(self, to: str, frm: str) -> None:
+        self._journal("state", to=to)
+
+    def _journal(self, kind: str, **fields) -> None:
+        if self.journal is not None:
+            self.journal.record(kind, session=self.session_id, **fields)
 
     # --- wiring ---------------------------------------------------------------
     def set_handler(self, side: str, handler: Callable[[dict], None]) -> None:
@@ -207,6 +222,7 @@ class APAGateway:
             return self._fail(side, msg, "SEQ_OUT_OF_ORDER")
         self.session.receiver.apply(msg)
         self.sm.record.cursors[msg.source] = msg.seq
+        self._journal("cursor", source=msg.source, seq=msg.seq)
 
         # 6. 类型分发
         if msg.type == "event":
@@ -311,8 +327,10 @@ class APAGateway:
             return [make_result(self.session_id, "gateway", "rejected",
                                 msg.id, code="permission_denied")]
 
-        # ④ Session 状态匹配（SUSPENDED 时禁止业务 action 执行）
-        if self.sm.state == "SUSPENDED" and entry.risk in ("L2", "L3", "L4"):
+        # ④ Session 状态匹配（§10.1）
+        #    终态：拒绝一切新动作；SUSPENDED：禁止 L2+ 业务动作执行
+        if self.sm.record.is_terminal() or \
+                (self.sm.state == "SUSPENDED" and entry.risk in ("L2", "L3", "L4")):
             self.rejections.append(("SESS", msg.id, self.sm.state))
             return [make_result(self.session_id, "gateway", "rejected",
                                 msg.id, code="session_state_mismatch")]
@@ -331,6 +349,22 @@ class APAGateway:
             self._audit_action(msg, entry, verdict="permitted", rule="session_control")
             return [make_result(self.session_id, "gateway", "ok", msg.id,
                                 data={"outcome": outcome})]
+
+        # 人工干预：human.task.create 由 Gateway 处理（§4.3）
+        # 创建任务 + Session SUSPENDED；人工完成后经 resolve_human_task 恢复
+        if name == "human.task.create":
+            task_id = self.human.create(
+                action_id=msg.id, task_type=params.get("task_type", "exception"),
+                assignee_role=params.get("assignee_role", "rpa_operator"),
+                context_ref=params.get("context_ref", ""),
+                priority=params.get("priority", "normal"),
+            )
+            self.sm.suspend_for_human(task_id)
+            self._audit_action(msg, entry, verdict="permitted", rule="human_task")
+            self._journal("task", task_id=task_id, status="open",
+                          task_type=params.get("task_type", "exception"))
+            return [make_result(self.session_id, "gateway", "ok", msg.id,
+                                data={"task_id": task_id})]
 
         # ⑥ 策略评估（§9.2 风险分级）
         policy_ctx = self._policy_context(params)
@@ -494,6 +528,29 @@ class APAGateway:
 
     def tick(self) -> None:
         self.retry_scheduler.tick()
+
+    # --- 人工任务闭环（§4.3） -----------------------------------------------------
+    def resolve_human_task(
+        self, task_id: str, outcome: str = "retry",
+        actor: str = "operator", comment: str = "",
+    ) -> bool:
+        """人工完成任务 → 注入 human.task.completed 事件 → Session 恢复。
+
+        以 executor principal 在协议内注入（内部通道，seq 取该流下一序号）。
+        """
+        if not self.human.resolve(task_id, outcome=outcome, actor=actor):
+            return False
+        source = self.identities.get("executor", "")
+        if not source:
+            return False
+        seq = self.session.receiver.cursor(self.session_id, source) + 1
+        ev = make_event(self.session_id, source, "human.task.completed",
+                        data={"task_id": task_id, "outcome": outcome,
+                              "actor": actor, "comment": comment},
+                        seq=seq, id=f"evt_human_{task_id}")
+        self.deliver("executor", ev.to_dict())
+        self._journal("task", task_id=task_id, status="resolved", outcome=outcome)
+        return True
 
     # --- introspection ----------------------------------------------------------
     def applied_counts(self) -> dict:

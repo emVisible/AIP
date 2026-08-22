@@ -1,6 +1,7 @@
 """apa-sdk — 开发者 SDK（设计文档 §14）。"""
 
 from .coalescer import EventCoalescer, SyncCoalescer
+from .composite import CompositeExecutor
 from .executor_base import AIPExecutor, ExecutorPreconditionError
 from .resilient import (
     CircuitOpenError,
@@ -21,6 +22,7 @@ from .semantic_adapter import (
 __all__ = [
     "AIPExecutor",
     "CircuitOpenError",
+    "CompositeExecutor",
     "Element",
     "ElementNotInteractable",
     "EventCoalescer",
@@ -36,4 +38,4 @@ __all__ = [
     "parse_int",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

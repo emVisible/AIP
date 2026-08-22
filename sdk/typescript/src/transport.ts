@@ -96,11 +96,14 @@ export class WsClientTransport implements Transport {
   private ws: WebSocket;
   onMessage?: (m: Message) => void;
   onError?: (e: Error) => void;
+  /** Binding-level open callback (fires before any AIP message). */
+  onOpen?: () => void;
 
   constructor(url: string, options: TransportHandlers = {}) {
     this.onMessage = options.onMessage;
     this.onError = options.onError;
     this.ws = new WebSocket(url);
+    this.ws.on("open", () => this.onOpen?.());
     this.ws.on("message", (data) => this.receive(data.toString()));
     this.ws.on("error", (e) => this.onError?.(e));
   }
@@ -116,6 +119,15 @@ export class WsClientTransport implements Transport {
 
   send(m: Message): void {
     this.ws.send(JSON.stringify(messageToDict(m)));
+  }
+
+  /**
+   * Send a raw text frame (E5: exactly one JSON object).
+   * For binding-level control frames (hello/ping) that never consume
+   * per-stream seq (SPEC D4) — not for application messages.
+   */
+  sendRaw(text: string): void {
+    this.ws.send(text);
   }
 
   close(): void {

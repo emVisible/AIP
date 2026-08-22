@@ -1,0 +1,65 @@
+# ============================================================
+# Document Action Registry — doc.*（§9.3 子集）
+# ============================================================
+doc.extract_text:
+  executor_domain: document
+  description: "提取文档全文到 ContextStore"
+  params:
+    type: object
+    required: [document_ref]
+    properties:
+      document_ref: { type: string }
+      output_context: { type: string, pattern: "^ctx_[A-Za-z0-9_]+$" }
+  idempotency: required
+  risk: L0
+  timeout_ms: 60000
+  retries: 2
+  audit_fields: [document_ref]
+
+doc.extract_fields:
+  executor_domain: document
+  description: "按内置字段模式提取结构化字段"
+  params:
+    type: object
+    required: [document_ref]
+    properties:
+      document_ref: { type: string }
+      output_context: { type: string, pattern: "^ctx_[A-Za-z0-9_]+$" }
+  idempotency: required
+  risk: L0
+  timeout_ms: 60000
+  retries: 2
+  audit_fields: [document_ref]
+
+doc.classify:
+  executor_domain: document
+  description: "文档类型分类（关键词确定性分类）"
+  params:
+    type: object
+    required: [document_ref]
+    properties:
+      document_ref: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 2
+
+# ============================================================
+# ERP 发票域 — v0.2 验收场景
+# ============================================================
+erp.invoice.create:
+  executor_domain: api
+  description: "将提取的发票写入 ERP"
+  params:
+    type: object
+    required: [invoice_no, total]
+    properties:
+      invoice_no: { type: string }
+      date: { type: string }
+      vendor: { type: string }
+      total: { type: number }
+  idempotency: required
+  risk: L2
+  timeout_ms: 60000
+  retries: 1
+  audit_fields: [invoice_no, total]

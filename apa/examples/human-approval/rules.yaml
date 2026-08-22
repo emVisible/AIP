@@ -1,0 +1,66 @@
+# 大额发票人工审批演示（规则 L0 + HITL）
+rules:
+  - name: extract_invoice_fields
+    once: true
+    if:
+      event: document.processing.started
+    then:
+      action: doc.extract_fields
+      params:
+        document_ref: "{{path}}"
+        output_context: "ctx_s_hitl_001_fields"
+
+  # 大额发票 → 创建人工审批任务（Gateway 拦截 → Session SUSPENDED）
+  - name: escalate_to_human
+    once: true
+    if:
+      action_result: doc.extract_fields
+      status: ok
+      data:
+        total_num: { ge: 100000 }
+    then:
+      action: human.task.create
+      params:
+        task_type: approval
+        assignee_role: finance_manager
+        priority: high
+        context_ref: "{{output_context}}"
+
+  # 人点「批准」→ 写入 ERP → 完成
+  - name: human_approved_write_erp
+    once: true
+    if:
+      event: human.task.completed
+      data:
+        outcome: approve
+    then:
+      action: erp.invoice.create
+      params:
+        invoice_no: "{{invoice_no}}"
+        date: "{{date}}"
+        vendor: "{{vendor}}"
+        total: "{{total_num}}"
+
+  - name: complete_after_write
+    once: true
+    if:
+      action_result: erp.invoice.create
+      status: ok
+    then:
+      action: session.complete
+      params:
+        outcome: success
+        summary: "发票 {{invoice_no}} 已人工批准并入 ERP"
+
+  # 人点「驳回」→ 直接结束（不入 ERP）
+  - name: human_rejected_finish
+    once: true
+    if:
+      event: human.task.completed
+      data:
+        outcome: reject
+    then:
+      action: session.complete
+      params:
+        outcome: failure
+        summary: "发票 {{invoice_no}} 已人工驳回"

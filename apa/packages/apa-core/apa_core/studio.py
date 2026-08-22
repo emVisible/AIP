@@ -36,7 +36,12 @@ _HTML = """<!doctype html><html lang="zh"><head><meta charset="utf-8">
 </style></head><body>
 <h1>APA Studio <span style="font-size:12px;color:#888">— sessions &amp; audit</span></h1>
 __BODY__
-</body></html>"""
+</body></html>
+
+<!--
+  人工任务交互（HITL）：按钮经 fetch 调用 /api/tasks/<id>/resolve，
+  由 StudioServer.resolve_task 回调注入完成事件并恢复挂起的会话。
+-->"""
 
 
 def collect_sessions(journal_paths: List[str]) -> Dict[str, dict]:
@@ -59,11 +64,13 @@ def collect_sessions(journal_paths: List[str]) -> Dict[str, dict]:
                 s["cursors"][rec.get("source", "?")] = rec.get("seq", 0)
                 s["last_ts"] = max(s["last_ts"], rec.get("ts", 0))
             elif kind == "task":
+                tid = rec.get("task_id")
                 if rec.get("status") == "resolved":
-                    if rec["task_id"] in s["tasks_open"]:
-                        s["tasks_open"].remove(rec["task_id"])
+                    s["tasks_open"] = [t for t in s["tasks_open"]
+                                       if t.get("task_id") != tid]
                 else:
-                    s["tasks_open"].append(rec.get("task_id"))
+                    s["tasks_open"].append({"task_id": tid,
+                                            "task_type": rec.get("task_type", "")})
             elif kind == "outcome":
                 s["outcome"] = rec.get("outcome")
     return sessions
@@ -73,25 +80,49 @@ def render_html(sessions: Dict[str, dict], audit_tail: List[dict]) -> str:
     rows = []
     for sid, s in sorted(sessions.items()):
         state_cls = s["state"]
-        tasks = ", ".join(s["tasks_open"]) or "—"
         cursors = ", ".join(f"{k}:{v}" for k, v in s["cursors"].items()) or "—"
+        task_names = ", ".join(t.get("task_id", "?")
+                               for t in s["tasks_open"]) or "—"
         rows.append(
             f"<tr><td><code>{sid}</code></td>"
             f"<td class='{state_cls}'>{s['state']}</td>"
             f"<td>{s['outcome'] or '—'}</td>"
-            f"<td>{cursors}</td><td>{tasks}</td>"
+            f"<td>{cursors}</td><td>{task_names}</td>"
             f"<td><code>{s['journal']}</code></td></tr>")
     table = ("<h2>Sessions</h2><table><tr><th>Session</th><th>State</th>"
              "<th>Outcome</th><th>Cursors</th><th>Open Tasks</th>"
              "<th>Journal</th></tr>" + "".join(rows) + "</table>") if rows \
         else "<p>（无会话日志；用 --journals 指定 journal 文件）</p>"
+    task_rows = []
+    for sid, sess in sorted(sessions.items()):
+        for t in sess.get("tasks_open", []):
+            tid = t.get("task_id", "")
+            ttype = t.get("task_type", "")
+            task_rows.append(
+                f"<tr><td><code>{tid}</code></td><td>{ttype}</td>"
+                f"<td>{sid}</td>"
+                f"<td>"
+                f"<button onclick=\"resolveTask('{tid}','approve')\">批准</button>"
+                f"<button onclick=\"resolveTask('{tid}','reject')\">驳回</button>"
+                f"<button onclick=\"resolveTask('{tid}','retry')\">重试</button>"
+                f"</td></tr>")
+    tasks_html = (
+        "<h2>Human Tasks（人工审批）</h2>"
+        "<table><tr><th>Task</th><th>Type</th><th>Session</th>"
+        "<th>Action</th></tr>" + "".join(task_rows) + "</table>"
+        "<script>function resolveTask(id, outcome){"
+        "fetch('/api/tasks/' + id + '/resolve', {method:'POST',"
+        "headers:{'Content-Type':'application/json'},"
+        "body: JSON.stringify({outcome: outcome})})"
+        ".then(function(){location.reload()});}</script>"
+    ) if task_rows else ""
     audit_rows = "".join(
         f"<tr><td><code>{a.get('kind', a.get('audit_id', ''))}</code></td>"
         f"<td>{json.dumps(a, ensure_ascii=False)[:160]}</td></tr>"
         for a in audit_tail)
     audit = ("<h2>Audit tail</h2><table><tr><th>Kind</th><th>Record</th></tr>"
              + audit_rows + "</table>") if audit_tail else ""
-    return _HTML.replace("__BODY__", table + audit)
+    return _HTML.replace("__BODY__", tasks_html + table + audit)
 
 
 class StudioHandler(BaseHTTPRequestHandler):
@@ -150,15 +181,21 @@ class StudioServer:
                  audit_tail_size: int = 30,
                  tenant: Optional[str] = None,
                  resolve_task=None) -> None:
-        expanded: List[str] = []
-        for pattern in journals:
-            expanded.extend(glob.glob(pattern))
-        self.journal_paths = expanded
+        # 惰性展开：journal 文件可能在服务启动后才产生（HITL 交互场景）
+        self.journal_patterns = list(journals)
         self.port = port
         self.audit_tail_size = audit_tail_size
         self.tenant = tenant          # 多租户过滤（§12.1）
         self._resolve = resolve_task
         self._httpd: Optional[ThreadingHTTPServer] = None
+
+    @property
+    def journal_paths(self) -> List[str]:
+        """每次访问重新展开 glob（文件生命周期与服务器解耦）。"""
+        expanded: List[str] = []
+        for pattern in self.journal_patterns:
+            expanded.extend(glob.glob(pattern))
+        return expanded
 
     def sessions(self) -> Dict[str, dict]:
         all_sessions = collect_sessions(self.journal_paths)

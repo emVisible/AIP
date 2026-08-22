@@ -115,6 +115,17 @@ rules:
 支持事件条件与 action_result 条件、金额比较（lt/le/gt/ge/eq/ne）、
 `{{field}}` 模板插值。L1/L2（小模型/大模型）与 dsh 接入为后续阶段。
 
+## 可交互入口
+
+| 交互方式 | 命令 / 地址 |
+|---|---|
+| 真实浏览器自动化演示 | `python examples/hello-rpa/run.py`（Chromium 自动审批） |
+| **网页人工审批（HITL）** | `python examples/human-approval/run.py` → 打开 `http://127.0.0.1:8690` 点「批准/驳回」，挂起的会话实时恢复并继续流转 |
+| Studio 监控面板 | `python -m apa_core.studio --journals 'data/*.jsonl' [--tenant corp_x]` |
+| 运行指标报告 | `python -m apa_core.analytics --journals 'data/*.jsonl'` |
+| 人工任务查询 | `python -m apa_core.human_loop list --journal data/s.jsonl` |
+| 外部决策端接入 | `ws://127.0.0.1:<port>`（Node 客户端已实测，见 plugins/dsh/tests） |
+
 ## v1.0 后续补全（Phase 5：感知与生态）
 
 - [x] **VLM 视觉适配插槽**（§5.5，C6）：`apa_sdk.vision` —— 抽象基类 +

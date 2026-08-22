@@ -1,0 +1,65 @@
+{"kind": "state", "ts": 1787369140900, "session": "s_p6b_001", "tenant": null, "to": "RUNNING"}
+{"kind": "cursor", "ts": 1787369140900, "session": "s_p6b_001", "tenant": null, "source": "rule_01", "seq": 1}
+{"kind": "action", "ts": 1787369140919, "session": "s_p6b_001", "tenant": null, "action_id": "act_587f1f2977ab", "name": "api.http.post", "source": "rule_01", "risk": "L2", "verdict": "permitted"}
+{"kind": "cursor", "ts": 1787369140919, "session": "s_p6b_001", "tenant": null, "source": "rule_01", "seq": 2}
+{"kind": "state", "ts": 1787369140919, "session": "s_p6b_001", "tenant": null, "to": "SUSPENDED"}
+{"kind": "task", "ts": 1787369140919, "session": "s_p6b_001", "tenant": null, "task_id": "ht_act_d28910969aa6", "status": "open", "task_type": "approval"}
+{"kind": "cursor", "ts": 1787369140919, "session": "s_p6b_001", "tenant": null, "source": "bot_01", "seq": 1}
+{"kind": "state", "ts": 1787369140919, "session": "s_p6b_001", "tenant": null, "to": "RUNNING"}
+{"kind": "task", "ts": 1787369140919, "session": "s_p6b_001", "tenant": null, "task_id": "ht_act_d28910969aa6", "status": "resolved", "outcome": "approve"}
+{"kind": "cursor", "ts": 1787369140919, "session": "s_p6b_001", "tenant": null, "source": "rule_01", "seq": 3}
+{"kind": "action", "ts": 1787369140919, "session": "s_p6b_001", "tenant": null, "action_id": "act_8f4392f2b6ea", "name": "erp.invoice.create", "source": "rule_01", "risk": "L2", "verdict": "permitted"}
+{"kind": "state", "ts": 1787369238090, "session": "s_p6b_001", "tenant": null, "to": "RUNNING"}
+{"kind": "cursor", "ts": 1787369238090, "session": "s_p6b_001", "tenant": null, "source": "rule_01", "seq": 1}
+{"kind": "action", "ts": 1787369238109, "session": "s_p6b_001", "tenant": null, "action_id": "act_85ff38c24808", "name": "api.http.post", "source": "rule_01", "risk": "L2", "verdict": "permitted"}
+{"kind": "cursor", "ts": 1787369238109, "session": "s_p6b_001", "tenant": null, "source": "rule_01", "seq": 2}
+{"kind": "state", "ts": 1787369238109, "session": "s_p6b_001", "tenant": null, "to": "SUSPENDED"}
+{"kind": "task", "ts": 1787369238109, "session": "s_p6b_001", "tenant": null, "task_id": "ht_act_6c5ba591eca6", "status": "open", "task_type": "approval"}
+{"kind": "cursor", "ts": 1787369238109, "session": "s_p6b_001", "tenant": null, "source": "bot_01", "seq": 1}
+{"kind": "state", "ts": 1787369238109, "session": "s_p6b_001", "tenant": null, "to": "RUNNING"}
+{"kind": "task", "ts": 1787369238109, "session": "s_p6b_001", "tenant": null, "task_id": "ht_act_6c5ba591eca6", "status": "resolved", "outcome": "approve"}
+{"kind": "cursor", "ts": 1787369238109, "session": "s_p6b_001", "tenant": null, "source": "rule_01", "seq": 3}
+{"kind": "action", "ts": 1787369238109, "session": "s_p6b_001", "tenant": null, "action_id": "act_58d3980c93d4", "name": "erp.invoice.create", "source": "rule_01", "risk": "L2", "verdict": "permitted"}
+{"kind": "state", "ts": 1787369259269, "session": "s_p6b_001", "tenant": null, "to": "RUNNING"}
+{"kind": "cursor", "ts": 1787369259269, "session": "s_p6b_001", "tenant": null, "source": "rule_01", "seq": 1}
+{"kind": "action", "ts": 1787369259287, "session": "s_p6b_001", "tenant": null, "action_id": "act_991a7c639bed", "name": "api.http.post", "source": "rule_01", "risk": "L2", "verdict": "permitted"}
+{"kind": "cursor", "ts": 1787369259287, "session": "s_p6b_001", "tenant": null, "source": "rule_01", "seq": 2}
+{"kind": "state", "ts": 1787369259287, "session": "s_p6b_001", "tenant": null, "to": "SUSPENDED"}
+{"kind": "task", "ts": 1787369259287, "session": "s_p6b_001", "tenant": null, "task_id": "ht_act_50f124b5c6db", "status": "open", "task_type": "approval"}
+{"kind": "cursor", "ts": 1787369259288, "session": "s_p6b_001", "tenant": null, "source": "bot_01", "seq": 1}
+{"kind": "state", "ts": 1787369259288, "session": "s_p6b_001", "tenant": null, "to": "RUNNING"}
+{"kind": "task", "ts": 1787369259288, "session": "s_p6b_001", "tenant": null, "task_id": "ht_act_50f124b5c6db", "status": "resolved", "outcome": "approve"}
+{"kind": "cursor", "ts": 1787369259288, "session": "s_p6b_001", "tenant": null, "source": "rule_01", "seq": 3}
+{"kind": "action", "ts": 1787369259288, "session": "s_p6b_001", "tenant": null, "action_id": "act_63d11a8e7657", "name": "erp.invoice.create", "source": "rule_01", "risk": "L2", "verdict": "permitted"}
+{"kind": "state", "ts": 1787369288581, "session": "s_p6b_001", "tenant": null, "to": "RUNNING"}
+{"kind": "cursor", "ts": 1787369288581, "session": "s_p6b_001", "tenant": null, "source": "rule_01", "seq": 1}
+{"kind": "action", "ts": 1787369288599, "session": "s_p6b_001", "tenant": null, "action_id": "act_43e1c6b216d1", "name": "api.http.post", "source": "rule_01", "risk": "L2", "verdict": "permitted"}
+{"kind": "cursor", "ts": 1787369288599, "session": "s_p6b_001", "tenant": null, "source": "bot_01", "seq": 1}
+{"kind": "cursor", "ts": 1787369288602, "session": "s_p6b_001", "tenant": null, "source": "bot_01", "seq": 2}
+{"kind": "action_result", "ts": 1787369288602, "session": "s_p6b_001", "tenant": null, "action_id": "act_43e1c6b216d1", "status": "ok", "name": "api.http.post"}
+{"kind": "cursor", "ts": 1787369288602, "session": "s_p6b_001", "tenant": null, "source": "rule_01", "seq": 2}
+{"kind": "state", "ts": 1787369288602, "session": "s_p6b_001", "tenant": null, "to": "SUSPENDED"}
+{"kind": "task", "ts": 1787369288602, "session": "s_p6b_001", "tenant": null, "task_id": "ht_act_5d74c14ad922", "status": "open", "task_type": "approval"}
+{"kind": "cursor", "ts": 1787369288602, "session": "s_p6b_001", "tenant": null, "source": "bot_01", "seq": 3}
+{"kind": "state", "ts": 1787369288602, "session": "s_p6b_001", "tenant": null, "to": "RUNNING"}
+{"kind": "task", "ts": 1787369288602, "session": "s_p6b_001", "tenant": null, "task_id": "ht_act_5d74c14ad922", "status": "resolved", "outcome": "approve"}
+{"kind": "cursor", "ts": 1787369288602, "session": "s_p6b_001", "tenant": null, "source": "rule_01", "seq": 3}
+{"kind": "action", "ts": 1787369288602, "session": "s_p6b_001", "tenant": null, "action_id": "act_b05ed0cd7b9c", "name": "erp.invoice.create", "source": "rule_01", "risk": "L2", "verdict": "permitted"}
+{"kind": "cursor", "ts": 1787369288604, "session": "s_p6b_001", "tenant": null, "source": "bot_01", "seq": 4}
+{"kind": "action_result", "ts": 1787369288604, "session": "s_p6b_001", "tenant": null, "action_id": "act_b05ed0cd7b9c", "status": "ok", "name": "erp.invoice.create"}
+{"kind": "state", "ts": 1787369310729, "session": "s_p6b_001", "tenant": null, "to": "RUNNING"}
+{"kind": "cursor", "ts": 1787369310729, "session": "s_p6b_001", "tenant": null, "source": "rule_01", "seq": 1}
+{"kind": "action", "ts": 1787369310729, "session": "s_p6b_001", "tenant": null, "action_id": "act_fa543b243422", "name": "api.http.post", "source": "rule_01", "risk": "L2", "verdict": "permitted"}
+{"kind": "cursor", "ts": 1787369310729, "session": "s_p6b_001", "tenant": null, "source": "bot_01", "seq": 1}
+{"kind": "cursor", "ts": 1787369310731, "session": "s_p6b_001", "tenant": null, "source": "bot_01", "seq": 2}
+{"kind": "action_result", "ts": 1787369310731, "session": "s_p6b_001", "tenant": null, "action_id": "act_fa543b243422", "status": "ok", "name": "api.http.post"}
+{"kind": "cursor", "ts": 1787369310731, "session": "s_p6b_001", "tenant": null, "source": "rule_01", "seq": 2}
+{"kind": "state", "ts": 1787369310731, "session": "s_p6b_001", "tenant": null, "to": "SUSPENDED"}
+{"kind": "task", "ts": 1787369310731, "session": "s_p6b_001", "tenant": null, "task_id": "ht_act_ca83b7d09b39", "status": "open", "task_type": "approval"}
+{"kind": "cursor", "ts": 1787369310731, "session": "s_p6b_001", "tenant": null, "source": "bot_01", "seq": 3}
+{"kind": "state", "ts": 1787369310731, "session": "s_p6b_001", "tenant": null, "to": "RUNNING"}
+{"kind": "task", "ts": 1787369310731, "session": "s_p6b_001", "tenant": null, "task_id": "ht_act_ca83b7d09b39", "status": "resolved", "outcome": "approve"}
+{"kind": "cursor", "ts": 1787369310731, "session": "s_p6b_001", "tenant": null, "source": "rule_01", "seq": 3}
+{"kind": "action", "ts": 1787369310731, "session": "s_p6b_001", "tenant": null, "action_id": "act_78e43aaf4b2a", "name": "erp.invoice.create", "source": "rule_01", "risk": "L2", "verdict": "permitted"}
+{"kind": "cursor", "ts": 1787369310732, "session": "s_p6b_001", "tenant": null, "source": "bot_01", "seq": 4}
+{"kind": "action_result", "ts": 1787369310732, "session": "s_p6b_001", "tenant": null, "action_id": "act_78e43aaf4b2a", "status": "ok", "name": "erp.invoice.create"}

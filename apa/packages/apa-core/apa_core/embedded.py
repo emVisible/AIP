@@ -59,6 +59,7 @@ class EmbeddedGateway:
         )
 
     def attach_executor(self, executor, source: str) -> AIPPeer:
+        self._install_tolerant_receiver(executor.peer)
         executor.peer.source = source
         executor.peer.transport = _ToGateway("executor", self.gateway)
         self.gateway.set_handler("executor", executor.on_message)
@@ -66,10 +67,32 @@ class EmbeddedGateway:
         return executor.peer
 
     def attach_agent(self, agent, source: str) -> AIPPeer:
+        self._install_tolerant_receiver(agent.peer)
         agent.peer.source = source
         agent.peer.transport = _ToGateway("agent", self.gateway)
         self.gateway.set_handler("agent", agent.on_message)
         return agent.peer
+
+    @staticmethod
+    def _install_tolerant_receiver(peer) -> None:
+        """嵌入式对端换用 gap 容忍接收器（§13.2 C）。
+
+        原因：网关拦截型动作（human.task.create / session.complete）
+        消耗 agent 流 seq 但不转发执行器 → 执行器视角出现永久空洞。
+        迁移既有游标状态，保证挂载前流量不丢失。
+        """
+        from .sequence_compat import GapTolerantReceiver
+
+        old = peer.receiver
+        if isinstance(old, GapTolerantReceiver):
+            return
+        tolerant = GapTolerantReceiver()
+        tolerant._applied_seq = dict(old._applied_seq)
+        tolerant._applied_count = dict(old._applied_count)
+        tolerant._ids = {k: set(v) for k, v in old._ids.items()}
+        tolerant.history = list(old.history)
+        peer.receiver = tolerant
+        peer.session.receiver = tolerant
 
     def run(self) -> None:
         """将网关连接状态置为运行，启动 Session。"""

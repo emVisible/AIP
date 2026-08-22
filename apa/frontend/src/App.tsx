@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router";
 
 import { AppLayout } from "./components/layout/AppLayout";
 import { Dashboard } from "./pages/Dashboard";
+import { DesignerPage } from "./pages/designer/DesignerPage";
 import { ComingSoon } from "./pages/ComingSoon";
 
 const queryClient = new QueryClient({
@@ -19,7 +20,7 @@ export function App() {
         <Routes>
           <Route element={<AppLayout />}>
             <Route index element={<Dashboard />} />
-            <Route path="designer" element={<ComingSoon title="流程设计器" />} />
+            <Route path="designer" element={<DesignerPage />} />
             <Route path="runs" element={<ComingSoon title="运行历史" />} />
             <Route path="hitl" element={<ComingSoon title="审批中心" />} />
             <Route path="settings" element={<ComingSoon title="设置" />} />

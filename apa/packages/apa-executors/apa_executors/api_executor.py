@@ -23,9 +23,42 @@ class APIExecutor(AIPExecutor):
             raise RuntimeError("httpx is required: pip install httpx")
         self.client = client or httpx.Client(timeout=30.0)
         self.base_url = base_url.rstrip("/")
+        self._polled_ids: set = set()
 
     def start_observation(self) -> None:
         """API 执行器无主动感知，事件由外部注入（如定时任务触发轮询）。"""
+
+    def poll_once(self, *, event_name: str, url: str,
+                  headers: Optional[dict] = None,
+                  item_to_data=None) -> int:
+        """轮询一次端点 → 新资源以语义事件发出（§B.3 轮询模式）。
+
+        event_name 如 "erp.invoice.received"；去重键取每项的 id 字段。
+        返回新发出的事件数。
+        """
+        resp = self.client.get(url, headers=headers or {})
+        if resp.status_code >= 400:
+            return 0
+        try:
+            items = resp.json()
+            if isinstance(items, dict):
+                items = items.get("items", [])
+        except Exception:
+            return 0
+        count = 0
+        for item in items:
+            key = str(item.get("id", "")) if isinstance(item, dict) else str(item)
+            if key in self._polled_ids:
+                continue
+            self._polled_ids.add(key)
+            data = item_to_data(item) if item_to_data else (
+                item if isinstance(item, dict) else {"value": item})
+            ref = self.put_context(f"api_{abs(hash(key)) % 100000}", data)
+            payload = dict(data)
+            payload.setdefault("context", ref)
+            self.emit(event_name, payload)
+            count += 1
+        return count
 
     def _execute_action(self, name: str, params: dict) -> Tuple[bool, dict]:
         url = params.get("url", "")
@@ -53,18 +86,24 @@ class APIExecutor(AIPExecutor):
 
             case "erp.order.approve":
                 order_id = params["order_id"]
-                # POC 演示：调用 ERP 审批端点
+                base = (self.base_url or url).rstrip("/")
+                if not base:
+                    return False, {"code": "endpoint_not_configured"}
                 resp = self.client.post(
-                    f"{url.rstrip('/')}/approve",
-                    json={"order_id": order_id, "approver": params.get("approver", "apa_system")},
+                    f"{base}/approve",
+                    json={"order_id": order_id,
+                          "approver": params.get("approver", "apa_system")},
                     headers=headers,
                 )
                 return self._result(resp)
 
             case "erp.order.reject":
                 order_id = params["order_id"]
+                base = (self.base_url or url).rstrip("/")
+                if not base:
+                    return False, {"code": "endpoint_not_configured"}
                 resp = self.client.post(
-                    f"{url.rstrip('/')}/reject",
+                    f"{base}/reject",
                     json={"order_id": order_id, "reason_code": params.get("reason_code", "")},
                     headers=headers,
                 )

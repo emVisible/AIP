@@ -36,7 +36,8 @@ apa/
 │   └── apa-executors/       # BrowserExecutor (Playwright) / APIExecutor (httpx)
 ├── examples/
 │   ├── hello-rpa/           # 最小可运行示例（真实浏览器 + 规则引擎，0 LLM）
-│   └── invoice-processing/  # v0.2 验收场景：发票 → 提取 → 写 ERP
+│   ├── invoice-processing/  # v0.2 验收场景：发票 → 提取 → 写 ERP
+│   └── po-approval/         # v0.3 验收场景：Process Mode 订单审批（批准/驳回分流）
 ├── plugins/dsh/             # dsh（DeepSeek Harness）决策引擎插件（TypeScript）
 ├── conformance/run.py       # APA-Profile 合规套件（20 用例）
 └── tests/                   # pytest 单元 + 端到端
@@ -113,6 +114,35 @@ rules:
 
 支持事件条件与 action_result 条件、金额比较（lt/le/gt/ge/eq/ne）、
 `{{field}}` 模板插值。L1/L2（小模型/大模型）与 dsh 接入为后续阶段。
+
+## v0.3 范围（§16.2：Process Mode / Desktop / 多 Bot / Studio）
+
+- [x] **Process Mode 流程编排**（§10.2 模式 B）：`process.py` —— YAML 流程定义、
+  `{{ }}` 模板与点路径条件（AST 白名单安全求值，拒绝任何调用/下标）、
+  `ai_decision` 插槽节点（C1）、on_failure/goto 错误处理器、max_actions 预算守卫
+  （C3：steps 中出现 idempotency/risk 加载即拒绝）
+- [x] **验收场景** [`examples/po-approval`](examples/po-approval/)：
+  订单审批流程（CoD 取数 → 金额分流批准/驳回 → ERP 落地 → 完成）双分支全绿
+- [x] **DesktopExecutor**（§5.4）：可插拔后端 —— macOS `OsascriptBackend` +
+  测试用 `MockDesktopBackend`；窗口观察事件（appeared/focused 去重）
+- [x] **API 感知**：`APIExecutor.poll_once` 轮询观察（§B.3），新资源去重发事件
+- [x] **WS 多 Bot 域路由**（§10.3）：executor hello 声明能力域，action 按
+  Registry.executor_domain 精确路由；断线重连补发按域过滤
+- [x] **APA-Studio v1**（§16.1 最小版）：零依赖单文件 —— 会话总览/游标/
+  人工任务/审计尾部，`python -m apa_core.studio --journals 'data/*.jsonl'`
+
+### v0.3 审视补漏（对已有构建的修正）
+
+- **修复协议缺陷**：Gateway 自有回执此前未占用 `(session, gateway)` 流的连续
+  seq，真实对端 Receiver 会判 stale 丢弃（被拒结果/人工任务回执静默丢失）。
+  现在 `_assign_seq` 统一分配。
+- **紧急熔断**（§12.4）：`gateway.abort()` —— 未决 action 标记 timeout、
+  Session → CANCELLED、挂起任务关闭
+- **expect 跟踪**（AIP §4.2）：Registry.expect 的动作 → 期望事件配对，
+  `summary.expects_pending/satisfied`
+- **Session 空闲过期**（K2）：`session_ttl_ms` 无活动超时 → SESSION_EXPIRED
+- **多 Bot 身份**：identities 的 executor 侧支持列表成员校验（I9）
+- **规则引擎防悬挂**：context.get 失败默认停止而非无限等待
 
 ## v0.1 范围（对照设计文档 §16.1 MVP）
 

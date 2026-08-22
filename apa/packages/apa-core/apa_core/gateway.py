@@ -20,6 +20,7 @@ from aip import (
     Clock,
     Message,
     Receiver,
+    Sequencer,
     Session,
     make_error,
     make_event,
@@ -117,12 +118,14 @@ class APAGateway:
         *,
         registry: Optional[ActionRegistry] = None,
         policy: Optional[PolicyConfig] = None,
-        identities: Optional[Dict[str, str]] = None,  # side -> expected source
+        # side -> 期望来源；executor 侧可为 list（§10.3 多 Bot 并发）
+        identities: Optional[Dict[str, str | List[str]]] = None,
         audit: Optional[AuditService] = None,
         clock: Optional[Clock] = None,
         process_id: Optional[str] = None,
         tenant_id: Optional[str] = None,
         journal=None,
+        session_ttl_ms: Optional[int] = None,
     ) -> None:
         self.session_id = session_id
         self.session = Session(session_id)
@@ -150,6 +153,14 @@ class APAGateway:
         self.retry_scheduler = RetryScheduler(self, clock)
         self.emitted: List[Message] = []
         self.human_task_outcomes: Dict[str, str] = {}
+        # expect 跟踪（AIP §4.2 / Registry.expect）：action → 期望后续事件
+        self.pending_expects: Dict[str, str] = {}   # action_id -> event name
+        self.satisfied_expects: int = 0
+        # Session TTL（K2）：无活动超过 ttl 即过期
+        self.session_ttl_ms = session_ttl_ms
+        self._last_activity_ms: Optional[int] = None
+        # Gateway 自有消息的流序号（对端 Receiver 需要连续 seq 才会接受）
+        self._gw_seq = Sequencer()
 
     # --- journal（Session 持久化，§10.1） ---------------------------------------
     def _on_transition(self, to: str, frm: str) -> None:
@@ -189,6 +200,21 @@ class APAGateway:
         return "agent" if side == "executor" else "executor"
 
     # --- core: receive ----------------------------------------------------------
+    def _identity_ok(self, side: str, source: str) -> bool:
+        expected = self.identities.get(side)
+        if expected is None:
+            return False
+        if isinstance(expected, (list, tuple, set)):
+            return source in expected
+        return source == expected
+
+    def executor_sources(self) -> List[str]:
+        """当前会话全部 executor 来源（§10.3 多 Bot）。"""
+        expected = self.identities.get("executor", [])
+        if isinstance(expected, (list, tuple, set)):
+            return list(expected)
+        return [expected] if expected else []
+
     def receive(self, side: str, raw: dict) -> List[Message]:
         msg = Message.from_dict(raw)
         self.emitted.append(msg)
@@ -203,15 +229,15 @@ class APAGateway:
         if msg.v != 1:
             return self._fail(side, msg, "UNSUPPORTED_VERSION")
 
-        # 3. 身份绑定（I9）
-        expected = self.identities.get(side)
-        if expected is None or msg.source != expected:
+        # 3. 身份绑定（I9，支持多 Bot 成员校验）
+        if not self._identity_ok(side, msg.source):
             self.rejections.append(("I9", side, msg.source))
             return self._fail(side, msg, "UNAUTHORIZED")
 
-        # 4. Session 有效性
-        if not self.session.is_active():
+        # 4. Session 有效性（K2 + TTL 空闲过期）
+        if not self.session.is_active() or self._ttl_expired():
             return self._fail(side, msg, "SESSION_EXPIRED")
+        self._touch_activity()
 
         # 5. 序列检查（S1–S5）
         cls = self.session.receiver.classify(msg)
@@ -233,10 +259,28 @@ class APAGateway:
             return self._finish(side, self._on_result(side, msg))
         return self._fail(side, msg, "INVALID_MESSAGE", "unknown type")
 
+    def _now(self) -> int:
+        return self.clock.now_ms() if self.clock else 0
+
+    def _touch_activity(self) -> None:
+        self._last_activity_ms = self._now()
+
+    def _ttl_expired(self) -> bool:
+        if self.session_ttl_ms is None or self._last_activity_ms is None:
+            return False  # 首条消息前不判 TTL
+        return self._now() - self._last_activity_ms > self.session_ttl_ms
+
     def _finish(self, side: str, outbound: List[Message]) -> List[Message]:
         for m in outbound:
+            self._assign_seq(m)
             self.outbound[self._other(side)].append(m.to_dict())
         return outbound
+
+    def _assign_seq(self, m: Message) -> None:
+        """Gateway 自有消息（source=gateway）必须占用 (session, gateway) 流的
+        连续 seq，否则对端 Receiver 会判 stale 丢弃（S1–S5）。"""
+        if m.source == "gateway" and not m.seq:
+            m.seq = self._gw_seq.next(self.session_id, "gateway")
 
     def _fail(self, side: str, msg: Message, code: str, detail: str = "") -> List[Message]:
         self.audit.log_error(self.session_id, code, detail or msg.id)
@@ -273,6 +317,13 @@ class APAGateway:
             if task_id:
                 self.sm.resume_after_human(task_id)
                 self.human_task_outcomes[task_id] = str((data or {}).get("outcome"))
+
+        # expect 满足检查（AIP §4.2）
+        if name in self.pending_expects.values():
+            for action_id, expected in list(self.pending_expects.items()):
+                if expected == name:
+                    del self.pending_expects[action_id]
+                    self.satisfied_expects += 1
 
         return [msg]  # 转发给 Decision Engine
 
@@ -380,6 +431,8 @@ class APAGateway:
         # ⑦ 审计 + 调度 + 转发
         self._audit_action(msg, entry, verdict="permitted", rule=rule)
         self.retry_scheduler.schedule(msg, entry)
+        if entry.expect:
+            self.pending_expects[msg.id] = entry.expect  # AIP §4.2
         self._forward(msg)
         return [msg]
 
@@ -418,10 +471,8 @@ class APAGateway:
         )
 
     def _route_executor(self, entry) -> str:
-        for src, role in self.identities.items():
-            if role == "executor":
-                return src
-        return "executor"
+        sources = self.executor_sources()
+        return sources[0] if sources else "executor"
 
     def _create_human_task_and_suspend(self, msg: Message, entry, rule: str) -> List[Message]:
         """L3/L4 或策略要求人工 → 创建 human.task + 挂起 Session（§4.3）。"""
@@ -529,6 +580,31 @@ class APAGateway:
     def tick(self) -> None:
         self.retry_scheduler.tick()
 
+    # --- 紧急熔断（§12.4：Session 强制终止，in-flight 标记 timeout） --------------
+    def abort(self, reason: str = "manual_abort") -> bool:
+        """强制终止会话：未决 action 全部标记 timeout，Session → CANCELLED。
+
+        与人工任务无关的挂起一并解除；审计与日志各留一条。
+        """
+        if self.sm.record.is_terminal():
+            return False
+        for action_id in list(self.pending.keys()):
+            self.session.actions.mark(action_id, "timeout")
+            self.retry_scheduler.cancel(action_id)
+        self.pending.clear()
+        for task_id in list(self.sm.record.human_tasks):
+            self.sm.resume_after_human(task_id)
+            if self.human.get(task_id):
+                self.human.resolve(task_id, outcome="aborted", actor="gateway")
+        self.sm.cancel()
+        self._journal("outcome", outcome="cancelled", reason=reason)
+        self.audit.log_error(self.session_id, "SESSION_ABORTED", reason)
+        return True
+
+    def unsatisfied_expects(self) -> Dict[str, str]:
+        """尚未收到期望事件的 action（§4.2 expect；POC 不做超时强判）。"""
+        return dict(self.pending_expects)
+
     # --- 人工任务闭环（§4.3） -----------------------------------------------------
     def resolve_human_task(
         self, task_id: str, outcome: str = "retry",
@@ -568,5 +644,7 @@ class APAGateway:
             "rejections": len(self.rejections),
             "retry_events": self.retry_scheduler.retry_events,
             "audit_records": len(self.audit.read_all()),
+            "expects_pending": len(self.pending_expects),
+            "expects_satisfied": self.satisfied_expects,
         })
         return s

@@ -9,6 +9,14 @@ from .human_loop import HumanTaskManager
 from .llm import FakeLLMClient, LLMClient, LLMError, parse_decision
 from .persist import SessionJournal, load_journal, recover, release_expired
 from .policy import PolicyConfig, PolicyDecision
+from .process import (
+    ProcessDef,
+    ProcessDefinitionError,
+    ProcessEngine,
+    ProcessRun,
+    build_process,
+    load_process,
+)
 from .registry import (
     RISK_LEVELS,
     ActionRegistry,
@@ -36,6 +44,10 @@ __all__ = [
     "MAX_EVENT_DATA_BYTES",
     "PolicyConfig",
     "PolicyDecision",
+    "ProcessDef",
+    "ProcessDefinitionError",
+    "ProcessEngine",
+    "ProcessRun",
     "RISK_LEVELS",
     "RecoverableReceiver",
     "RegistryEntry",
@@ -49,9 +61,11 @@ __all__ = [
     "interpolate",
     "load_registries",
     "load_journal",
+    "build_process",
+    "load_process",
     "parse_decision",
     "recover",
     "release_expired",
 ]
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

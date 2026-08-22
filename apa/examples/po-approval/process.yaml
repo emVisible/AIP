@@ -1,0 +1,62 @@
+# 采购订单自动审批 — Process Mode（设计文档 §10.2 模式 B 落地）
+process:
+  id: po_auto_approval
+  mode: process
+  version: "1.0"
+  trigger:
+    type: event
+    name: erp.order.approval_requested
+  timeout_minutes: 60
+  max_actions: 50
+
+  steps:
+    - id: fetch_detail
+      action: context.get
+      params:
+        ref: "{{ event.data.context }}"
+        fields: [order_id, amount, vendor]
+      output_as: order
+      on_failure: { goto: escalate }
+
+    # 预算内：批准 + 通知
+    - id: approve_order
+      condition: "{{ steps.order.amount < 100000 }}"
+      action: erp.order.approve
+      params:
+        order_id: "{{ steps.order.order_id }}"
+        approver: apa_system
+      on_failure: { goto: escalate }
+
+    - id: approve_notify
+      condition: "{{ steps.order.amount < 100000 }}"
+      action: api.http.post
+      params:
+        url: "{{ event.data.notify_url }}"
+        json:
+          text: "订单 {{ steps.order.order_id }} 已自动批准"
+
+    # 超预算：驳回 + 通知
+    - id: reject_order
+      condition: "{{ steps.order.amount >= 100000 }}"
+      action: erp.order.reject
+      params:
+        order_id: "{{ steps.order.order_id }}"
+        reason_code: over_budget
+      on_failure: { goto: escalate }
+
+    - id: reject_notify
+      condition: "{{ steps.order.amount >= 100000 }}"
+      action: api.http.post
+      params:
+        url: "{{ event.data.notify_url }}"
+        json:
+          text: "订单 {{ steps.order.order_id }} 已驳回（超预算）"
+
+  error_handlers:
+    escalate:
+      action: human.task.create
+      params:
+        task_type: exception
+        assignee_role: procurement_manager
+        priority: high
+        context_ref: "{{ event.data.context }}"

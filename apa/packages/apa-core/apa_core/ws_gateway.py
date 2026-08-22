@@ -27,6 +27,12 @@ from .gateway import APAGateway
 
 
 class WsGatewayServer:
+    """独立网关 + §10.3 多 Bot 域路由。
+
+    hello 可声明 "domains": ["browser", ...]；action 出站按 Registry 的
+    executor_domain 路由到声明了该域能力的连接；无匹配时广播全部 executor。
+    """
+
     def __init__(
         self,
         gateway: APAGateway,
@@ -39,12 +45,13 @@ class WsGatewayServer:
         self.gateway = gateway
         self.host = host
         self.port_requested = port
+        # side -> [ws]；executor 额外维护 (source, domains, ws)
         self.conns: Dict[str, list] = {"executor": [], "agent": []}
+        self.executor_meta: Dict[object, dict] = {}  # id(ws) -> {source, domains}
         self._queues: Dict[str, asyncio.Queue] = {
             "executor": asyncio.Queue(), "agent": asyncio.Queue()}
         self._tasks: List[asyncio.Task] = []
         self._server = None
-        # 网关出站 → 各侧队列 → 泵到该侧所有连接
         for side in ("executor", "agent"):
             self.gateway.set_handler(side, self._make_enqueuer(side))
 
@@ -111,6 +118,7 @@ class WsGatewayServer:
         finally:
             if side is not None and ws in self.conns[side]:
                 self.conns[side].remove(ws)
+                self.executor_meta.pop(id(ws), None)
                 if not self.conns[side]:
                     self.gateway.disconnect(side)
 
@@ -118,7 +126,8 @@ class WsGatewayServer:
         role = data.get("role")
         source = data.get("source", "")
         expected = self.gateway.identities.get(role or "")
-        if role not in ("executor", "agent") or source != expected:
+        if role not in ("executor", "agent") or not self.gateway._identity_ok(
+                role, source):
             await ws.send(json.dumps({
                 "type": "error", "code": "UNAUTHORIZED",
                 "message": f"role/source mismatch: {role}/{source!r}"}))
@@ -127,6 +136,10 @@ class WsGatewayServer:
         if self.gateway.sm.state in ("INITIALIZING",):
             self.gateway.sm.start()
         self.conns[role].append(ws)
+        self.executor_meta[id(ws)] = {
+            "source": source,
+            "domains": list(data.get("domains") or []),
+        }
         self.gateway.connected[role] = True
         if role == "executor":
             if self.gateway.sm.state == "RECOVERING":
@@ -135,21 +148,49 @@ class WsGatewayServer:
         await ws.send(json.dumps({
             "type": "hello", "session": self.gateway.session_id,
             "cursors": self.gateway.session.cursors()}))
-        # 补发缓冲（精确恢复）
+        # 补发缓冲（精确恢复）；多 Bot 时按域过滤
         buffered = [raw for raw in self.gateway.outbound.get(role, [])
                     if cursors.get(raw.get("source"), 0) < raw.get("seq", 0)]
         for raw in buffered:
+            if role == "executor" and len(self.conns["executor"]) > 1 \
+                    and ws not in self._targets_for_action(raw):
+                continue
             await ws.send(json.dumps(raw, ensure_ascii=False))
         return role, source
 
     # --- 出站 -----------------------------------------------------------------
+    def _targets_for_action(self, raw: dict) -> list:
+        """§10.3 域路由：按 Registry.executor_domain 选目标连接。
+
+        匹配顺序：声明了该域的 executor → 未声明域的 executor（通配）→ 全部。
+        """
+        conns = list(self.conns["executor"])
+        if len(conns) <= 1:
+            return conns
+        name = (raw.get("payload") or {}).get("name", "")
+        entry = self.gateway.registry.get(name)
+        domain = entry.executor_domain if entry else None
+        if domain in (None, "", "any"):
+            return conns
+
+        def domains_of(ws) -> set:
+            return set(self.executor_meta.get(id(ws), {}).get("domains", []))
+
+        exact = [ws for ws in conns if domain in domains_of(ws)]
+        if exact:
+            return exact
+        wildcard = [ws for ws in conns if not domains_of(ws)]
+        return wildcard or conns
+
     async def _pump(self, side: str) -> None:
         q = self._queues[side]
         while True:
             raw = await q.get()
             frame = json.dumps(raw, ensure_ascii=False)
+            targets = (self._targets_for_action(raw) if side == "executor"
+                       else list(self.conns["agent"]))
             dead = []
-            for ws in list(self.conns[side]):
+            for ws in targets:
                 try:
                     await ws.send(frame)
                 except Exception:
@@ -157,3 +198,4 @@ class WsGatewayServer:
             for ws in dead:
                 if ws in self.conns[side]:
                     self.conns[side].remove(ws)
+                    self.executor_meta.pop(id(ws), None)

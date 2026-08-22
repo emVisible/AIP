@@ -209,6 +209,11 @@ class RuleBasedAgent:
             if then and self._should_fire(then):
                 self._apply_then(then, in_reply_to=msg.id)
             return
+        if action_name == "context.get" and status != "ok":
+            # CoD 取数失败：默认停止而非悬挂（DE-5 精神：不猜测）
+            self.steps.append(f"result: context.get {status} — stop")
+            self._finish(failure=f"context.get {status}")
+            return
         then = self.engine.evaluate_result(action_name, status, result_data)
         if then and self._should_fire(then):
             self._apply_then(then, in_reply_to=msg.id)

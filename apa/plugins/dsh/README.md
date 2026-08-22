@@ -78,12 +78,33 @@ pnpm --filter @apa/dsh-plugin build   # 或在插件目录 npm run build
 - **DE-5** LLM 输出 uncertain 或越权动作名 → 自动转 `human.task.create`，
   Session SUSPENDED，等待人工
 
+## 跨语言联调验证（已通过）
+
+`tests/e2e_client.mjs` 使用与插件**完全相同**的协议核心
+（`@aip/protocol` AIPPeer + WsClientTransport，含 `sendRaw` 绑定层帧），
+对 Python WsGatewayServer 做真实套接字端到端验证：
+
+```
+[node] connected
+[node] hello ack ok (cursors={"bot_01":1})
+[node] pong received (D4)
+[node] event: browser.page.loaded seq=1
+[node] action sent: browser.click target=approve-btn
+[node] progress: accepted          ← DE-1：非终态不触发决策
+[node] terminal ok — cross-language loop closed
+```
+
+运行：`pytest apa/tests/test_phase6.py`（需 node ≥ 18；
+CI 的 cross-language job 已覆盖）。该测试同时锁定了两个线级契约：
+per-stream seq 跨语言一致、params.target 与 Registry schema 对齐。
+
 ## 类型检查
 
 ```bash
 # 协议核心（无需 cordis，本地可验证）
 npx tsc -p tsconfig.check.json
-# 完整编译（需 pnpm install 提供 cordis 类型）
+# 完整编译（需 npm/pnpm install 提供 cordis 类型；离线环境不可用时
+# 以 e2e_client.mjs 运行时验证替代——上节已通过）
 npm run build
 ```
 
@@ -91,6 +112,8 @@ npm run build
 
 - `index.ts` 的 dsh 服务适配基于公开 README 的接口形态编写，dsh llm 服务
   面演进时需同步调整（`adapt()` 单点适配）。
-- 本仓库 CI 不含 cordis 运行时，端到端联调需在 dsh 侧执行：
-  先起 Python 网关，再以 headless profile 加载本插件观察 `[apa] cascade[*]` 日志。
+- 本仓库 CI 无法安装 cordis（离线环境），运行时联调分两层完成：
+  ① 协议核心经 e2e_client.mjs 对 Python 网关实测通过（见上）；
+  ② cordis 挂载需在 dsh 侧执行：先起 Python 网关，再以 headless profile
+  加载本插件观察 `[apa] cascade[*]` 日志。
 - 多 Session 并行需为每个 session 启动独立 agent 实例（POC 单连接单会话）。

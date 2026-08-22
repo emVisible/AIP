@@ -49,6 +49,7 @@ def collect_sessions(journal_paths: List[str]) -> Dict[str, dict]:
             s = sessions.setdefault(sid, {
                 "journal": path, "state": "INITIALIZING", "cursors": {},
                 "tasks_open": [], "outcome": None, "last_ts": 0,
+                "tenant": rec.get("tenant"),
             })
             kind = rec.get("kind")
             if kind == "state":
@@ -120,6 +121,11 @@ class StudioHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/audit":
             self._send(json.dumps(st.audit_tail(), ensure_ascii=False).encode(),
                        "application/json")
+        elif self.path == "/api/analytics":
+            from .analytics import summarize
+            data = summarize(st.journal_paths, tenant=st.tenant)
+            self._send(json.dumps(data, ensure_ascii=False).encode(),
+                       "application/json")
         else:
             self._send(render_html(st.sessions(), st.audit_tail()).encode(),
                        "text/html; charset=utf-8")
@@ -142,6 +148,7 @@ class StudioHandler(BaseHTTPRequestHandler):
 class StudioServer:
     def __init__(self, journals: List[str], *, port: int = 8686,
                  audit_tail_size: int = 30,
+                 tenant: Optional[str] = None,
                  resolve_task=None) -> None:
         expanded: List[str] = []
         for pattern in journals:
@@ -149,11 +156,16 @@ class StudioServer:
         self.journal_paths = expanded
         self.port = port
         self.audit_tail_size = audit_tail_size
+        self.tenant = tenant          # 多租户过滤（§12.1）
         self._resolve = resolve_task
         self._httpd: Optional[ThreadingHTTPServer] = None
 
     def sessions(self) -> Dict[str, dict]:
-        return collect_sessions(self.journal_paths)
+        all_sessions = collect_sessions(self.journal_paths)
+        if self.tenant:
+            return {sid: s for sid, s in all_sessions.items()
+                    if s.get("tenant") == self.tenant}
+        return all_sessions
 
     def audit_tail(self) -> List[dict]:
         out: List[dict] = []
@@ -201,8 +213,9 @@ def main() -> int:  # pragma: no cover
     parser.add_argument("--journals", nargs="+", required=True,
                         help="journal 文件或 glob（如 data/*.jsonl）")
     parser.add_argument("--port", type=int, default=8686)
+    parser.add_argument("--tenant", default=None, help="仅展示指定租户")
     args = parser.parse_args()
-    server = StudioServer(args.journals, port=args.port)
+    server = StudioServer(args.journals, port=args.port, tenant=args.tenant)
     print(f"APA-Studio → http://127.0.0.1:{args.port}")
     server.serve_forever()
     return 0

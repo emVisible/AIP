@@ -1,12 +1,15 @@
 """apa-core — APA 协议层核心（设计文档 §8/§9/§10/§12）。"""
 
 from .audit import AuditService
+from .analytics import report as analytics_report
+from .analytics import summarize as analytics_summarize
 from .cascade import CascadingAgent
 from .context import APAContextStore, ContextRefError
 from .embedded import EmbeddedGateway
 from .gateway import APAGateway, MAX_EVENT_DATA_BYTES, RetryScheduler
 from .human_loop import HumanTaskManager
 from .llm import FakeLLMClient, LLMClient, LLMError, parse_decision
+from .mock_erp import MockERP
 from .persist import SessionJournal, load_journal, recover, release_expired
 from .policy import PolicyConfig, PolicyDecision
 from .process import (
@@ -27,6 +30,15 @@ from .registry import (
 from .rules import RuleBasedAgent, RuleEngine, interpolate
 from .sequence_compat import RecoverableReceiver
 from .session import IllegalStateTransition, SessionStateMachine, SessionRecord
+from .vault import (
+    EncryptedFileVault,
+    EnvVault,
+    FernetBackend,
+    VaultBackend,
+    VaultError,
+    VaultManager,
+    open_vault,
+)
 
 __all__ = [
     "APAGateway",
@@ -36,12 +48,16 @@ __all__ = [
     "CascadingAgent",
     "ContextRefError",
     "EmbeddedGateway",
+    "EncryptedFileVault",
+    "EnvVault",
     "FakeLLMClient",
+    "FernetBackend",
     "HumanTaskManager",
     "IllegalStateTransition",
     "LLMClient",
     "LLMError",
     "MAX_EVENT_DATA_BYTES",
+    "MockERP",
     "PolicyConfig",
     "PolicyDecision",
     "ProcessDef",
@@ -58,14 +74,20 @@ __all__ = [
     "SessionJournal",
     "SessionRecord",
     "SessionStateMachine",
+    "VaultBackend",
+    "VaultError",
+    "VaultManager",
+    "analytics_report",
+    "analytics_summarize",
     "interpolate",
     "load_registries",
     "load_journal",
     "build_process",
     "load_process",
+    "open_vault",
     "parse_decision",
     "recover",
     "release_expired",
 ]
 
-__version__ = "0.3.0"
+__version__ = "1.0.0"

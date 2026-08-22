@@ -10,9 +10,7 @@
 import argparse
 import json
 import sys
-import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -27,6 +25,7 @@ from aip import AIPPeer
 from apa_core.cascade import CascadingAgent
 from apa_core.embedded import EmbeddedGateway
 from apa_core.llm import FakeLLMClient, LLMClient
+from apa_core.mock_erp import MockERP
 from apa_core.policy import PolicyConfig
 from apa_core.registry import load_registries
 
@@ -35,38 +34,6 @@ from apa_executors.document_executor import DocumentExecutor
 from apa_sdk.composite import CompositeExecutor
 
 SESSION = "s_inv_001"
-ERP_PORT = 18765
-
-
-# --- 本地 ERP mock（C4：端点在执行器配置，不经协议） -----------------------------
-class _ERPHandler(BaseHTTPRequestHandler):
-    invoices = []
-
-    def do_POST(self):
-        if self.path != "/invoices":
-            self.send_response(404)
-            self.end_headers()
-            return
-        length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length) or b"{}")
-        body["id"] = f"ERP-{1000 + len(self.invoices)}"
-        body["status"] = "created"
-        type(self).invoices.append(body)
-        data = json.dumps(body).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
-
-    def log_message(self, *a):
-        pass
-
-
-def start_erp() -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer(("127.0.0.1", ERP_PORT), _ERPHandler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    return server
 
 
 def build_agent(peer, rules, use_llm: bool):
@@ -102,7 +69,8 @@ def run(use_llm: bool) -> int:
         process_id="invoice_processing",
     )
 
-    erp = start_erp()
+    erp = MockERP()
+    ERP_PORT = erp.start()
 
     # 单协议身份 bot_01，多领域能力：doc.* / api.* / erp.*
     router = CompositeExecutor("bot_01", SESSION)
@@ -140,15 +108,15 @@ def run(use_llm: bool) -> int:
         print(f"  · {step}")
     fields = router.context_store.snapshot("ctx_s_inv_001_fields") or {}
     print(f"\n提取字段: {fields}")
-    print(f"ERP 收到的发票: {_ERPHandler.invoices}")
+    print(f"ERP 收到的发票: {erp.invoices}")
     extra = f"  决策分布: {agent.stats}" if hasattr(agent, "stats") else ""
     print(f"Session: {summary['state']}{extra}")
 
-    ok = (summary["state"] == "COMPLETED" and len(_ERPHandler.invoices) == 1
-          and _ERPHandler.invoices[0].get("invoice_no") == "INV-2026-0042"
+    ok = (summary["state"] == "COMPLETED" and len(erp.invoices) == 1
+          and erp.invoices[0].get("invoice_no") == "INV-2026-0042"
           and fields.get("total_num") == 30000.0)
     print("\nRESULT:", "OK — 发票已入 ERP" if ok else "FAILED")
-    erp.shutdown()
+    erp.stop()
     return 0 if ok else 1
 
 

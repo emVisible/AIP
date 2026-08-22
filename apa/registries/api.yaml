@@ -10,6 +10,13 @@ api.http.get:
     properties:
       url: { type: string, format: uri }
       headers: { type: object, additionalProperties: { type: string } }
+      auth:
+        type: object
+        description: "凭据引用（C4）：只有 vault/env 引用名，机密由执行器本地解析注入"
+        properties:
+          vault: { type: string }
+          env: { type: string }
+        additionalProperties: false
       timeout_ms: { type: number }
   idempotency: required
   risk: L0
@@ -27,6 +34,13 @@ api.http.post:
       url: { type: string, format: uri }
       json: { type: object }
       headers: { type: object, additionalProperties: { type: string } }
+      auth:
+        type: object
+        description: "凭据引用（C4）：只有 vault/env 引用名，机密由执行器本地解析注入"
+        properties:
+          vault: { type: string }
+          env: { type: string }
+        additionalProperties: false
   idempotency: none
   risk: L2
   timeout_ms: 30000
@@ -43,6 +57,13 @@ api.http.put:
       url: { type: string, format: uri }
       json: { type: object }
       headers: { type: object, additionalProperties: { type: string } }
+      auth:
+        type: object
+        description: "凭据引用（C4）：只有 vault/env 引用名，机密由执行器本地解析注入"
+        properties:
+          vault: { type: string }
+          env: { type: string }
+        additionalProperties: false
   idempotency: required
   risk: L2
   timeout_ms: 30000
@@ -58,6 +79,13 @@ api.http.delete:
     properties:
       url: { type: string, format: uri }
       headers: { type: object, additionalProperties: { type: string } }
+      auth:
+        type: object
+        description: "凭据引用（C4）：只有 vault/env 引用名，机密由执行器本地解析注入"
+        properties:
+          vault: { type: string }
+          env: { type: string }
+        additionalProperties: false
   idempotency: required
   risk: L3
   timeout_ms: 30000
@@ -75,6 +103,13 @@ api.http.patch:
       url: { type: string, format: uri }
       json: { type: object }
       headers: { type: object, additionalProperties: { type: string } }
+      auth:
+        type: object
+        description: "凭据引用（C4）：只有 vault/env 引用名，机密由执行器本地解析注入"
+        properties:
+          vault: { type: string }
+          env: { type: string }
+        additionalProperties: false
   idempotency: optional
   risk: L2
   timeout_ms: 30000

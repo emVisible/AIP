@@ -16,14 +16,27 @@ except ImportError:  # pragma: no cover
 
 
 class APIExecutor(AIPExecutor):
+    """凭据注入层（C4）：params.auth 携带引用（{"vault": name} / {"env": VAR}），
+    机密在本执行器内由 Vault 解析并注入请求头，绝不进入 AIP 协议。"""
+
     def __init__(self, source: str, session_id: str, transport=None, *,
-                 client=None, context_store=None, base_url: str = "") -> None:
+                 client=None, context_store=None, base_url: str = "",
+                 vault=None) -> None:
         super().__init__(source, session_id, transport, context_store=context_store)
         if httpx is None:
             raise RuntimeError("httpx is required: pip install httpx")
         self.client = client or httpx.Client(timeout=30.0)
         self.base_url = base_url.rstrip("/")
         self._polled_ids: set = set()
+        self.vault = vault
+
+    def _resolve_headers(self, params: dict) -> dict:
+        headers = dict(params.get("headers") or {})
+        auth = params.get("auth")
+        if auth and self.vault is not None:
+            from apa_core.vault import VaultManager
+            headers = VaultManager(self.vault).inject_headers(headers, auth)
+        return headers
 
     def start_observation(self) -> None:
         """API 执行器无主动感知，事件由外部注入（如定时任务触发轮询）。"""
@@ -62,7 +75,7 @@ class APIExecutor(AIPExecutor):
 
     def _execute_action(self, name: str, params: dict) -> Tuple[bool, dict]:
         url = params.get("url", "")
-        headers = params.get("headers") or {}
+        headers = self._resolve_headers(params)
         match name:
             case "api.http.get":
                 resp = self.client.get(url, headers=headers)
@@ -90,9 +103,8 @@ class APIExecutor(AIPExecutor):
                 if not base:
                     return False, {"code": "endpoint_not_configured"}
                 resp = self.client.post(
-                    f"{base}/approve",
-                    json={"order_id": order_id,
-                          "approver": params.get("approver", "apa_system")},
+                    f"{base}/orders/{order_id}/approve",
+                    json={"approver": params.get("approver", "apa_system")},
                     headers=headers,
                 )
                 return self._result(resp)
@@ -103,8 +115,8 @@ class APIExecutor(AIPExecutor):
                 if not base:
                     return False, {"code": "endpoint_not_configured"}
                 resp = self.client.post(
-                    f"{base}/reject",
-                    json={"order_id": order_id, "reason_code": params.get("reason_code", "")},
+                    f"{base}/orders/{order_id}/reject",
+                    json={"reason_code": params.get("reason_code", "")},
                     headers=headers,
                 )
                 return self._result(resp)

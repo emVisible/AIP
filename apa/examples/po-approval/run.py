@@ -10,9 +10,7 @@
 import argparse
 import json
 import sys
-import threading
 import time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -25,6 +23,7 @@ sys.path.insert(0, str(APA_ROOT / "sdk" / "python"))
 from aip import AIPPeer
 
 from apa_core.embedded import EmbeddedGateway
+from apa_core.mock_erp import MockERP
 from apa_core.policy import PolicyConfig
 from apa_core.process import ProcessEngine, load_process
 from apa_core.registry import load_registries
@@ -33,28 +32,7 @@ from apa_executors.api_executor import APIExecutor
 from apa_sdk.composite import CompositeExecutor
 
 SESSION = "s_po_001"
-ERP_PORT = 18766
 
-
-class _ERPHandler(BaseHTTPRequestHandler):
-    """本地 ERP mock：/approve /reject /notify。"""
-
-    events = []
-
-    def do_POST(self):
-        length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length) or b"{}")
-        body["path"] = self.path
-        type(self).events.append(body)
-        data = json.dumps({"ok": True}).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
-
-    def log_message(self, *a):
-        pass
 
 
 def run(over_budget: bool) -> int:
@@ -70,7 +48,8 @@ def run(over_budget: bool) -> int:
         identities={"executor": ["bot_01"], "agent": "proc_01"},
         process_id="po_auto_approval",
     )
-    erp = start_erp()
+    erp = MockERP(seed_orders=[{"id": "PO-9012", "status": "pending"}])
+    ERP_PORT = erp.start()
 
     router = CompositeExecutor("bot_01", SESSION)
     api_mod = APIExecutor("bot_01", SESSION,
@@ -164,21 +143,17 @@ def run(over_budget: bool) -> int:
     print("\n流程步骤：")
     for s in engine.run.steps:
         print(f"  · {s}")
-    print(f"\nERP 收到: {_ERPHandler.events}")
+    print(f"\nERP 收到: {erp.requests}")
     print(f"Session: {summary['state']}  outcome={engine.run.outcome}")
 
     expected_action = "/approve" if not over_budget else "/reject"
     ok = (engine.run.done and summary["state"] == "COMPLETED"
-          and any(e.get("path") == expected_action for e in _ERPHandler.events))
+          and any(str(r.get("path", "")).endswith(expected_action)
+                  for r in erp.requests))
     print("\nRESULT:", f"OK — 订单已{'批准' if not over_budget else '驳回'}" if ok else "FAILED")
-    erp.shutdown()
+    erp.stop()
     return 0 if ok else 1
 
-
-def start_erp() -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer(("127.0.0.1", ERP_PORT), _ERPHandler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    return server
 
 
 class _Passthrough:

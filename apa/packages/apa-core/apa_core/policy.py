@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -31,7 +32,17 @@ class PolicyDecision(str, Enum):
 
 
 class PolicyConfig:
-    """策略配置。rule 列表按顺序求值，首个命中的规则决定结果。"""
+    """策略配置。求值顺序（§8.2 第⑥步）：
+
+    1. deny 精确名单 → REJECT
+    2. deny_patterns 通配（fnmatch，如 "erp.payment.*"）→ REJECT
+    3. principals_deny 主体黑名单 → REJECT
+    4. require_approval 精确名单 → REQUIRE_HUMAN
+    5. require_approval_patterns 通配 → REQUIRE_HUMAN
+    6. rules 列表（首个命中者生效；支持 action_pattern 与 source 条件）
+    7. 注册表 requires_approval_at 声明
+    8. 默认：按风险分级（L3/L4 → REQUIRE_HUMAN，其余 PERMIT）
+    """
 
     def __init__(
         self,
@@ -39,12 +50,18 @@ class PolicyConfig:
         *,
         require_approval: Optional[List[str]] = None,
         deny: Optional[List[str]] = None,
+        deny_patterns: Optional[List[str]] = None,
+        require_approval_patterns: Optional[List[str]] = None,
+        principals_deny: Optional[List[str]] = None,
         default: str = "auto",
     ) -> None:
         # default: "auto"（按风险分级）| "permit" | "deny"
         self.default = default
         self.require_approval = set(require_approval or [])
         self.deny = set(deny or [])
+        self.deny_patterns = list(deny_patterns or [])
+        self.require_approval_patterns = list(require_approval_patterns or [])
+        self.principals_deny = set(principals_deny or [])
         self.rules = rules or []
 
     @classmethod
@@ -64,25 +81,39 @@ class PolicyConfig:
             rules=data.get("rules"),
             require_approval=data.get("require_approval"),
             deny=data.get("deny"),
+            deny_patterns=data.get("deny_patterns"),
+            require_approval_patterns=data.get("require_approval_patterns"),
+            principals_deny=data.get("principals_deny"),
             default=data.get("default", "auto"),
         )
 
     # --- 求值 ----------------------------------------------------------------
     def evaluate(
-        self, action_name: str, entry: RegistryEntry, context: Optional[dict] = None
-    ) -> tuple[PolicyDecision, str]:
-        """返回 (决策, 命中的规则名)。context 供自定义规则使用（如金额阈值）。"""
+        self,
+        action_name: str,
+        entry: RegistryEntry,
+        context: Optional[dict] = None,
+        *,
+        source: Optional[str] = None,
+    ) -> tuple:
+        """返回 (决策, 命中的规则名)。context 供条件规则使用（如金额阈值）。"""
         if action_name in self.deny:
             return PolicyDecision.REJECT, "deny_list"
+        for pat in self.deny_patterns:
+            if fnmatch(action_name, pat):
+                return PolicyDecision.REJECT, f"deny_pattern:{pat}"
+        if source and source in self.principals_deny:
+            return PolicyDecision.REJECT, f"principal_denied:{source}"
+
         if action_name in self.require_approval:
             return PolicyDecision.REQUIRE_HUMAN, "require_approval"
+        for pat in self.require_approval_patterns:
+            if fnmatch(action_name, pat):
+                return PolicyDecision.REQUIRE_HUMAN, f"require_approval_pattern:{pat}"
 
         for rule in self.rules:
-            if rule.get("action") != action_name:
+            if not self._rule_matches(rule, action_name, context or {}, source):
                 continue
-            if rule.get("when"):
-                if not self._match(rule["when"], context or {}):
-                    continue
             decision = rule.get("decision")
             if decision in ("permit", "require_human", "reject"):
                 return PolicyDecision(decision), rule.get("name", "rule")
@@ -101,6 +132,27 @@ class PolicyConfig:
             return PolicyDecision.REQUIRE_HUMAN, f"risk:{entry.risk}"
         return PolicyDecision.PERMIT, f"risk:{entry.risk}"
 
+    def _rule_matches(self, rule: dict, action_name: str,
+                      ctx: dict, source: Optional[str]) -> bool:
+        exact = rule.get("action")
+        pattern = rule.get("action_pattern")
+        if exact is not None:
+            if exact != action_name:
+                return False
+        elif pattern is not None:
+            import fnmatch as _fm
+            if not any(_fm.fnmatch(action_name, p) for p in
+                       ([pattern] if isinstance(pattern, str) else pattern)):
+                return False
+        else:
+            return False
+        if rule.get("source") and rule["source"] != source:
+            return False
+        if rule.get("when"):
+            if not self._match(rule["when"], ctx):
+                return False
+        return True
+
     @staticmethod
     def _match(cond: dict, ctx: dict) -> bool:
         """极简条件匹配：{ field: value } 全部相等才命中。"""
@@ -114,5 +166,8 @@ class PolicyConfig:
             "default": self.default,
             "require_approval": sorted(self.require_approval),
             "deny": sorted(self.deny),
+            "deny_patterns": list(self.deny_patterns),
+            "require_approval_patterns": list(self.require_approval_patterns),
+            "principals_deny": sorted(self.principals_deny),
             "rules": self.rules,
         }

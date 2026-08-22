@@ -115,6 +115,27 @@ rules:
 支持事件条件与 action_result 条件、金额比较（lt/le/gt/ge/eq/ne）、
 `{{field}}` 模板插值。L1/L2（小模型/大模型）与 dsh 接入为后续阶段。
 
+## v1.0 范围（§16.2：Policy 完整 / Vault / Analytics / 多租户）
+
+- [x] **Credential Vault**（§12.1 第三层）：纯标准库加密存储（scrypt KDF +
+  HMAC-CTR + encrypt-then-MAC，篡改/错钥检测），可选 Fernet 后端与 EnvVault；
+  会话 TTL；`VaultManager` 注入门面 —— **C4**：auth 规格只含引用名，
+  机密在 Executor 本地解析注入（schema 层 `additionalProperties: false`
+  直接拒绝 literal 机密）
+- [x] **API 凭据注入端到端**：api.http.* 的 `params.auth` → 本地解析 →
+  Bearer 头注入；协议面帧与审计均无机密值
+- [x] **Policy Engine 完整**：`deny_patterns` / `require_approval_patterns`
+  通配规则、`principals_deny` 主体黑名单、规则级 `source` 条件
+- [x] **速率限制**：`rate_limit_per_minute` 按来源滑动窗口（60s）→
+  `rate_limited` 拒绝
+- [x] **多租户隔离**（§12.1）：journal 全量记录 tenant、WS hello 租户绑定
+  校验（不匹配 → UNAUTHORIZED）、Studio/Analytics 按 `--tenant` 过滤
+- [x] **Analytics 服务**（§13.1）：journal → 会话状态分布/动作成功率/
+  耗时 p50/p95/风险失败分布；CLI `python -m apa_core.analytics`；
+  Studio `/api/analytics`
+- [x] **MockERP 参考实现**（§B.3-4）：标准 REST 模拟 ERP（订单审批/
+  发票/通知 + 可选 Bearer 认证），示例已统一复用
+
 ## v0.3 范围（§16.2：Process Mode / Desktop / 多 Bot / Studio）
 
 - [x] **Process Mode 流程编排**（§10.2 模式 B）：`process.py` —— YAML 流程定义、

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import deque
 from typing import Callable, Dict, List, Optional
 
 from aip import (
@@ -126,6 +127,7 @@ class APAGateway:
         tenant_id: Optional[str] = None,
         journal=None,
         session_ttl_ms: Optional[int] = None,
+        rate_limit_per_minute: Optional[int] = None,
     ) -> None:
         self.session_id = session_id
         self.session = Session(session_id)
@@ -161,6 +163,11 @@ class APAGateway:
         self._last_activity_ms: Optional[int] = None
         # Gateway 自有消息的流序号（对端 Receiver 需要连续 seq 才会接受）
         self._gw_seq = Sequencer()
+        # 速率限制（§12 安全：按来源的滑动窗口，60s）
+        self.rate_limit_per_minute = rate_limit_per_minute
+        self._action_times: Dict[str, deque] = {}
+        # 动作耗时统计起点（Analytics）
+        self._action_started_ms: Dict[str, int] = {}
 
     # --- journal（Session 持久化，§10.1） ---------------------------------------
     def _on_transition(self, to: str, frm: str) -> None:
@@ -168,7 +175,8 @@ class APAGateway:
 
     def _journal(self, kind: str, **fields) -> None:
         if self.journal is not None:
-            self.journal.record(kind, session=self.session_id, **fields)
+            self.journal.record(kind, session=self.session_id,
+                                tenant=self.sm.record.tenant_id, **fields)
 
     # --- wiring ---------------------------------------------------------------
     def set_handler(self, side: str, handler: Callable[[dict], None]) -> None:
@@ -350,6 +358,18 @@ class APAGateway:
                 self.session_id, "gateway", status, msg.id,
                 duplicate=True, original_result_id=result_id)]
 
+        # ⓪ 速率限制：按来源滑动窗口（60s）
+        if self.rate_limit_per_minute is not None:
+            now_ms = self._now()
+            window = self._action_times.setdefault(msg.source, deque())
+            while window and now_ms - window[0] > 60_000:
+                window.popleft()
+            if len(window) >= self.rate_limit_per_minute:
+                self.rejections.append(("RATE", msg.id, msg.source))
+                return [make_result(self.session_id, "gateway", "rejected",
+                                    msg.id, code="rate_limited")]
+            window.append(now_ms)
+
         # ① Registry 查找
         entry = self.registry.get(name)
         if entry is None or entry.deprecated:
@@ -419,7 +439,8 @@ class APAGateway:
 
         # ⑥ 策略评估（§9.2 风险分级）
         policy_ctx = self._policy_context(params)
-        decision, rule = self.policy.evaluate(name, entry, policy_ctx)
+        decision, rule = self.policy.evaluate(name, entry, policy_ctx,
+                                              source=msg.source)
         if decision == PolicyDecision.REJECT:
             self.rejections.append(("POLICY", msg.id, rule))
             return [make_result(self.session_id, "gateway", "rejected",
@@ -433,6 +454,10 @@ class APAGateway:
         self.retry_scheduler.schedule(msg, entry)
         if entry.expect:
             self.pending_expects[msg.id] = entry.expect  # AIP §4.2
+        if self.clock:
+            self._action_started_ms[msg.id] = self._now()
+        self._journal("action", action_id=msg.id, name=name,
+                      source=msg.source, risk=entry.risk, verdict="permitted")
         self._forward(msg)
         return [msg]
 
@@ -499,6 +524,14 @@ class APAGateway:
             return self._fail(side, msg, "INVALID_MESSAGE", "result for unknown action")
         if status in ("ok", "failed", "timeout", "rejected"):
             self.retry_scheduler.cancel(action_id)
+            started = self._action_started_ms.pop(action_id, None)
+            duration = (self._now() - started) if started is not None else None
+            action_name = ""
+            act_meta = self.session.actions.actions.get(action_id) or {}
+            action_name = act_meta.get("name", "")
+            self._journal("action_result", action_id=action_id, status=status,
+                          name=action_name,
+                          **({"duration_ms": duration} if duration is not None else {}))
         self.sm.stats_bump("results")
 
         # 会话控制 action 的结果 → 驱动状态机

@@ -125,6 +125,13 @@ class WsGatewayServer:
     async def _on_hello(self, ws, data: dict) -> tuple:
         role = data.get("role")
         source = data.get("source", "")
+        # 租户绑定（§12.1：Session 不可跨租户）
+        expected_tenant = self.gateway.sm.record.tenant_id
+        if expected_tenant and data.get("tenant") != expected_tenant:
+            await ws.send(json.dumps({
+                "type": "error", "code": "UNAUTHORIZED",
+                "message": f"tenant mismatch: {data.get('tenant')!r}"}))
+            return None, None
         expected = self.gateway.identities.get(role or "")
         if role not in ("executor", "agent") or not self.gateway._identity_ok(
                 role, source):

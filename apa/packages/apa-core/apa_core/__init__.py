@@ -32,6 +32,7 @@ from .sequence_compat import RecoverableReceiver
 from .session import IllegalStateTransition, SessionStateMachine, SessionRecord
 from .vault import (
     EncryptedFileVault,
+    HashiCorpVaultBackend,
     EnvVault,
     FernetBackend,
     VaultBackend,
@@ -52,6 +53,7 @@ __all__ = [
     "EnvVault",
     "FakeLLMClient",
     "FernetBackend",
+    "HashiCorpVaultBackend",
     "HumanTaskManager",
     "IllegalStateTransition",
     "LLMClient",

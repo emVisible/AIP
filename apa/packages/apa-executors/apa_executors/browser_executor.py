@@ -190,12 +190,28 @@ class BrowserExecutor(AIPExecutor):
         page: Optional[PageOps] = None,
         adapter: Optional[SemanticAdapter] = None,
         context_store=None,
+        vision=None,
+        recorder=None,
     ) -> None:
         super().__init__(source, session_id, transport, context_store=context_store)
         self.page = page
         self.adapter = adapter or SemanticAdapter()
+        self.vision = vision  # VisionAdapter：DOM 感知失败时的本地降级（C6）
+        self.recorder = recorder  # SchemaRecorder：录制模式（§B.1）
         self._observe_counter = 0
         self._last_signature: Optional[str] = None
+        self.vision_fallbacks = 0
+
+    def _record(self, name: str, params: dict) -> None:
+        if self.recorder is None:
+            return
+        try:
+            state = (self.page.screen_state() if hasattr(self.page, "screen_state")
+                     else ScreenState(url=self.page.url, title=self.page.title,
+                                      elements=self.page.all_elements()))
+            self.recorder.record_action(name, params, state)
+        except Exception:
+            pass  # 录制失败不影响执行
 
     # --- 观察循环 -------------------------------------------------------------
     def start_observation(self) -> None:
@@ -204,11 +220,24 @@ class BrowserExecutor(AIPExecutor):
     def _observe(self) -> None:
         """捕获当前页面状态 → 语义提升 → 发事件（只传引用，C5/C6）。
 
-        状态未变化时跳过（防事件风暴；配合 §6.3 EventCoalescer）。
+        感知降级链（§5.3/§5.4）：DOM 解析 → VLM 本地分析（C6：
+        截图与坐标不进入协议）。状态未变化时跳过（防事件风暴）。
         """
-        state = self.page.screen_state() if hasattr(self.page, "screen_state") else \
-            ScreenState(url=self.page.url, title=self.page.title,
-                        elements=self.page.all_elements())
+        if hasattr(self.page, "screen_state"):
+            state = self.page.screen_state()
+            # MockPage：元素为空且启用视觉 → 本地降级
+            if not state.elements and self.vision is not None:
+                state = self._vision_fallback(state)
+        else:
+            elements = self.page.all_elements()
+            if not elements and self.vision is not None:
+                elements = self.vision.understand_screen(
+                    self.page.screenshot_bytes())
+                self.vision_fallbacks += 1
+                for e in elements:
+                    e.bounds = None  # C6：坐标剥离于入协议前
+            state = ScreenState(url=self.page.url, title=self.page.title,
+                                elements=elements)
         signature = _state_signature(state)
         if signature == self._last_signature:
             return  # 页面无变化，不重复发事件
@@ -224,6 +253,18 @@ class BrowserExecutor(AIPExecutor):
             data["context"] = ref
             self.emit(ev.name, data)
 
+    def _vision_fallback(self, state: ScreenState) -> ScreenState:
+        """MockPage 路径的视觉降级：截图 → 本地 VLM → 语义元素（C6）。"""
+        try:
+            elements = self.vision.understand_screen(b"mock-screenshot")
+            self.vision_fallbacks += 1
+            for e in elements:
+                e.bounds = None
+            return ScreenState(url=state.url, title=state.title,
+                               elements=elements)
+        except Exception:
+            return state
+
     # --- 动作执行 -------------------------------------------------------------
     def _execute_action(self, name: str, params: dict) -> Tuple[bool, dict]:
         if self.page is None:
@@ -231,17 +272,20 @@ class BrowserExecutor(AIPExecutor):
         match name:
             case "browser.navigate":
                 self.page.goto(params["url"], params.get("wait_for", "networkidle"))
+                self._record(name, params)
                 self._observe()
                 return True, {"url": params["url"]}
 
             case "browser.click":
                 self.page.click(params["target"], force=params.get("force", False))
+                self._record(name, params)
                 self._observe()
                 return True, {"target": params["target"]}
 
             case "browser.input":
                 self.page.fill(params["target"], params["value"],
                                clear_first=params.get("clear_first", True))
+                self._record(name, params)
                 self._observe()
                 return True, {"target": params["target"]}
 

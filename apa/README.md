@@ -115,6 +115,19 @@ rules:
 支持事件条件与 action_result 条件、金额比较（lt/le/gt/ge/eq/ne）、
 `{{field}}` 模板插值。L1/L2（小模型/大模型）与 dsh 接入为后续阶段。
 
+## v1.0 后续补全（Phase 5：感知与生态）
+
+- [x] **VLM 视觉适配插槽**（§5.5，C6）：`apa_sdk.vision` —— 抽象基类 +
+  OpenAI-compatible 实现（`APA_VISION_*` 环境变量）+ 脚本化 Fake；接入
+  BrowserExecutor 感知降级链（DOM 解析 → VLM 本地分析）；**bounds 坐标
+  在入协议前剥离**，截图只在 Executor 内存消费
+- [x] **Schema 录制模式**（§B.1 问题 1）：`apa_sdk.recorder.SchemaRecorder`
+  —— 记录动作触发的元素与页面状态，生成带 TODO 标注的 schema.yaml 草稿
+  （事件命名需人工审核），可直接被 SemanticAdapter 加载验证
+- [x] **HashiCorp Vault 对接**（§13.1）：KV v2 HTTP 后端
+  （VAULT_ADDR / VAULT_TOKEN / VAULT_MOUNT），get/put/delete/list 全覆盖，
+  与本地加密后端接口一致可互换
+
 ## v1.0 范围（§16.2：Policy 完整 / Vault / Analytics / 多租户）
 
 - [x] **Credential Vault**（§12.1 第三层）：纯标准库加密存储（scrypt KDF +

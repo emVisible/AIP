@@ -261,6 +261,75 @@ class FernetBackend(VaultBackend):
         return list(self._entries)
 
 
+class HashiCorpVaultBackend(VaultBackend):
+    """HashiCorp Vault KV v2 HTTP 对接（§13.1：apa-vault 可对接 HashiCorp Vault）。
+
+    环境变量：
+        VAULT_ADDR   如 https://vault.corp:8200（必填）
+        VAULT_TOKEN  访问令牌（必填）
+        VAULT_MOUNT  默认 "secret"（KV v2 mount 名）
+    """
+
+    def __init__(self, *, addr: Optional[str] = None, token: Optional[str] = None,
+                 mount: str = "secret", timeout_s: float = 10.0) -> None:
+        self.addr = (addr or os.environ.get("VAULT_ADDR", "")).rstrip("/")
+        self.token = token or os.environ.get("VAULT_TOKEN", "")
+        self.mount = mount
+        self.timeout_s = timeout_s
+        if not self.addr or not self.token:
+            raise VaultError(
+                "HashiCorpVaultBackend requires VAULT_ADDR and VAULT_TOKEN")
+
+    def _url(self, name: str) -> str:
+        return f"{self.addr}/v1/{self.mount}/data/{name}"
+
+    @staticmethod
+    def _headers() -> dict:
+        return {}
+
+    def _auth_headers(self) -> dict:
+        return {"X-Vault-Token": self.token}
+
+    def put(self, name: str, secret: str, *, ttl_ms: Optional[int] = None) -> None:
+        import httpx
+        resp = httpx.post(self._url(name), json={"data": {"value": secret}},
+                          headers=self._auth_headers(), timeout=self.timeout_s)
+        if resp.status_code >= 400:
+            raise VaultError(f"vault put failed: HTTP {resp.status_code}")
+
+    def get(self, name: str) -> Optional[str]:
+        import httpx
+        resp = httpx.get(self._url(name), headers=self._auth_headers(),
+                         timeout=self.timeout_s)
+        if resp.status_code == 404:
+            return None
+        if resp.status_code >= 400:
+            raise VaultError(f"vault get failed: HTTP {resp.status_code}")
+        data = resp.json().get("data", {}).get("data", {})
+        return data.get("value")
+
+    def delete(self, name: str) -> bool:
+        import httpx
+        url = f"{self.addr}/v1/{self.mount}/metadata/{name}"
+        resp = httpx.delete(url, headers=self._auth_headers(), timeout=self.timeout_s)
+        if resp.status_code == 404:
+            return False
+        if resp.status_code >= 400:
+            raise VaultError(f"vault delete failed: HTTP {resp.status_code}")
+        return True
+
+    def list_names(self) -> List[str]:
+        import httpx
+        url = f"{self.addr}/v1/{self.mount}/metadata?list=true"
+        resp = httpx.request("LIST", url, headers=self._auth_headers(),
+                             timeout=self.timeout_s)
+        if resp.status_code == 404:
+            return []
+        if resp.status_code >= 400:
+            raise VaultError(f"vault list failed: HTTP {resp.status_code}")
+        return list(resp.json().get("data", {}).get("keys", []))
+
+
 # --- 注入门面（Executor 本地注入层，C4） --------------------------------------------
 class VaultManager:
     """把 auth 规格解析为请求头注入值。
@@ -298,6 +367,8 @@ def open_vault(path: Optional[str] = None, *, backend: str = "auto") -> VaultBac
     """便捷工厂：backend="auto" → 有 cryptography 用 Fernet，否则 EncryptedFile。"""
     if backend == "env":
         return EnvVault()
+    if backend == "hashicorp":
+        return HashiCorpVaultBackend()
     if backend == "fernet":
         return FernetBackend(path or "data/vault.key")
     if backend == "file":

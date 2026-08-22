@@ -205,6 +205,9 @@ class MockPage:
                 return e
         return None
 
+    def screenshot_bytes(self) -> bytes:
+        return b"mock-png"
+
     def screen_state(self) -> ScreenState:
         return ScreenState(
             url=self.url, title=self.title,

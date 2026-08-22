@@ -37,6 +37,8 @@ class Element:
     data_apa_id: str = ""
     aria_label: str = ""
     attrs: Dict[str, str] = field(default_factory=dict)
+    # C6：坐标只在 Executor 内存中使用（VLM 感知产物），不进入 AIP 协议
+    bounds: Optional[Dict[str, float]] = None
 
     def match(self, spec: dict) -> bool:
         if "role" in spec and spec["role"] != self.role:

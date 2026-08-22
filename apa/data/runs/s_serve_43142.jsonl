@@ -1,0 +1,4 @@
+{"kind": "state", "ts": 1787392843259, "session": "s_serve_43142", "tenant": "serve", "to": "RUNNING"}
+{"kind": "cursor", "ts": 1787392843260, "session": "s_serve_43142", "tenant": "serve", "source": "proc__43142", "seq": 1}
+{"kind": "action", "ts": 1787392843292, "session": "s_serve_43142", "tenant": "serve", "action_id": "act_73e0fdac69d6", "name": "api.http.post", "source": "proc__43142", "risk": "L2", "verdict": "permitted"}
+{"kind": "cursor", "ts": 1787392843292, "session": "s_serve_43142", "tenant": "serve", "source": "bot__43142", "seq": 1}

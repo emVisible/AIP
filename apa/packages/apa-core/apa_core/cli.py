@@ -42,6 +42,41 @@ def _cmd_tasks(args) -> int:
     return human_main()
 
 
+def _cmd_serve(args) -> int:
+    import time as _time
+
+    from .launcher import default_registries
+    from .registry import load_registries
+    from .serve import ServeApp
+
+    reg_paths = args.registries or [str(p) for p in default_registries()]
+    reg = load_registries(*reg_paths)
+    app = ServeApp(
+        journals=args.journals,
+        port=args.port,
+        processes_dir=args.processes_dir or None,
+        registry=reg,
+        runs_dir=args.runs_dir or None,
+        mock_erp=not args.no_mock_erp,
+        erp_base_url=args.erp_url or "",
+        token=args.token or None,
+        tenant=args.tenant or None,
+    )
+    if args.jobs:
+        n = app.load_jobs(args.jobs)
+        print(f"==> 已加载调度任务 {n} 个")
+    port = app.studio_start_background()
+    print(f"==> APA 常驻服务: http://127.0.0.1:{port}   （Ctrl-C 退出）")
+    try:
+        while True:
+            _time.sleep(3600)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        app.shutdown()
+    return 0
+
+
 def _cmd_latency(args) -> int:
     bench_dir = Path(__file__).resolve().parents[2] / "benchmarks"
     sys.path.insert(0, str(bench_dir))
@@ -83,6 +118,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_tasks.add_argument("task_id", nargs="?")
     p_tasks.add_argument("--outcome", default=None)
     p_tasks.set_defaults(fn=_cmd_tasks)
+
+    p_serve = sub.add_parser("serve", help="常驻服务：面板+调度器+本地执行")
+    p_serve.add_argument("--journals", nargs="+", required=True)
+    p_serve.add_argument("--port", type=int, default=8686)
+    p_serve.add_argument("--jobs", default=None, help="scheduler.yaml 任务文件")
+    p_serve.add_argument("--processes-dir", default="data/processes")
+    p_serve.add_argument("--runs-dir", default=None)
+    p_serve.add_argument("--registries", nargs="+", default=None)
+    p_serve.add_argument("--no-mock-erp", action="store_true",
+                         help="禁用内置沙盒 ERP（生产接真实端点时用）")
+    p_serve.add_argument("--erp-url", default="")
+    p_serve.add_argument("--token", default=None)
+    p_serve.add_argument("--tenant", default=None)
+    p_serve.set_defaults(fn=_cmd_serve)
 
     p_lat = sub.add_parser("latency", help="动作往返延迟基准")
     p_lat.add_argument("--n", type=int, default=200)

@@ -134,6 +134,7 @@ rules:
 | **应用级令牌准入** | `WsGatewayServer(hello_token=...)`：hello 帧须携带匹配 token，错/缺 → UNAUTHORIZED（与 TLS 正交，可叠加租户/I9 校验） |
 | **多会话池** | `WsGatewayServer(gateways={sid: gw, ...})` 单服务并发承载多个会话；hello.session 路由、连接表/出站泵按会话隔离、未知会话显式拒绝 |
 | **SQLite 持久化后端** | `SqliteJournal`（stdlib sqlite3，事务写入）；`open_journal(path)` 按扩展名自动选择 JSONL/SQLite；recover/studio/analytics/human_loop 统一读取层全部兼容 |
+| **常驻服务** | `apa serve --jobs data/scheduler.yaml` —— 面板+设计器+调度器+本地流程执行单进程运行；外部事件入口 `POST /api/events`；内置沙盒 ERP 可关 |
 | **延迟基准**（§14.4） | `python -m benchmarks.latency --n 200` —— 内嵌回路动作往返 p50≈0.03ms / 吞吐 ≈3600 ops/s（Apple Silicon 实测），CI 可作回归阈值 |
 
 ```python

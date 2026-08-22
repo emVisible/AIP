@@ -20,7 +20,7 @@ import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from .persist import journal_records
 
@@ -232,6 +232,20 @@ class StudioHandler(BaseHTTPRequestHandler):
             return
         # /api/tasks/<task_id>/resolve  → 需要注册的 resolver 回调
         parts = self.path.strip("/").split("/")
+        if self.path == "/api/events":
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            cb = self.studio.dispatch_event_cb
+            if cb is None:
+                self._send(json.dumps(
+                    {"error": "event dispatch not configured"}).encode(),
+                    "application/json", 501)
+                return
+            result = cb(str(body.get("name", "")),
+                        body.get("data") or {})
+            self._send(json.dumps(result, ensure_ascii=False).encode(),
+                       "application/json")
+            return
         if self.path == "/api/processes/save":
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length) or b"{}")
@@ -275,7 +289,10 @@ class StudioServer:
                  token: Optional[str] = None,
                  registry=None,
                  processes_dir: Optional[str] = None,
+                 dispatch_event: Optional[Callable[[str, dict], dict]] = None,
                  resolve_task=None) -> None:
+        # 外部事件入口（serve 模式接 Scheduler.dispatch_event）
+        self.dispatch_event_cb = dispatch_event
         # 惰性展开：journal 文件可能在服务启动后才产生（HITL 交互场景）
         self.journal_patterns = list(journals)
         self.port = port

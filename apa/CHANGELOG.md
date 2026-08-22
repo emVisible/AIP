@@ -1,5 +1,17 @@
 # APA CHANGELOG
 
+## v1.0+ Phase 11 — 常驻服务 + cordis 实机联调
+
+- **ServeApp 常驻栈**：Studio(HTTP) + Scheduler(tick 循环) + 本地会话执行线程池
+  单进程运行；`apa serve` 子命令与 `webui.sh --serve` 接线；
+  scheduler.yaml 批量加载 cron/event 任务（到点跑 data/processes 流程）
+- **HTTP 外部事件入口**：`POST /api/events` → Scheduler.dispatch_event
+  （serve 模式自动接线；未配置返回 501）
+- **cordis 实机联调**：真实 cordis 4.0.0-rc.8 容器挂载 @apa/dsh-plugin ——
+  Service 提供 llm → inject 解析等待 → apply 注入 → 决策闭环实测通过
+  （tests/test_phase11.py::TestCordisRuntime）；修复插件双重包装导致
+  结果回执静默丢弃的缺陷（模块注册统一由 ProcessRunner 收口）
+
 ## v1.0+ Phase 10 — dsh 底座接入 + 低代码起步
 
 - **dsh 插件运行时打通**：pnpm 安装 cordis 4.0.0-rc.8（卡点原为版本标签）；

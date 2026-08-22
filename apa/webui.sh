@@ -5,6 +5,7 @@
 # 用法：
 #   ./webui.sh                     # 启动 Studio（默认端口 8686）
 #   ./webui.sh --demo              # 先跑一个演示会话再启动（有数据可看）
+#   ./webui.sh --serve --jobs jobs.yaml   # 常驻：面板+调度器+执行
 #   ./webui.sh --port 9000         # 指定端口
 #   ./webui.sh --token secret      # 启用 Bearer 认证
 #   ./webui.sh --tenant corp_x     # 只看某租户
@@ -22,6 +23,8 @@ TOKEN=""
 TENANT=""
 OPEN_BROWSER="1"
 DEMO="0"
+SERVE="0"
+JOBS=""
 DATA_DIR="$SCRIPT_DIR/data"
 JOURNAL_ARGS=()   # 传给 studio 的 --journals 参数
 
@@ -34,6 +37,8 @@ while [[ $# -gt 0 ]]; do
     --tenant)     TENANT="$2"; shift 2 ;;
     --no-browser) OPEN_BROWSER="0"; shift ;;
     --demo)       DEMO="1"; shift ;;
+    --serve)      SERVE="1"; shift ;;
+    --jobs)       JOBS="$2"; shift 2 ;;
     --journal)    JOURNAL_ARGS+=("--journals" "$2"); shift 2 ;;
     -h|--help)    usage ;;
     *) echo "未知参数: $1（--help 查看用法）"; exit 2 ;;
@@ -66,7 +71,7 @@ then
     pyyaml jsonschema httpx websockets
 fi
 
-mkdir -p "$DATA_DIR"
+mkdir -p "$DATA_DIR" "$DATA_DIR/processes"
 
 # ---------- 3. 可选演示数据 ----------
 if [[ "$DEMO" == "1" ]]; then
@@ -104,6 +109,16 @@ echo "==> 启动: http://127.0.0.1:$PORT   （Ctrl-C 停止）"
 open_browser &
 
 cd "$SCRIPT_DIR"
+if [[ "$SERVE" == "1" ]]; then
+  echo "==> 常驻模式：面板 + 调度器 + 本地流程执行"
+  SERVE_ARGS=(--journals "$DATA_DIR/*.jsonl" --port "$PORT"
+              --processes-dir "$DATA_DIR/processes")
+  [[ -n "$JOBS"   ]] && SERVE_ARGS+=(--jobs "$JOBS")
+  [[ -n "$TENANT" ]] && SERVE_ARGS+=(--tenant "$TENANT")
+  [[ -n "$TOKEN"  ]] && SERVE_ARGS+=(--token "$TOKEN")
+  exec "$PY" -m apa_core.cli serve "${SERVE_ARGS[@]}"
+fi
+
 exec "$PY" -m apa_core.cli studio \
   --journals "$DATA_DIR/*.jsonl" \
   --port "$PORT" \

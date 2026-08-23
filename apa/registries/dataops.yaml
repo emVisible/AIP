@@ -556,3 +556,108 @@ data.count:
   risk: L0
   timeout_ms: 10000
   retries: 2
+
+# ============================================================
+# M4 系统 / 文件
+# ============================================================
+shell.execute:
+  executor_domain: data
+  description: "执行 shell 命令（超时强杀；审计 cmd；可能有任意副作用）"
+  params:
+    type: object
+    required: [cmd]
+    properties:
+      cmd: { type: string }
+      timeout_s: { type: number, minimum: 1, maximum: 600, default: 30 }
+  idempotency: none
+  risk: L2
+  timeout_ms: 620000
+  retries: 0
+  audit_fields: [cmd]
+
+sys.notify:
+  executor_domain: data
+  description: "桌面通知（macOS 通知中心，其他平台 stdout 降级）"
+  params:
+    type: object
+    required: [message]
+    properties:
+      title: { type: string, default: APA }
+      message: { type: string }
+  idempotency: none
+  risk: L1
+  timeout_ms: 15000
+  retries: 0
+
+clipboard.set:
+  executor_domain: data
+  description: "写系统剪贴板（同值重放幂等；darwin）"
+  params:
+    type: object
+    required: [text]
+    properties: { text: { type: string } }
+  idempotency: required
+  risk: L1
+  timeout_ms: 5000
+  retries: 1
+
+clipboard.get:
+  executor_domain: data
+  description: "读系统剪贴板文本（读操作可重试）"
+  params: { type: object, properties: {} }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+file.list_dir:
+  executor_domain: data
+  description: "目录列举（glob pattern，含 is_dir/size）"
+  params:
+    type: object
+    required: [path]
+    properties:
+      path: { type: string }
+      pattern: { type: string, default: "*" }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 2
+
+file.mkdir:
+  executor_domain: data
+  description: "创建目录（已存在为 no-op，幂等）"
+  params:
+    type: object
+    required: [path]
+    properties:
+      path: { type: string }
+      parents: { type: boolean, default: true }
+  idempotency: required
+  risk: L1
+  timeout_ms: 10000
+  retries: 1
+
+file.exists:
+  executor_domain: data
+  description: "路径存在性检查"
+  params:
+    type: object
+    required: [path]
+    properties: { path: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+file.stat:
+  executor_domain: data
+  description: "文件元信息（size/mtime_iso/is_dir）"
+  params:
+    type: object
+    required: [path]
+    properties: { path: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2

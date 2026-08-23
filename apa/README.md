@@ -62,17 +62,21 @@ cd frontend && pnpm install && pnpm dist:dir   # → release/mac-arm64/APA Deskt
 
 | 域 | 动作 | 后端 |
 |---|---|---|
-| browser.* | navigate/click/input/select_option/wait_element/scroll/screenshot/extract/**extract_table** | Playwright |
-| api.* | http.get/post/put/patch/delete | httpx + Vault 凭据注入(C4) |
-| excel.* | read_range/append_row/**append_rows**/write_cell/get_formula/set_formula/list_sheets/add_sheet | openpyxl，原子落盘 |
-| ocr.* | extract（mock / http_ocr 云接入点） | 可插拔，C4 凭据 |
-| email.* | send（SMTP+TLS+附件+CC） | stdlib smtplib |
-| data.* | create/filter/sort/to_csv | 内存表格管道 |
-| file.* | read_text/write_text | pathlib |
-| string.* | replace/split | 纯函数 |
-| context.* | get/set/append | ContextStore |
-| erp.* | MockERP 业务沙盒（订单审批等） | 内置 FastAPI |
-| human.* | approval 任务（HITL） | journal 驱动 |
+| string ×12 | regex_extract/replace/test · trim/upper/lower · format_template · pad · starts_with · contains · replace/split | 纯函数 |
+| encode ×4 | base64_encode/decode · url_encode/decode | stdlib |
+| json ×2 + dt ×5 | parse/stringify · now/parse/add/diff/timestamp(UTC) | stdlib |
+| hash ×3 | md5 / sha256 / uuid_gen | 已知向量测试 |
+| data ×9 | create/filter/sort/to_csv/count/aggregate/distinct/slice/json_to_table | 内存表格管道 |
+| file ×6 | read_text/write_text/list_dir/mkdir/exists/stat | pathlib |
+| shell ×1 | **shell.execute**(timeout 强杀+审计 cmd) | subprocess |
+| system ×3 | sys_notify(通知中心) / clipboard_set/get(pbcopy) | darwin 优先 |
+| browser ×24 | 导航/点击/输入/选择/等待/滚动/截图/提取/**extract_table** · **tab×4** · upload/download(expect_download) · execute_js · cookies×3 · hover/double_click/right_click · get_page_info/element_attr | Playwright 多页 |
+| excel ×18 | 读/写/追加(单行+批量)/公式/sheet 列表 · 样式/合并/列宽/**图表** · rename/delete/copy_sheet · find_replace · insert/delete_row | openpyxl 原子落盘 |
+| ocr ×2 | extract(mock/http_ocr) / screen_text(Apple Vision) | C4 凭据注入 |
+| desktop ×17 | 窗口/键盘/文件/进程 · **AX 元素**: ui.read_element/read_tree/click_element/wait_element · click_text(Vision 定位) | Quartz + AXUIElement 双路径 |
+| api/erp/session ×9 | HTTP 五动词 · MockERP 审批 · 会话收束 | Vault 注入(C4) |
+| 流程控制（引擎内建） | if/goto/max_actions · foreach · **while(max_iterations 守卫)** · sub_process · ai_decision · log 节点 · core.delay | ProcessEngine |
+| 治理 ×4 | human.task.create/cancel/reassign · session.complete | HITL/journal |
 
 ## 流程控制（ProcessEngine）
 

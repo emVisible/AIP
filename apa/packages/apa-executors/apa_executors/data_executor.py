@@ -74,6 +74,15 @@ class DataExecutor(AIPExecutor):
             # ---- M2 流程控制配套 ----
             "core.delay": self._core_delay,
             "data.count": self._data_count,
+            # ---- M4 系统 / 文件 ----
+            "shell.execute": self._shell_execute,
+            "sys.notify": self._sys_notify,
+            "clipboard.set": self._clipboard_set,
+            "clipboard.get": self._clipboard_get,
+            "file.list_dir": self._file_list_dir,
+            "file.mkdir": self._file_mkdir,
+            "file.exists": self._file_exists,
+            "file.stat": self._file_stat,
         }
         fn = handler_map.get(name)
         if fn is None:
@@ -432,3 +441,105 @@ class DataExecutor(AIPExecutor):
         delimiter = p.get("delimiter", ",")
         parts = text.split(delimiter)
         return True, {"parts": [p.strip() for p in parts]}
+
+    # ==== M4 系统 / 文件 =====================================================
+
+    def _shell_execute(self, p):
+        """执行 shell 命令。L2：审计记录 cmd；超时强杀。"""
+        import subprocess
+
+        cmd = str(p.get("cmd", ""))
+        if not cmd.strip():
+            return False, {"code": "missing_param", "detail": "cmd"}
+        timeout_s = min(float(p.get("timeout_s", 30)), 600)
+        try:
+            r = subprocess.run(cmd, shell=True, capture_output=True,
+                               text=True, timeout=timeout_s)
+            return True, {
+                "exit_code": r.returncode,
+                "stdout": (r.stdout or "")[-20000:],
+                "stderr": (r.stderr or "")[-5000:],
+                "timed_out": False,
+            }
+        except subprocess.TimeoutExpired as e:
+            return True, {
+                "exit_code": None, "stdout": "", 
+                "stderr": f"timeout after {timeout_s}s",
+                "timed_out": True,
+            }
+
+    def _sys_notify(self, p):
+        """macOS 通知中心（osascript）；非 darwin 降级 stdout。"""
+        import subprocess
+        import sys
+
+        title = str(p.get("title", "APA"))
+        message = str(p.get("message", "")).replace(chr(34), chr(92) + chr(34))
+        if sys.platform == "darwin":
+            script = (f'display notification "{message}" '
+                      f'with title "{title}"')
+            r = subprocess.run(["osascript", "-e", script],
+                               capture_output=True, text=True, timeout=10)
+            return True, {"delivered": r.returncode == 0,
+                          "channel": "notification_center"}
+        print(f"[notify] {title}: {message}")
+        return True, {"delivered": True, "channel": "stdout"}
+
+    def _clipboard_set(self, p):
+        try:
+            from .macos_engine import Clipboard
+
+            Clipboard.copy(str(p.get("text", "")))
+            return True, {"set": True}
+        except Exception as e:  # noqa: BLE001
+            return False, {"code": "clipboard_unavailable",
+                           "detail": str(e)[:80]}
+
+    def _clipboard_get(self, p):
+        try:
+            from .macos_engine import Clipboard
+
+            return True, {"text": Clipboard.paste_text()}
+        except Exception as e:  # noqa: BLE001
+            return False, {"code": "clipboard_unavailable",
+                           "detail": str(e)[:80]}
+
+    def _file_list_dir(self, p):
+        base = Path(p["path"])
+        pattern = p.get("pattern") or "*"
+        entries = []
+        for fp in sorted(base.glob(pattern)):
+            try:
+                stat = fp.stat()
+                size = stat.st_size
+                is_dir = fp.is_dir()
+            except OSError:
+                size, is_dir = None, fp.is_dir()
+            entries.append({"name": fp.name, "is_dir": is_dir,
+                            "size": size})
+        return True, {"entries": entries, "count": len(entries),
+                      "path": str(base)}
+
+    def _file_mkdir(self, p):
+        path = Path(p["path"])
+        parents = bool(p.get("parents", True))
+        existed = path.exists()
+        path.mkdir(parents=parents, exist_ok=True)
+        return True, {"path": str(path), "existed": existed}
+
+    def _file_exists(self, p):
+        return True, {"exists": Path(p["path"]).exists()}
+
+    def _file_stat(self, p):
+        from datetime import datetime
+
+        fp = Path(p["path"])
+        if not fp.exists():
+            return False, {"code": "file_not_found"}
+        st = fp.stat()
+        return True, {
+            "size": st.st_size,
+            "mtime_iso": datetime.fromtimestamp(
+                st.st_mtime).isoformat(),
+            "is_dir": fp.is_dir(),
+        }

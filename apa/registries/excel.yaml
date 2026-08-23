@@ -126,3 +126,166 @@ excel.append_rows:
   risk: L1
   timeout_ms: 120000
   retries: 0
+
+# ============================================================
+# M4 Excel 高级
+# ============================================================
+excel.set_cell_style:
+  executor_domain: excel
+  description: "单元格样式（同参重放幂等）：bold/font_size/font_color/bg_color"
+  params:
+    type: object
+    required: [file, cell]
+    properties:
+      file: { type: string }
+      sheet: { type: string }
+      cell: { type: string, pattern: "^[A-Z]+[0-9]+$" }
+      bold: { type: boolean }
+      font_size: { type: number }
+      font_color: { type: string, pattern: "^[0-9A-Fa-f]{6}$" }
+      bg_color: { type: string, pattern: "^[0-9A-Fa-f]{6}$" }
+  idempotency: required
+  risk: L1
+  timeout_ms: 30000
+  retries: 1
+
+excel.merge_cells:
+  executor_domain: excel
+  description: "合并区域（已合并则重放为 no-op）"
+  params:
+    type: object
+    required: [file, range]
+    properties:
+      file: { type: string }
+      sheet: { type: string }
+      range: { type: string, pattern: "^[A-Z]+[0-9]+:[A-Z]+[0-9]+$" }
+  idempotency: required
+  risk: L1
+  timeout_ms: 30000
+  retries: 1
+
+excel.set_column_width:
+  executor_domain: excel
+  description: "设置列宽（column 接受 A/B 或 1 基序号）"
+  params:
+    type: object
+    required: [file, column, width]
+    properties:
+      file: { type: string }
+      sheet: { type: string }
+      column: { type: string }
+      width: { type: number, minimum: 1 }
+  idempotency: required
+  risk: L1
+  timeout_ms: 30000
+  retries: 1
+
+excel.add_chart:
+  executor_domain: excel
+  description: "插入柱状/折线图（重复执行会叠加图表，非幂等）"
+  params:
+    type: object
+    required: [file, data_range]
+    properties:
+      file: { type: string }
+      sheet: { type: string }
+      type: { enum: [bar, line], default: bar }
+      data_range: { type: string, description: "B2:C5 或 Sheet!B2:C5" }
+      title: { type: string }
+      anchor: { type: string, default: E2 }
+      titles_from_data: { type: boolean, default: false }
+  idempotency: none
+  risk: L1
+  timeout_ms: 30000
+  retries: 0
+
+excel.rename_sheet:
+  executor_domain: excel
+  description: "重命名工作表（状态迁移，不重试）"
+  params:
+    type: object
+    required: [file, old, new]
+    properties:
+      file: { type: string }
+      old: { type: string }
+      new: { type: string }
+  idempotency: none
+  risk: L1
+  timeout_ms: 15000
+  retries: 0
+
+excel.delete_sheet:
+  executor_domain: excel
+  description: "删除工作表（保留最后一张）"
+  params:
+    type: object
+    required: [file, sheet]
+    properties:
+      file: { type: string }
+      sheet: { type: string }
+  idempotency: none
+  risk: L2
+  timeout_ms: 15000
+  retries: 0
+
+excel.copy_sheet:
+  executor_domain: excel
+  description: "复制工作表内容到新表"
+  params:
+    type: object
+    required: [file, source, target]
+    properties:
+      file: { type: string }
+      source: { type: string }
+      target: { type: string }
+  idempotency: none
+  risk: L1
+  timeout_ms: 30000
+  retries: 0
+
+excel.find_replace:
+  executor_domain: excel
+  description: "全表查找替换（替换后重放 no-op，幂等）"
+  params:
+    type: object
+    required: [file, find]
+    properties:
+      file: { type: string }
+      sheet: { type: string }
+      find: { type: string }
+      replace: { type: string, default: "" }
+  idempotency: required
+  risk: L2
+  timeout_ms: 60000
+  retries: 1
+
+excel.insert_row:
+  executor_domain: excel
+  description: "在指定行号前插入空行并可填值"
+  params:
+    type: object
+    required: [file, at]
+    properties:
+      file: { type: string }
+      sheet: { type: string }
+      at: { type: integer, minimum: 1 }
+      values: { type: array }
+  idempotency: none
+  risk: L1
+  timeout_ms: 30000
+  retries: 0
+
+excel.delete_row:
+  executor_domain: excel
+  description: "删除指定行（位置语义随内容移动，不重试）"
+  params:
+    type: object
+    required: [file, at]
+    properties:
+      file: { type: string }
+      sheet: { type: string }
+      at: { type: integer, minimum: 1 }
+  idempotency: none
+  risk: L2
+  timeout_ms: 30000
+  retries: 0

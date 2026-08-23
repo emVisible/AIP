@@ -527,3 +527,32 @@ data.json_to_table:
   risk: L0
   timeout_ms: 30000
   retries: 2
+
+# ============================================================
+# M2 流程控制配套
+# ============================================================
+core.delay:
+  executor_domain: data
+  description: "等待 N 秒（上限 300s；非幂等不重试）"
+  params:
+    type: object
+    required: [seconds]
+    properties:
+      seconds: { type: number, minimum: 0, maximum: 300 }
+  idempotency: none
+  risk: L0
+  timeout_ms: 310000
+  retries: 0
+
+data.count:
+  executor_domain: data
+  description: "读取内存表格行数（while 条件配套）"
+  params:
+    type: object
+    required: [source]
+    properties:
+      source: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 10000
+  retries: 2

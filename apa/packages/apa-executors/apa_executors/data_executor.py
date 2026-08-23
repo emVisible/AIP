@@ -71,6 +71,9 @@ class DataExecutor(AIPExecutor):
             "data.distinct": self._data_distinct,
             "data.slice": self._data_slice,
             "data.json_to_table": self._data_json_to_table,
+            # ---- M2 流程控制配套 ----
+            "core.delay": self._core_delay,
+            "data.count": self._data_count,
         }
         fn = handler_map.get(name)
         if fn is None:
@@ -340,6 +343,21 @@ class DataExecutor(AIPExecutor):
         table = {"columns": columns, "rows": rows}
         self._set_table(p.get("key", "from_json"), table)
         return True, {**table, "count": len(rows)}
+
+    def _core_delay(self, p):
+        """等待 N 秒（上限 300s 防误配挂死会话线程）。"""
+        import time as _t
+
+        seconds = float(p.get("seconds", 0))
+        if seconds <= 0:
+            return True, {"slept": 0.0}
+        slept = min(seconds, 300.0)
+        _t.sleep(slept)
+        return True, {"slept": round(slept, 3)}
+
+    def _data_count(self, p):
+        src = self._get_table(p.get("source", ""))
+        return True, {"count": len(src.get("rows", []))}
 
     def _data_create(self, p):
         cols = p.get("columns", [])

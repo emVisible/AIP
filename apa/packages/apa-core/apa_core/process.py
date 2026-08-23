@@ -216,6 +216,31 @@ def eval_condition(expr: str, scopes: Dict[str, Any]) -> bool:
         return False
 
 
+def _eval_while_cond(expr: str, scopes: Dict[str, Any]) -> Optional[bool]:
+    """while 专用三态求值：True / False / None(求值异常，如首轮键缺失)。
+
+    与 eval_condition 同一 AST 白名单；区别仅在不吞异常。
+    """
+    inner = expr.strip()
+    m = re.fullmatch(r"\{\{(.+?)\}\}", inner, re.DOTALL)
+    if m:
+        inner = m.group(1).strip()
+    try:
+        tree = _ast.parse(inner, mode="eval")
+        for node in _ast.walk(tree):
+            if not isinstance(node, _ALLOWED_NODES):
+                return None
+            if isinstance(node, _ast.Constant) and not isinstance(
+                    node.value, (int, float, str, bool, type(None))):
+                return None
+        local = {k: (_NS(v) if isinstance(v, dict) else v)
+                 for k, v in scopes.items()}
+        code = compile(tree, "<while_cond>", "eval")
+        return bool(eval(code, {"__builtins__": {}}, local))  # noqa: S307
+    except Exception:
+        return None
+
+
 StepExecutor = Callable[[str, dict], tuple]  # (name, params) -> (ok, data)
 
 
@@ -301,6 +326,17 @@ class ProcessEngine:
         if step.type == "foreach":
             return self._exec_foreach(step)
 
+        # ---- while 条件循环（M2）----
+        if step.type == "while":
+            return self._exec_while(step)
+
+        # ---- 日志节点（M2）----
+        if step.type == "log":
+            msg = render(step.params.get("message", ""), run.scopes)
+            run.steps.append({"step": step.id, "type": "log",
+                              "message": str(msg)})
+            return True
+
         # ---- 子流程调用 ----
         if step.type == "sub_process":
             return self._exec_sub_process(step)
@@ -347,6 +383,98 @@ class ProcessEngine:
         run.steps.append({"step": step.id, "action": step.action,
                           "status": "failed", "result": data})
         return self._goto_handler(step, reason=(data or {}).get("code", "failed"))
+
+    def _exec_while(self, step: StepDef) -> bool:
+        """while 条件循环（M2，影刀「循环-当条件满足」对标）。
+
+        YAML 示例：
+            - id: poll
+              type: while
+              params:
+                condition: "steps.poll.last.status != 'done'"   # AST 白名单
+                max_iterations: 20                              # 必填守卫
+                body_action: api.http.get
+                body_params: { url: "https://x/api/status" }
+        每轮把 body 结果写入 steps.<output_as>.last 供下一轮条件读取。
+        条件表达式键缺失（求值异常）视为 True 进入——轮询型循环的
+        「状态未知 ≠ 完成」直觉；显式 False 才退出。
+        达到 max_iterations 仍未满足 → 输出 capped=true（整体仍 success，
+        防死循环但可被后续条件分支感知）。
+        """
+        run = self.run
+        cond_expr = str(step.params.get("condition", "")).strip()
+        try:
+            max_iter = int(step.params.get("max_iterations", 0))
+        except (TypeError, ValueError):
+            max_iter = 0
+        if not cond_expr:
+            raise ProcessDefinitionError(
+                f"{step.id}: while requires 'condition'")
+        if max_iter < 1:
+            raise ProcessDefinitionError(
+                f"{step.id}: while requires max_iterations >= 1 "
+                "(死循环守卫，§10.2 精神)")
+
+        body_action = step.params.get("body_action") or ""
+        body_params_tpl = step.params.get("body_params") or {}
+        key_out = step.output_as or step.id
+
+        def cond_holds() -> bool:
+            """None（求值异常，如首轮无数据）→ 乐观进入。"""
+            v = _eval_while_cond(cond_expr, run.scopes)
+            return True if v is None else v
+
+        iterations = 0
+        capped = True
+        last_data: Any = None
+        last_ok = True
+
+        while iterations < max_iter:
+            # 条件不满足 → 正常退出（求值异常=乐观进入）
+            if not cond_holds():
+                capped = False
+                break
+
+            # 全局预算守卫（§10.2）：条件判断不计动作，body 计
+            if body_action:
+                if run.actions_sent + 1 > self.proc.max_actions:
+                    run.done = True
+                    run.outcome = "max_actions_exceeded"
+                    return False
+                bp = render(body_params_tpl, run.scopes) or {}
+                run.actions_sent += 1
+                ok, data = self.send_fn(body_action, bp)
+                iterations += 1
+                last_ok = ok and last_ok
+                last_data = data
+                run.scopes.setdefault("steps", {})[key_out] = {
+                    "iterations": iterations,
+                    "last": data,
+                    "capped": False,
+                }
+                if not ok:
+                    run.steps.append({
+                        "step": step.id, "type": "while",
+                        "iterations": iterations,
+                        "status": "failed",
+                        "result": data})
+                    return self._goto_handler(step, reason="while_body_failed")
+            else:
+                iterations += 1  # 无 body：纯条件等待（配合 delay 使用）
+
+        if iterations >= max_iter and cond_holds():
+            capped = True
+        else:
+            capped = False
+
+        run.scopes.setdefault("steps", {})[key_out] = {
+            "iterations": iterations,
+            "last": last_data,
+            "capped": capped,
+        }
+        run.steps.append({"step": step.id, "type": "while",
+                          "iterations": iterations, "capped": capped})
+        return last_ok
 
     def _exec_foreach(self, step: StepDef) -> bool:
         """foreach 循环：遍历 source 数组，对每项执行 body_action。

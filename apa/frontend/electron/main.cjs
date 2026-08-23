@@ -8,7 +8,7 @@
  *   打包态：apa-runtime 由 stage-desktop.cjs 暂存到 Resources，
  *     可写数据放 userData（journals/processes/logs）。
  */
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, ipcMain } = require("electron");
 const { spawn, execSync } = require("child_process");
 const { mkdtempSync } = require("fs");
 const fs = require("fs");
@@ -124,13 +124,61 @@ async function main() {
   mainWindow = new BrowserWindow({
     width: 1280, height: 800, minWidth: 900,
     title: "APA Desktop",
-    webPreferences: { nodeIntegration: false, contextIsolation: true },
+    webPreferences: {
+      nodeIntegration: false, contextIsolation: true,
+      preload: path.join(__dirname, "preload.cjs"),
+    },
   });
 
   mainWindow.loadURL(`http://127.0.0.1:${port}`);
 }
 
-app.whenReady().then(main);
+app.whenReady().then(() => {
+  setupSpyIpc();
+  main();
+});
+
+// ---- 拾取器 overlay（M2）----------------------------------------------------
+let overlayWin = null;
+
+function ensureOverlay() {
+  if (overlayWin && !overlayWin.isDestroyed()) return overlayWin;
+  const { screen } = require("electron");
+  const disp = screen.getPrimaryDisplay();
+  overlayWin = new BrowserWindow({
+    x: disp.bounds.x, y: disp.bounds.y,
+    width: disp.bounds.width, height: disp.bounds.height,
+    transparent: true, frame: false,
+    resizable: false, movable: false,
+    fullscreenable: false, skipTaskbar: true,
+    hasShadow: false, show: true,
+    alwaysOnTop: true,
+    webPreferences: {
+      nodeIntegration: true, contextIsolation: false,
+    },
+  });
+  // 鼠标事件穿透：overlay 只做视觉高亮
+  overlayWin.setIgnoreMouseEvents(true);
+  overlayWin.loadFile(path.join(__dirname, "overlay.html"));
+  return overlayWin;
+}
+
+function closeOverlay() {
+  if (overlayWin && !overlayWin.isDestroyed()) overlayWin.destroy();
+  overlayWin = null;
+}
+
+function setupSpyIpc() {
+  ipcMain.on("spy-overlay-show", () => {
+    try { ensureOverlay(); } catch (e) { console.error("[spy]", e); }
+  });
+  ipcMain.on("spy-overlay-hide", () => closeOverlay());
+  ipcMain.on("spy-bounds", (_e, payload) => {
+    if (overlayWin && !overlayWin.isDestroyed()) {
+      overlayWin.webContents.send("spy-bounds", payload);
+    }
+  });
+}
 app.on("window-all-closed", () => {
   if (pythonProc) pythonProc.kill("SIGTERM");
   app.quit();

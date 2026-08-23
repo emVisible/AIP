@@ -81,9 +81,11 @@ def create_app(
     dispatch_event: Optional[Callable] = None,
     resolve_task: Optional[Callable] = None,
     runs_dir: Optional[str] = None,
+    spy_service: Optional[Any] = None,
 ) -> FastAPI:
     """构建 FastAPI 实例。依赖注入：所有外部交互通过参数传入。"""
     _recorder = None  # RecorderService 惰性单例（录制会话注册表）
+    _spy = spy_service  # SpyService 注入点（None 则惰性构造）
 
     from .studio import StudioServer  # 延迟导入复用现有逻辑
 
@@ -252,6 +254,54 @@ def create_app(
             return _recorder.stop(sid, process_id=body.process_id)
         except RecorderError as e:
             raise HTTPException(404, str(e))
+
+    # ---- 桌面拾取器（M2）----
+    @app.post("/api/spy/start")
+    async def spy_start():
+        nonlocal _spy
+        from .spy import SpyError, SpyService
+        if _spy is None:
+            _spy = SpyService()
+        try:
+            return _spy.start()
+        except SpyError as e:
+            raise HTTPException(503, str(e))
+
+    @app.post("/api/spy/stop")
+    async def spy_stop():
+        if _spy is None:
+            return {"stopped": False}
+        return _spy.stop()
+
+    @app.get("/api/spy/status")
+    async def spy_status():
+        if _spy is None:
+            return {"active": False, "version": 0, "latest": None}
+        return _spy.status()
+
+    @app.post("/api/spy/capture")
+    async def spy_capture():
+        from .spy import SpyError
+        if _spy is None:
+            raise HTTPException(404, "spy not started")
+        try:
+            return _spy.capture()
+        except SpyError as e:
+            raise HTTPException(409, str(e))
+
+    @app.get("/api/spy/stream")
+    async def spy_stream():
+        if _spy is None:
+            raise HTTPException(404, "spy not started")
+        from fastapi.responses import StreamingResponse
+        from .spy import spy_stream_frames
+
+        return StreamingResponse(
+            spy_stream_frames(_spy),
+            media_type="application/x-ndjson",
+            headers={"Cache-Control": "no-cache",
+                     "X-Accel-Buffering": "no"},
+        )
 
     # ---- SSE journal stream ----
     @app.get("/api/journal/stream")

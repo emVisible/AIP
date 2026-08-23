@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body {
+    margin: 0; padding: 0; background: transparent;
+    overflow: hidden; user-select: none;
+  }
+  #hl {
+    position: fixed; display: none;
+    border: 2px solid #7c3aed;
+    background: rgba(124, 58, 237, 0.12);
+    border-radius: 4px;
+    pointer-events: none;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.6);
+  }
+  #tag {
+    position: fixed; display: none;
+    left: 0; top: 0;
+    font: 11px -apple-system, sans-serif;
+    background: #7c3aed; color: #fff;
+    padding: 2px 6px; border-radius: 3px;
+    white-space: nowrap; max-width: 420px;
+    overflow: hidden; text-overflow: ellipsis;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="hl"></div>
+<div id="tag"></div>
+<script>
+  const { ipcRenderer } = require("electron");
+  const hl = document.getElementById("hl");
+  const tag = document.getElementById("tag");
+
+  ipcRenderer.on("spy-bounds", (_e, payload) => {
+    const { bounds, label } = payload || {};
+    if (!bounds || bounds.w <= 0 || bounds.h <= 0) {
+      hl.style.display = "none";
+      tag.style.display = "none";
+      return;
+    }
+    hl.style.display = "block";
+    hl.style.left = bounds.x + "px";
+    hl.style.top = bounds.y + "px";
+    hl.style.width = bounds.w + "px";
+    hl.style.height = bounds.h + "px";
+    tag.style.display = "block";
+    tag.textContent = label || "";
+    // 标签跟随框左上角，防溢出屏幕右缘
+    tag.style.left = Math.min(bounds.x, window.screen.width - 440) + "px";
+    tag.style.top = Math.max(bounds.y - 20, 2) + "px";
+  });
+</script>
+</body>
+</html>

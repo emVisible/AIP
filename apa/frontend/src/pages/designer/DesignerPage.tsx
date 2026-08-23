@@ -18,6 +18,8 @@ import type { ActionMeta, ProcessInfo } from "../../api/types";
 import { CatalogPanel } from "../../components/designer/CatalogPanel";
 import { ParamsPanel } from "../../components/designer/ParamsPanel";
 import { TestRunPanel } from "../../components/designer/TestRunPanel";
+import { SpyPanel } from "../../components/designer/SpyPanel";
+import "../../types/desktop";
 
 /** 模板信息（/api/templates 返回结构）。 */
 interface TemplateInfo { id: string; name: string; description: string; yaml: string }
@@ -230,6 +232,28 @@ export function DesignerPage() {
     }
   }
 
+
+  function captureSpyElement(el: {
+    role: string; title: string; app_name: string;
+    bounds: { x: number; y: number; w: number; h: number } | null;
+    ax_path: unknown[];
+  }) {
+    setSteps(prev => {
+      const step: DStep = {
+        id: `spy_${prev.length + 1}`,
+        type: "", action: "desktop.ui.click_element",
+        target: "", condition: "", output_as: "",
+        on_failure_goto: "",
+        params_json: JSON.stringify({ element: el }, null, 2),
+      };
+      setSelectedIdx(prev.length);
+      return [...prev, step];
+    });
+    setStatusMsg(`已捕获 ${el.app_name} · ${el.role}` +
+      (el.title ? ` "${el.title.slice(0, 24)}"` : "") +
+      " → 插入 click_element 步骤");
+  }
+
   // ---- 浏览器录制 ----------------------------------------------------------
   function startRecording() {
     if (!recording || !recording.url.startsWith("http")) return;
@@ -424,6 +448,8 @@ export function DesignerPage() {
           )}
 
           <TestRunPanel yaml={yamlText} />
+
+          <SpyPanel onCapture={captureSpyElement} />
 
           {/* 模板库 */}
           <TemplateLibrary onPick={importTemplate} />

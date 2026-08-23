@@ -47,6 +47,8 @@
     "files": [
       "dist/**",
       "electron/main.cjs",
+      "electron/preload.cjs",
+      "electron/overlay.html",
       "package.json"
     ],
     "extraResources": [

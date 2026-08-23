@@ -1,7 +1,7 @@
 /**
  * APA 低代码流程设计器 — Activity Pipeline Editor。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -9,9 +9,12 @@ import {
   type Edge,
   type Node,
   ReactFlow,
+  ReactFlowProvider,
   useEdgesState,
   useNodesState,
+  useReactFlow,
 } from "@xyflow/react";
+import { readDnDAction, readDnDStepIndex } from "./designerDnd";
 
 import { api } from "../../api/client";
 import type { ActionMeta, ProcessInfo } from "../../api/types";
@@ -93,6 +96,15 @@ function StepNodeView({ data }: { data: StepNodeData }) {
 const nodeTypes = { step: StepNodeView };
 
 export function DesignerPage() {
+  return (
+    <ReactFlowProvider>
+      <DesignerInner />
+    </ReactFlowProvider>
+  );
+}
+
+/** 内层：需要 useReactFlow 上下文。 */
+function DesignerInner() {
   const [metaId, setMetaId] = useState("");
   const [triggerName, setTriggerName] = useState("");
   const [maxActions, setMaxActions] = useState(50);
@@ -107,23 +119,15 @@ export function DesignerPage() {
 
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<Node>([]);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const { screenToFlowPosition } = useReactFlow();
+  /** 新建节点的落点（画布流坐标），同步时优先于网格默认值。 */
+  const dropPosRef = useRef(new Map<string, { x: number; y: number }>());
+  /** 步骤卡右键菜单状态。 */
+  const [menu, setMenu] = useState<{ idx: number; x: number; y: number }
+                                 | null>(null);
 
-  // steps → RF graph sync
+  // steps → RF graph sync（保留用户拖动过的节点位置）
   useEffect(() => {
-    const nodes: Node[] = steps.map((s, i) => ({
-      id: s.id || `n${i}`,
-      type: "step" as const,
-      position: { x: 200, y: i * 100 },
-      data: {
-        label: s.id || `step_${i + 1}`,
-        sub: s.action || s.type || "\u2014",
-        tone: selectedIdx === i
-          ? "border-blue-500 ring-2 ring-blue-200"
-          : s.condition
-            ? "border-amber-300"
-            : "border-slate-300",
-      } satisfies StepNodeData,
-    }));
     const edges: Edge[] = [];
     for (let i = 0; i < steps.length - 1; i++) {
       edges.push({
@@ -133,7 +137,28 @@ export function DesignerPage() {
         animated: true,
       });
     }
-    setRfNodes(nodes);
+    setRfNodes((prev) => {
+      const prevPos = new Map(prev.map((n) => [n.id, n.position]));
+      return steps.map((s2, i) => {
+        const id = s2.id || `n${i}`;
+        return {
+          id,
+          type: "step" as const,
+          position:
+            prevPos.get(id) ??
+            dropPosRef.current.get(id) ?? { x: 200, y: i * 100 },
+          data: {
+            label: s2.id || `step_${i + 1}`,
+            sub: s2.action || s2.type || "\u2014",
+            tone: selectedIdx === i
+              ? "border-blue-500 ring-2 ring-blue-200"
+              : s2.condition
+                ? "border-amber-300"
+                : "border-slate-300",
+          } satisfies StepNodeData,
+        };
+      });
+    });
     setRfEdges(edges);
   }, [steps, selectedIdx, setRfNodes, setRfEdges]);
 
@@ -163,6 +188,87 @@ export function DesignerPage() {
       }),
       error_handlers: [] as Record<string, unknown>[],
     };
+  }
+
+
+  // ---- M4：画布拖放建节点 ---------------------------------------------------
+  function handleCanvasDragOver(e: React.DragEvent) {
+    if (e.dataTransfer.types.includes("application/apa-action")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    }
+  }
+
+  function handleCanvasDrop(e: React.DragEvent) {
+    const action = readDnDAction(e.nativeEvent as DragEvent);
+    if (!action) return;
+    e.preventDefault();
+    const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+    const step = stepFromAction(action, steps.length);
+    dropPosRef.current.set(step.id, pos);
+    setSelectedIdx(steps.length);
+    setSteps((prev) => [...prev, step]);
+    setStatusMsg(`已从目录拖入 ${action} ✓`);
+  }
+
+  // ---- M4：步骤卡排序 / 右键菜单 --------------------------------------------
+  function moveStep(from: number, to: number) {
+    if (from === to) return;
+    setSteps((prev) => {
+      if (from < 0 || from >= prev.length || to < 0 || to >= prev.length) {
+        return prev;
+      }
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved!);
+      return next;
+    });
+    setSelectedIdx(to);
+  }
+
+  function handleCardDrop(target: number, e: React.DragEvent) {
+    const from = readDnDStepIndex(e.nativeEvent as DragEvent);
+    if (from === null) {
+      // 目录动作落到步骤卡上 → 插到该卡之后
+      const action = readDnDAction(e.nativeEvent as DragEvent);
+      if (action) insertStep(target + 1, stepFromAction(action, target + 1));
+      e.preventDefault();
+      return;
+    }
+    e.preventDefault();
+    moveStep(from, target);
+  }
+
+  function insertStep(at: number, step: DStep) {
+    setSteps((prev) => {
+      const at2 = Math.max(0, Math.min(at, prev.length));
+      const next = [...prev.slice(0, at2), step, ...prev.slice(at2)];
+      return next;
+    });
+    setSelectedIdx(at);
+  }
+
+  function duplicateStep(idx: number) {
+    setSteps((prev) => {
+      if (idx < 0 || idx >= prev.length) return prev;
+      const src = prev[idx]!;
+      const copy: DStep = { ...src,
+        id: `${src.id || `step_${idx + 1}`}_copy${Date.now()
+          .toString(36).slice(-3)}` };
+      return [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)];
+    });
+    setMenu(null);
+  }
+
+  function deleteStep(idx: number) {
+    setSteps((prev) => prev.filter((_, i) => i !== idx));
+    setSelectedIdx(null);
+    setMenu(null);
+  }
+
+  function blankAt(at: number) {
+    insertStep(at, blankStep(at));
+    setMenu(null);
   }
 
   async function syncToYaml() {
@@ -380,7 +486,9 @@ export function DesignerPage() {
         {/* 中：画布 + 步骤编辑 */}
         <div className="overflow-y-auto p-3">
           <div style={{ height: Math.max(280, rfNodes.length * 80 + 60) }}
-               className="border rounded-xl min-h-[250px] overflow-hidden">
+               className="border rounded-xl min-h-[250px] overflow-hidden"
+               onDragOver={handleCanvasDragOver}
+               onDrop={handleCanvasDrop}>
             <ReactFlow
               nodes={rfNodes} edges={rfEdges}
               onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
@@ -394,8 +502,28 @@ export function DesignerPage() {
 
           <div className="mt-3 space-y-2">
             {steps.map((s, i) => (
-              <div key={s.id || i} onClick={() => setSelectedIdx(i)}
-                className={`cursor-pointer rounded-lg border px-3 py-2 text-xs ${
+              <div key={s.id || i}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("application/apa-step-index",
+                                         String(i));
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                onDragOver={(e) => {
+                  if (e.dataTransfer.types.includes(
+                    "application/apa-step-index") ||
+                      e.dataTransfer.types.includes("application/apa-action")) {
+                    e.preventDefault();
+                  }
+                }}
+                onDrop={(e) => handleCardDrop(i, e)}
+                onClick={() => setSelectedIdx(i)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setMenu({ idx: i, x: e.clientX, y: e.clientY });
+                }}
+                className={`cursor-grab active:cursor-grabbing rounded-lg
+                            border px-3 py-2 text-xs ${
                   selectedIdx === i
                     ? "ring-1 ring-blue-300 border-blue-300 bg-blue-50"
                     : "border-slate-200 bg-white"}`}>
@@ -510,6 +638,35 @@ export function DesignerPage() {
         <span>{statusMsg}</span>
         <span>{currentFile}</span>
       </div>
+
+      {/* 步骤右键菜单 */}
+      {menu && (
+        <div className="fixed inset-0 z-40" onClick={() => setMenu(null)}
+             onContextMenu={(e) => { e.preventDefault(); setMenu(null); }}>
+          <div style={{ left: menu.x, top: menu.y }}
+               className="absolute bg-white border border-slate-200
+                          rounded-lg shadow-lg py-1 w-36 text-xs">
+            <button onClick={() => duplicateStep(menu.idx)}
+              className="w-full px-3 py-1.5 text-left hover:bg-slate-50">
+              ⧉ 复制步骤
+            </button>
+            <button onClick={() => blankAt(menu.idx)}
+              className="w-full px-3 py-1.5 text-left hover:bg-slate-50">
+              ↑ 在前面插入
+            </button>
+            <button onClick={() => blankAt(menu.idx + 1)}
+              className="w-full px-3 py-1.5 text-left hover:bg-slate-50">
+              ↓ 在后面插入
+            </button>
+            <div className="my-0.5 border-t border-slate-100" />
+            <button onClick={() => deleteStep(menu.idx)}
+              className="w-full px-3 py-1.5 text-left text-red-600
+                         hover:bg-red-50">
+              ✕ 删除步骤
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 录制模态 */}
       {recording && (

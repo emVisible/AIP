@@ -57,6 +57,11 @@ export function CatalogPanel({ onInsert }: { onInsert: (action: string) => void 
                           tracking-wide px-1 pt-2">流程控制</p>
             {flowItems.map(([name, desc]) => (
               <div key={name}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("application/apa-action", name);
+                  e.dataTransfer.effectAllowed = "copy";
+                }}
                 onClick={() => onInsert(name)}
                 className="px-2 py-1 cursor-pointer rounded text-xs
                            hover:bg-violet-50 flex justify-between items-center"
@@ -75,6 +80,11 @@ export function CatalogPanel({ onInsert }: { onInsert: (action: string) => void 
             {items.map(([name, meta]) => (
               <div
                 key={name}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("application/apa-action", name);
+                  e.dataTransfer.effectAllowed = "copy";
+                }}
                 onClick={() => onInsert(name)}
                 className={cn(
                   "px-2 py-1 cursor-pointer rounded text-xs hover:bg-blue-50",

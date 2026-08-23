@@ -8,10 +8,9 @@ build/
 node_modules/
 package-lock.json
 benchmarks/result.json
+.env
+uv.lock
+apa/data/runs/
 apa/examples/human-approval/.session.jsonl
 apa/tests/_p6b.jsonl
-uv.lock
-# APA secrets（勿提交）
-.env
 desktop/node_modules/
-apa/data/runs/

@@ -14,6 +14,7 @@ VLM 在 Executor 内部使用，产物是语义元素列表，不进入 AIP 协�
 from __future__ import annotations
 
 import base64
+import os
 from typing import Dict, List, Optional, Tuple
 
 from apa_sdk import AIPExecutor, ExecutorPreconditionError, SemanticAdapter
@@ -362,8 +363,185 @@ class BrowserExecutor(AIPExecutor):
                 })
                 return True, {"output_context": ref, "size_bytes": len(data)}
 
+            # ---- M3 浏览器高级 -------------------------------------------------
+            case "browser.tab_new":
+                return self._tab_new(params)
+            case "browser.tab_list":
+                return self._tab_list()
+            case "browser.tab_switch":
+                return self._tab_switch(params)
+            case "browser.tab_close":
+                return self._tab_close(params)
+
+            case "browser.execute_js":
+                script = params["script"]
+                arg = params.get("arg")
+                value = self.page.page.evaluate(script, arg)
+                return True, {"value": _jsonable(value)}
+
+            case "browser.upload":
+                files = params.get("files") or []
+                self.page.resolve(params["target"]).set_input_files(files)
+                self._record(name, params)
+                return True, {"target": params["target"],
+                              "count": len(files)}
+
+            case "browser.download":
+                return self._download(params)
+
+            case "browser.cookies_get":
+                cookies = self.page.page.context.cookies(
+                    params.get("urls"))
+                return True, {"cookies": cookies, "count": len(cookies)}
+
+            case "browser.cookies_set":
+                items = params.get("cookies") or []
+                self.page.page.context.add_cookies(items)
+                return True, {"added": len(items)}
+
+            case "browser.cookies_clear":
+                self.page.page.context.clear_cookies()
+                return True, {"cleared": True}
+
+            case "browser.hover":
+                self.page.resolve(params["target"]).hover()
+                self._record(name, params)
+                return True, {"target": params["target"]}
+
+            case "browser.double_click":
+                self.page.resolve(params["target"]).dblclick()
+                self._record(name, params)
+                return True, {"target": params["target"]}
+
+            case "browser.right_click":
+                self.page.resolve(params["target"]).click(button="right")
+                self._record(name, params)
+                return True, {"target": params["target"]}
+
+            case "browser.get_page_info":
+                return True, {"url": self.page.url,
+                              "title": self.page.title}
+
+            case "browser.element_attr":
+                attr = params["attr"]
+                val = self.page.resolve(params["target"]) \
+                    .get_attribute(attr, timeout=params.get("timeout_ms", 5000))
+                return True, {"attr": attr, "value": val}
+
             case _:
                 return False, {"code": "action_not_supported_by_executor"}
+
+    # --- M3 tab / download 内部实现 ------------------------------------------
+
+    def _tabs(self) -> Dict[str, PageOps]:
+        """惰性注册表：首个调用把当前 page 登记为 tab_1。"""
+        if not hasattr(self, "_tab_map"):
+            self._tab_map: Dict[str, PageOps] = {}
+        if not self._tab_map:
+            self._tab_map["tab_1"] = self.page
+            self._active_ref = "tab_1"
+        return self._tab_map
+
+    def _tab_new(self, params: dict) -> Tuple[bool, dict]:
+        ctx = self.page.page.context
+        raw = ctx.new_page()
+        ref = params.get("ref") or f"tab_{len(self._tabs()) + 1}"
+        ops = PlaywrightPageOps(raw)
+        self._tabs()[ref] = ops
+        url = params.get("url")
+        if url:
+            raw.goto(url, wait_until=params.get("wait_for", "networkidle"))
+        self.page = ops
+        self._active_ref = ref
+        self._observe()
+        return True, {"ref": ref, "url": self.page.url}
+
+    def _tab_list(self) -> Tuple[bool, dict]:
+        items = [{"ref": r, "url": o.url, "title": o.title}
+                 for r, o in self._tabs().items()]
+        active = getattr(self, "_active_ref", None)
+        for it in items:
+            it["active"] = it["ref"] == active
+        return True, {"tabs": items, "count": len(items),
+                      "active": active}
+
+    def _tab_switch(self, params: dict) -> Tuple[bool, dict]:
+        ref = params["ref"]
+        tabs = self._tabs()
+        if ref not in tabs:
+            return False, {"code": "tab_not_found", "ref": ref}
+        self.page = tabs[ref]
+        self._active_ref = ref
+        self._observe()
+        return True, {"ref": ref, "url": self.page.url,
+                      "title": self.page.title}
+
+    def _tab_close(self, params: dict) -> Tuple[bool, dict]:
+        tabs = self._tabs()
+        ref = params.get("ref") or getattr(self, "_active_ref", None)
+        if ref is None or ref not in tabs:
+            return False, {"code": "tab_not_found", "ref": ref}
+        closing_active = ref == getattr(self, "_active_ref", None)
+        try:
+            tabs[ref].page.close()
+        except Exception:
+            pass
+        del tabs[ref]
+        if not tabs:  # 保底：至少留一个空白页
+            raw = self.page.page.context.new_page()
+            tabs[ref or "tab_1"] = PlaywrightPageOps(raw)
+        if closing_active:
+            first_ref = next(iter(tabs))
+            self.page = tabs[first_ref]
+            self._active_ref = first_ref
+        else:
+            self._active_ref = getattr(self, "_active_ref", None) or \
+                next(iter(tabs))
+        return True, {"closed": ref, "remaining": len(tabs),
+                      "active": self._active_ref}
+
+    def _download(self, params: dict) -> Tuple[bool, dict]:
+        path = params["path"]
+        os.makedirs(os.path.dirname(os.path.abspath(path)) or ".",
+                    exist_ok=True)
+        url = params.get("url")
+        trigger = params.get("trigger_target")
+
+        if url and url.startswith("data:"):  # 内联数据直链
+            _header, _, payload = url.partition(",")
+            if "base64" in _header:
+                content = base64.b64decode(payload)
+            else:
+                from urllib.parse import unquote
+
+                content = unquote(payload).encode()
+            with open(path, "wb") as f:
+                f.write(content)
+            return True, {"path": path, "bytes": len(content),
+                          "mode": "url"}
+
+        if url:  # 直链模式：携带会话 Cookie
+            import httpx
+
+            resp = httpx.get(url, follow_redirects=True, timeout=60.0,
+                             cookies={c["name"]: c["value"] for c in
+                                      self.page.page.context.cookies()})
+            resp.raise_for_status()
+            with open(path, "wb") as f:
+                f.write(resp.content)
+            return True, {"path": path, "bytes": len(resp.content),
+                          "mode": "url"}
+
+        if trigger:  # 触发模式：点击引发浏览器下载事件
+            with self.page.page.expect_download(timeout=60000) as dl_info:
+                self.page.resolve(trigger).click()
+            dl = dl_info.value
+            dl.save_as(path)
+            return True, {"path": path, "mode": "trigger",
+                          "suggested": dl.suggested_filename}
+
+        return False, {"code": "missing_param",
+                       "detail": "url or trigger_target required"}
 
     # --- 便捷 -----------------------------------------------------------------
     def navigate(self, url: str, wait_for: str = "networkidle") -> None:
@@ -373,6 +551,18 @@ class BrowserExecutor(AIPExecutor):
         """对外触发导航（demo 用）：导航 + 观察 + 发出语义事件。"""
         self.page.goto(url, "networkidle")
         self._observe()
+
+
+
+def _jsonable(v):
+    """JSON 不可序列化值降级为字符串表示。"""
+    try:
+        import json as _j
+
+        _j.dumps(v)
+        return v
+    except (TypeError, ValueError):
+        return str(v)
 
 
 def _elements_to_dict(elements: List[Element]) -> List[dict]:

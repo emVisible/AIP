@@ -11,7 +11,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        # 设计要求 Python >=3.12（见 apa/pyproject.toml requires-python）
+        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -51,8 +52,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
-          cache-dependency-path: sdk/typescript/pnpm-lock.yaml
+      # 不启用 pnpm 缓存：sdk/typescript 无已提交的 pnpm-lock.yaml
+      # （CI 内 pnpm import 从 package-lock 迁移生成），缓存路径无法解析
       - name: Build & test AIP TS SDK (pnpm)
         working-directory: sdk/typescript
         run: |

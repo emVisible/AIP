@@ -9,11 +9,13 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
-from starlette.testclient import TestClient
 
-from apa_core.api import create_app
-from apa_core.registry import load_registries
-from apa_core.serve import ServeApp
+pytest.importorskip("fastapi", reason="serve/api layer requires fastapi")
+from starlette.testclient import TestClient  # noqa: E402
+
+from apa_core.api import create_app  # noqa: E402
+from apa_core.registry import load_registries  # noqa: E402
+from apa_core.serve import ServeApp  # noqa: E402
 
 APA_ROOT = str(__import__("pathlib").Path(__file__).resolve().parents[1])
 

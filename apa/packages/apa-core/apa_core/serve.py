@@ -17,6 +17,7 @@
 """
 from __future__ import annotations
 
+import sys
 import threading
 import time
 from pathlib import Path
@@ -169,7 +170,25 @@ class ServeApp:
         suffix = session[-6:]
         api_mod = APIExecutor(f"bot_{suffix}", session,
                               base_url=self.erp_base_url)
-        return [(("api", "erp"), api_mod)]
+        mods: List[Any] = [(("api", "erp"), api_mod)]
+
+        # M1：macOS 元素识别执行器（非 darwin / 缺框架时静默跳过）
+        if sys.platform == "darwin":
+            try:
+                from apa_executors.ax_executor import AXExecutor
+
+                ax_mod = AXExecutor(f"bot_{suffix}", session)
+                mods.append((("desktop.ui", "desktop.click_text"), ax_mod))
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                from apa_executors.ocr_executor import OCRExecutor
+
+                ocr_mod = OCRExecutor(f"bot_{suffix}", session)
+                mods.append(("ocr", ocr_mod))
+            except Exception:  # noqa: BLE001
+                pass
+        return mods
 
     def _run_session_job(
         self,

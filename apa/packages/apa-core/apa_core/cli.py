@@ -179,6 +179,25 @@ def _cmd_doctor(args) -> int:
     except OSError as e:
         check("data dir writable", False, str(e)[:80])
 
+    # macOS 权限（M1 元素识别底座）
+    if sys.platform == "darwin":
+        try:
+            from apa_executors import ax_engine as _ax
+
+            if not _ax.ax_trusted():
+                check("ax permission", False,
+                      _ax.PERMISSION_HINTS["accessibility"])
+            else:
+                check("ax permission", True)
+            if hasattr(_ax, "screen_capture_allowed"):
+                if not _ax.screen_capture_allowed():
+                    check("screen recording permission", False,
+                          _ax.PERMISSION_HINTS["screen_capture"])
+                else:
+                    check("screen recording permission", True)
+        except Exception as e:  # noqa: BLE001
+            check("ax modules", False, str(e)[:60])
+
     # 前端构建产物
     fe = root / "frontend" / "dist" / "index.html"
     check("frontend dist", fe.is_file(),

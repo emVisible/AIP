@@ -16,6 +16,8 @@ dependencies = [
     "pyobjc-core>=12.0; sys_platform == 'darwin'",
     "pyobjc-framework-Cocoa>=12.0; sys_platform == 'darwin'",
     "pyobjc-framework-Quartz>=12.0; sys_platform == 'darwin'",
+    "pyobjc-framework-ApplicationServices>=12.0; sys_platform == 'darwin'",
+    "pyobjc-framework-Vision>=12.0; sys_platform == 'darwin'",
     "pyobjc-framework-AppKit>=12.0; sys_platform == 'darwin'",
 ]
 

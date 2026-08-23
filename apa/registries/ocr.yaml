@@ -32,3 +32,20 @@ ocr.extract:
   timeout_ms: 60000
   retries: 2
   audit_fields: [backend, endpoint]
+
+ocr.screen_text:
+  executor_domain: ocr
+  description: "屏幕区域文字识别（Apple Vision，需屏幕录制权限）"
+  params:
+    type: object
+    properties:
+      region:
+        type: object
+        description: "{x,y,w,h} 全局点坐标；缺省全屏"
+      language: { type: string, default: zh-Hans }
+      accurate: { type: boolean, default: true }
+      output_context: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 60000
+  retries: 2

@@ -53,19 +53,42 @@ class OCRExecutor(AIPExecutor):
         return base64.b64encode(Path(path).read_bytes()).decode()
 
     def _execute_action(self, name: str, params: dict) -> Tuple[bool, dict]:
-        if name != "ocr.extract":
-            return False, {"code": "action_not_supported_by_executor"}
-        backend = params.get("backend", "mock")
+        if name == "ocr.extract":
+            backend = params.get("backend", "mock")
+            try:
+                if backend == "mock":
+                    return self._mock(params)
+                if backend == "http_ocr":
+                    return self._http_ocr(params)
+                return False, {"code": f"unknown backend {backend!r}"}
+            except FileNotFoundError as e:
+                return False, {"code": "file_not_found", "detail": str(e)}
+            except Exception as e:  # noqa: BLE001
+                return False, {"code": type(e).__name__, "detail": str(e)}
+
+        if name == "ocr.screen_text":
+            return self._screen_text(params)
+
+        return False, {"code": "action_not_supported_by_executor"}
+
+    def _screen_text(self, params: dict) -> Tuple[bool, dict]:
+        """屏幕区域 OCR（Apple Vision，需屏幕录制权限）。"""
         try:
-            if backend == "mock":
-                return self._mock(params)
-            if backend == "http_ocr":
-                return self._http_ocr(params)
-            return False, {"code": f"unknown backend {backend!r}"}
-        except FileNotFoundError as e:
-            return False, {"code": "file_not_found", "detail": str(e)}
-        except Exception as e:  # noqa: BLE001
-            return False, {"code": type(e).__name__, "detail": str(e)}
+            from . import screen_ocr as so
+        except RuntimeError as e:
+            return False, {"code": "dependency_missing", "detail": str(e)}
+        try:
+            region = params.get("region")
+            hits = so.ocr_screen(region, lang=params.get("language", "zh-Hans"),
+                                 accurate=params.get("accurate", True))
+        except RuntimeError as e:
+            return False, {"code": "capture_denied", "detail": str(e)}
+        out = {"hits": hits, "count": len(hits)}
+        ref_key = params.get("output_context")
+        if ref_key and self.context_store is not None:
+            ref = self.context_store.make_ref(self.peer.session_id, ref_key)
+            self.context_store.put(ref, out)
+        return True, out
 
     # ---- 后端实现 -----------------------------------------------------------
 

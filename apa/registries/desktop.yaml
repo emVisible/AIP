@@ -106,3 +106,89 @@ desktop.file.delete:
   retries: 0
   requires_approval_at: L3
   audit_fields: [path]
+# ---- M1: AX 元素识别与操作（影刀级 OS 底座）----
+desktop.ui.read_element:
+  executor_domain: desktop
+  description: "读取元素：屏幕坐标命中测试 或 按描述符 ax_path 重定位"
+  params:
+    type: object
+    properties:
+      x: { type: number }
+      y: { type: number }
+      element:
+        type: object
+        description: "AX 描述符（ax_path 层级链）"
+        additionalProperties: true
+      output_context: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 10000
+  retries: 2
+
+desktop.ui.read_tree:
+  executor_domain: desktop
+  description: "限深遍历元素树（pid 缺省用全系统根）"
+  params:
+    type: object
+    properties:
+      pid: { type: integer }
+      max_depth: { type: integer, minimum: 1, maximum: 12, default: 4 }
+      max_nodes: { type: integer, minimum: 1, maximum: 1000, default: 200 }
+      output_context: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 1
+
+desktop.ui.click_element:
+  executor_domain: desktop
+  description: "双路径点击：AXPress 优先，坐标单击兜底"
+  params:
+    type: object
+    required: [element]
+    properties:
+      element:
+        type: object
+        additionalProperties: true
+      output_context: { type: string }
+  idempotency: none
+  risk: L2
+  timeout_ms: 15000
+  retries: 0
+
+desktop.ui.wait_element:
+  executor_domain: desktop
+  description: "轮询等待元素（按描述符重定位）出现"
+  params:
+    type: object
+    required: [element]
+    properties:
+      element:
+        type: object
+        additionalProperties: true
+      timeout_s: { type: number, minimum: 0.5, maximum: 120, default: 10 }
+      interval_s: { type: number, minimum: 0.1, maximum: 5, default: 0.4 }
+      output_context: { type: string }
+  idempotency: optional
+  risk: L0
+  timeout_ms: 120000
+  retries: 0
+
+desktop.click_text:
+  executor_domain: desktop
+  description: "Vision OCR 定位屏幕文字 → 坐标点击"
+  params:
+    type: object
+    required: [text]
+    properties:
+      text: { type: string }
+      contains: { type: boolean, default: true }
+      region:
+        type: object
+        description: "局部搜索区域 {x,y,w,h}"
+      min_confidence: { type: number, minimum: 0, maximum: 1, default: 0.3 }
+      output_context: { type: string }
+  idempotency: none
+  risk: L2
+  timeout_ms: 60000
+  retries: 0

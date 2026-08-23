@@ -84,13 +84,14 @@ def render(value: Any, scopes: Dict[str, Any]) -> Any:
 class StepDef:
     id: str
     action: Optional[str] = None
-    type: Optional[str] = None                 # ai_decision 等特殊节点
+    type: Optional[str] = None                 # ai_decision / foreach / sub_process
     params: dict = field(default_factory=dict)
     target: Optional[str] = None
     condition: Optional[str] = None            # Python 表达式（受限 eval）
     output_as: Optional[str] = None
     on_failure: Optional[dict] = None          # { goto: step_id }
     expect_event: Optional[str] = None
+    body_steps: List[Dict[str, Any]] = field(default_factory=list)  # foreach 子步骤
 
 
 @dataclass
@@ -293,6 +294,12 @@ class ProcessEngine:
 
     def _exec_step(self, step: StepDef) -> bool:
         run = self.run
+
+        # ---- foreach 循环（对标 RF FOR / 影刀循环指令）----
+        if step.type == "foreach":
+            return self._exec_foreach(step)
+
+        # ---- AI 决策节点 ----
         if step.type == "ai_decision":
             ctx_list = [
                 lookup(t, run.scopes)
@@ -334,6 +341,73 @@ class ProcessEngine:
         run.steps.append({"step": step.id, "action": step.action,
                           "status": "failed", "result": data})
         return self._goto_handler(step, reason=(data or {}).get("code", "failed"))
+
+    def _exec_foreach(self, step: StepDef) -> bool:
+        """foreach 循环：遍历 source 数组，对每项执行 body_action。
+
+        YAML 示例：
+            - id: process_rows
+              type: foreach
+              params:
+                source: "{{steps.extract.rows}}"
+                item_var: row
+              body_action: erp.order.approve
+              body_params:
+                order_id: "{{row.order_id}}"
+        """
+        run = self.run
+        items_raw = render(step.params.get("source"), run.scopes)
+        if isinstance(items_raw, str):
+            try:
+                import json as _j
+                items_raw = _j.loads(items_raw)
+            except (ValueError, TypeError):
+                items_raw = []
+        if not isinstance(items_raw, list):
+            items_raw = [items_raw]
+
+        item_var = step.params.get("item_var", "item")
+        body_action = step.params.get("body_action", "")
+        body_params_tpl = step.params.get("body_params") or {}
+
+        all_ok = True
+        results: List[Dict[str, Any]] = []
+
+        for idx, item in enumerate(items_raw):
+            run.scopes[item_var] = item
+
+            body_form = build_process({"process": {
+                "id": f"{step.id}_body_{idx}",
+                "mode": "process",
+                "trigger": {},
+                "steps": step.body_steps or (
+                    [{"id": "inner", "action": body_action,
+                      "params": render(body_params_tpl, run.scopes)}]
+                    if body_action else []),
+            }})
+
+            sub_engine = ProcessEngine(
+                body_form,
+                self.send_fn,
+                decision_fn=self.decision_fn,
+            )
+            sub_engine.run.scopes["event"] = run.scopes.get("event", {})
+            for k, v in run.scopes.get("steps", {}).items():
+                sub_engine.run.scopes.setdefault("steps", {})[k] = v
+            sub_engine._run_from(0)
+
+            ok = sub_engine.run.outcome == "success"
+            results.append({"index": idx, "ok": ok})
+            if not ok:
+                all_ok = False
+
+        key = step.output_as or step.id
+        run.scopes.setdefault("steps", {})[key] = {"count": len(results)}
+        run.steps.append({
+            "step": step.id, "type": "foreach",
+            "iterations": len(results), "all_ok": all_ok,
+        })
+        return all_ok
 
     def _goto_handler(self, step: StepDef, *, reason: str,
                       default_goto: Optional[str] = None) -> bool:

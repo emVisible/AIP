@@ -166,11 +166,16 @@ class ServeApp:
         ProcessRunner 注册时会统一把模块 peer/store 重绑到会话身份。
         """
         from apa_executors.api_executor import APIExecutor
+        from apa_executors.data_executor import DataExecutor
 
         suffix = session[-6:]
         api_mod = APIExecutor(f"bot_{suffix}", session,
                               base_url=self.erp_base_url)
         mods: List[Any] = [(("api", "erp"), api_mod)]
+
+        # 数据工具包（string/file/data/encode/json/dt/hash 全域路由）
+        data_mod = DataExecutor(f"bot_{suffix}", session)
+        mods.append(("data", data_mod))
 
         # M1：macOS 元素识别执行器（非 darwin / 缺框架时静默跳过）
         if sys.platform == "darwin":

@@ -145,3 +145,385 @@ email.send:
   timeout_ms: 60000
   retries: 0
   audit_fields: [to, subject]
+# ============================================================
+# M1 数据工具包（string/encode/json/dt/hash/uuid/data 增强）
+# 全部纯函数：idempotency=required + retries
+# ============================================================
+string.regex_extract:
+  executor_domain: data
+  description: "正则提取所有匹配（可指定分组）"
+  params:
+    type: object
+    required: [text, pattern]
+    properties:
+      text: { type: string }
+      pattern: { type: string }
+      group: { type: integer, minimum: 0, default: 0 }
+      ignore_case: { type: boolean, default: false }
+  idempotency: required
+  risk: L0
+  timeout_ms: 10000
+  retries: 2
+
+string.regex_replace:
+  executor_domain: data
+  description: "正则替换"
+  params:
+    type: object
+    required: [text, pattern]
+    properties:
+      text: { type: string }
+      pattern: { type: string }
+      repl: { type: string, default: "" }
+  idempotency: required
+  risk: L0
+  timeout_ms: 10000
+  retries: 2
+
+string.regex_test:
+  executor_domain: data
+  description: "正则匹配测试"
+  params:
+    type: object
+    required: [text, pattern]
+    properties:
+      text: { type: string }
+      pattern: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 10000
+  retries: 2
+
+string.trim:
+  executor_domain: data
+  description: "去除首尾空白"
+  params:
+    type: object
+    required: [text]
+    properties: { text: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+string.upper:
+  executor_domain: data
+  description: "转大写"
+  params:
+    type: object
+    required: [text]
+    properties: { text: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+string.lower:
+  executor_domain: data
+  description: "转小写"
+  params:
+    type: object
+    required: [text]
+    properties: { text: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+string.format_template:
+  executor_domain: data
+  description: "{name} 占位模板填充（缺变量保留原样）"
+  params:
+    type: object
+    required: [template]
+    properties:
+      template: { type: string }
+      vars: { type: object, additionalProperties: true }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+string.pad:
+  executor_domain: data
+  description: "定宽填充；align 指填充侧（left=左补齐）"
+  params:
+    type: object
+    required: [text, width]
+    properties:
+      text: { type: string }
+      width: { type: integer, minimum: 1 }
+      fillchar: { type: string, default: " " }
+      align: { enum: [left, right, center], default: left }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+string.starts_with:
+  executor_domain: data
+  description: "前缀判断"
+  params:
+    type: object
+    required: [text, prefix]
+    properties:
+      text: { type: string }
+      prefix: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+string.contains:
+  executor_domain: data
+  description: "包含判断（可选忽略大小写）"
+  params:
+    type: object
+    required: [text, needle]
+    properties:
+      text: { type: string }
+      needle: { type: string }
+      ignore_case: { type: boolean, default: false }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+encode.base64_encode:
+  executor_domain: data
+  description: "Base64 编码"
+  params:
+    type: object
+    required: [text]
+    properties: { text: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 10000
+  retries: 2
+
+encode.base64_decode:
+  executor_domain: data
+  description: "Base64 解码（非 UTF-8 时回传 result_b64）"
+  params:
+    type: object
+    required: [b64]
+    properties: { b64: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 10000
+  retries: 2
+
+encode.url_encode:
+  executor_domain: data
+  description: "URL 百分号编码（safe 为空串，全字符转义）"
+  params:
+    type: object
+    required: [text]
+    properties: { text: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+encode.url_decode:
+  executor_domain: data
+  description: "URL 解码"
+  params:
+    type: object
+    required: [text]
+    properties: { text: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+json.parse:
+  executor_domain: data
+  description: "JSON 文本 → 值"
+  params:
+    type: object
+    required: [text]
+    properties: { text: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 10000
+  retries: 2
+
+json.stringify:
+  executor_domain: data
+  description: "值 → JSON 文本"
+  params:
+    type: object
+    required: [value]
+    properties:
+      value: {}
+      indent: { type: integer, minimum: 0, maximum: 8 }
+  idempotency: required
+  risk: L0
+  timeout_ms: 10000
+  retries: 2
+
+dt.now:
+  executor_domain: data
+  description: "当前时间（iso/formatted/epoch 三态输出；非幂等不重试）"
+  params:
+    type: object
+    properties: { fmt: { type: string } }
+  idempotency: none
+  risk: L0
+  timeout_ms: 5000
+  retries: 0
+
+dt.parse:
+  executor_domain: data
+  description: "文本 → ISO 时间（无 fmt 则 ISO 解析）"
+  params:
+    type: object
+    required: [text]
+    properties:
+      text: { type: string }
+      fmt: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+dt.add:
+  executor_domain: data
+  description: "时间加减（days/hours/minutes/seconds）"
+  params:
+    type: object
+    required: [iso]
+    properties:
+      iso: { type: string }
+      days: { type: number }
+      hours: { type: number }
+      minutes: { type: number }
+      seconds: { type: number }
+      fmt: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+dt.diff:
+  executor_domain: data
+  description: "两时间差值（b-a，单位 seconds/minutes/hours/days）"
+  params:
+    type: object
+    required: [a, b]
+    properties:
+      a: { type: string }
+      b: { type: string }
+      unit: { enum: [seconds, minutes, hours, days], default: seconds }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+dt.timestamp:
+  executor_domain: data
+  description: "ISO → Unix 时间戳"
+  params:
+    type: object
+    required: [iso]
+    properties:
+      iso: { type: string }
+      fmt: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+hash.md5:
+  executor_domain: data
+  description: "MD5 摘要"
+  params:
+    type: object
+    required: [text]
+    properties: { text: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+hash.sha256:
+  executor_domain: data
+  description: "SHA-256 摘要"
+  params:
+    type: object
+    required: [text]
+    properties: { text: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+uuid.gen:
+  executor_domain: data
+  description: "UUID v4 生成（非幂等不重试）"
+  params: { type: object, properties: {} }
+  idempotency: none
+  risk: L0
+  timeout_ms: 5000
+  retries: 0
+
+data.aggregate:
+  executor_domain: data
+  description: "列聚合 sum/avg/min/max/count"
+  params:
+    type: object
+    required: [source, column]
+    properties:
+      source: { type: string }
+      column: { type: string }
+      func: { enum: [sum, avg, min, max, count], default: sum }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 2
+
+data.distinct:
+  executor_domain: data
+  description: "按列去重保留首现行"
+  params:
+    type: object
+    required: [source, column]
+    properties:
+      source: { type: string }
+      column: { type: string }
+      output_key: { type: string, default: distinct }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 2
+
+data.slice:
+  executor_domain: data
+  description: "行切片 [start, stop)"
+  params:
+    type: object
+    required: [source]
+    properties:
+      source: { type: string }
+      start: { type: integer, minimum: 0, default: 0 }
+      stop: { type: integer, minimum: 0 }
+      output_key: { type: string, default: sliced }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 2
+
+data.json_to_table:
+  executor_domain: data
+  description: "dict 列表 → 内存表格（列取键并集保序）"
+  params:
+    type: object
+    required: [items]
+    properties:
+      items: { type: array, items: { type: object } }
+      key: { type: string, default: from_json }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 2

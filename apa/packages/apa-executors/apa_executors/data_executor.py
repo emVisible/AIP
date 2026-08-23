@@ -42,6 +42,35 @@ class DataExecutor(AIPExecutor):
             "file.write_text": self._file_write_text,
             "string.replace": self._string_replace,
             "string.split": self._string_split,
+            # ---- M1 数据工具包 ----
+            "string.regex_extract": self._string_regex_extract,
+            "string.regex_replace": self._string_regex_replace,
+            "string.regex_test": self._string_regex_test,
+            "string.trim": self._string_trim,
+            "string.upper": self._string_upper,
+            "string.lower": self._string_lower,
+            "string.format_template": self._string_format_template,
+            "string.pad": self._string_pad,
+            "string.starts_with": self._string_starts_with,
+            "string.contains": self._string_contains,
+            "encode.base64_encode": self._encode_b64_encode,
+            "encode.base64_decode": self._encode_b64_decode,
+            "encode.url_encode": self._encode_url_encode,
+            "encode.url_decode": self._encode_url_decode,
+            "json.parse": self._json_parse,
+            "json.stringify": self._json_stringify,
+            "dt.now": self._dt_now,
+            "dt.parse": self._dt_parse,
+            "dt.add": self._dt_add,
+            "dt.diff": self._dt_diff,
+            "dt.timestamp": self._dt_timestamp,
+            "hash.md5": self._hash_md5,
+            "hash.sha256": self._hash_sha256,
+            "uuid.gen": self._uuid_gen,
+            "data.aggregate": self._data_aggregate,
+            "data.distinct": self._data_distinct,
+            "data.slice": self._data_slice,
+            "data.json_to_table": self._data_json_to_table,
         }
         fn = handler_map.get(name)
         if fn is None:
@@ -50,6 +79,267 @@ class DataExecutor(AIPExecutor):
             return fn(params)
         except Exception as e:
             return False, {"code": type(e).__name__, "detail": str(e)}
+
+    # ==== M1 数据工具包 =====================================================
+
+    # ---- string.* -----------------------------------------------------------
+
+    def _string_regex_extract(self, p):
+        import re as _re
+
+        text = p.get("text", "")
+        pattern = p["pattern"]
+        flags = 0
+        if p.get("ignore_case"):
+            flags |= _re.IGNORECASE
+        matches = [m.group(int(p.get("group", 0)))
+                   for m in _re.finditer(pattern, text, flags)]
+        return True, {"matches": matches, "count": len(matches),
+                      "first": matches[0] if matches else ""}
+
+    def _string_regex_replace(self, p):
+        import re as _re
+
+        out = _re.sub(p["pattern"], p.get("repl", ""), p.get("text", ""))
+        return True, {"result": out}
+
+    def _string_regex_test(self, p):
+        import re as _re
+
+        ok = _re.search(p["pattern"], p.get("text", "")) is not None
+        return True, {"matched": ok}
+
+    def _string_trim(self, p):
+        return True, {"result": str(p.get("text", "")).strip()}
+
+    def _string_upper(self, p):
+        return True, {"result": str(p.get("text", "")).upper()}
+
+    def _string_lower(self, p):
+        return True, {"result": str(p.get("text", "")).lower()}
+
+    def _string_format_template(self, p):
+        """{name} 占位模板；缺变量保留原样。"""
+        import re as _re
+
+        vars_ = p.get("vars") or {}
+        tpl = p.get("template", "")
+        out = _re.sub(r"\{(\w+)\}",
+                      lambda m: str(vars_.get(m.group(1), m.group(0))),
+                      tpl)
+        return True, {"result": out}
+
+    def _string_pad(self, p):
+        """align 指填充侧：left=左补齐(rjust)，right=右补齐(ljust)。"""
+        text = str(p.get("text", ""))
+        width = int(p.get("width", 0))
+        fill = str(p.get("fillchar", " "))[:1] or " "
+        align = p.get("align", "left")
+        fn = {"left": text.rjust, "right": text.ljust,
+              "center": text.center}.get(align, text.rjust)
+        return True, {"result": fn(width, fill)}
+
+    def _string_starts_with(self, p):
+        return True, {"matched":
+                      str(p.get("text", "")).startswith(str(p.get("prefix", "")))}
+
+    def _string_contains(self, p):
+        needle = str(p.get("needle", ""))
+        hay = str(p.get("text", ""))
+        if p.get("ignore_case"):
+            ok = needle.lower() in hay.lower()
+        else:
+            ok = needle in hay
+        return True, {"matched": ok}
+
+    # ---- encode.* -----------------------------------------------------------
+
+    def _encode_b64_encode(self, p):
+        import base64
+
+        raw = p.get("text", "")
+        data = raw.encode("utf-8") if isinstance(raw, str) else raw
+        return True, {"result":
+                      base64.b64encode(data).decode("ascii")}
+
+    def _encode_b64_decode(self, p):
+        import base64
+
+        out = base64.b64decode(p.get("b64", ""))
+        try:
+            return True, {"result": out.decode("utf-8")}
+        except UnicodeDecodeError:
+            return True, {"result_b64": base64.b64encode(out).decode()}
+
+    def _encode_url_encode(self, p):
+        from urllib.parse import quote
+
+        return True, {"result":
+                      quote(str(p.get("text", "")), safe="")}
+
+    def _encode_url_encode_component(self, p):
+        from urllib.parse import quote
+
+        return True, {"result":
+                      quote(str(p.get("text", "")), safe="")}
+
+    def _encode_url_decode(self, p):
+        from urllib.parse import unquote
+
+        return True, {"result": unquote(str(p.get("text", "")))}
+
+    # ---- json.* -------------------------------------------------------------
+
+    def _json_parse(self, p):
+        import json as _j
+
+        val = _j.loads(p.get("text", "{}"))
+        return True, {"value": val}
+
+    def _json_stringify(self, p):
+        import json as _j
+
+        indent = p.get("indent")
+        return True, {"text": _j.dumps(
+            p.get("value"), ensure_ascii=False,
+            indent=int(indent) if indent else None,
+            default=str)}
+
+    # ---- dt.* ---------------------------------------------------------------
+
+    @staticmethod
+    def _fmt_dt(d, fmt: Optional[str]) -> str:
+        return d.strftime(fmt) if fmt else d.isoformat()
+
+    def _dt_now(self, p):
+        from datetime import datetime
+
+        now = datetime.now()
+        return True, {
+            "iso": now.isoformat(),
+            "formatted": self._fmt_dt(now, p.get("fmt")),
+            "epoch": now.timestamp(),
+        }
+
+    def _dt_parse(self, p):
+        from datetime import datetime
+
+        d = (datetime.strptime(p["text"], p["fmt"])
+             if p.get("fmt") else datetime.fromisoformat(p["text"]))
+        return True, {"iso": d.isoformat(), "epoch": d.timestamp()}
+
+    def _dt_add(self, p):
+        from datetime import datetime, timedelta
+
+        base = (datetime.strptime(p["iso"], p["fmt"])
+                if p.get("fmt") else datetime.fromisoformat(p["iso"]))
+        delta = timedelta(
+            days=float(p.get("days", 0)),
+            hours=float(p.get("hours", 0)),
+            minutes=float(p.get("minutes", 0)),
+            seconds=float(p.get("seconds", 0)))
+        out = base + delta
+        return True, {"iso": out.isoformat(),
+                      "formatted": self._fmt_dt(out, p.get("fmt"))}
+
+    def _dt_diff(self, p):
+        from datetime import datetime
+
+        a = datetime.fromisoformat(p["a"])
+        b = datetime.fromisoformat(p["b"])
+        sec = (b - a).total_seconds()
+        unit = p.get("unit", "seconds")
+        div = {"seconds": 1, "minutes": 60, "hours": 3600,
+               "days": 86400}.get(unit, 1)
+        return True, {"value": sec / div, "unit": unit}
+
+    def _dt_timestamp(self, p):
+        from datetime import datetime, timezone
+
+        d = (datetime.strptime(p["iso"], p["fmt"])
+             if p.get("fmt") else datetime.fromisoformat(p["iso"]))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)  # 无时区按 UTC
+        return True, {"epoch": d.timestamp()}
+
+    # ---- hash / uuid --------------------------------------------------------
+
+    def _hash_md5(self, p):
+        import hashlib
+
+        return True, {"digest": hashlib.md5(
+            str(p.get("text", "")).encode()).hexdigest()}
+
+    def _hash_sha256(self, p):
+        import hashlib
+
+        return True, {"digest": hashlib.sha256(
+            str(p.get("text", "")).encode()).hexdigest()}
+
+    def _uuid_gen(self, p):
+        import uuid as _u
+
+        return True, {"uuid": str(_u.uuid4())}
+
+    # ---- data 增强 ----------------------------------------------------------
+
+    def _data_aggregate(self, p):
+        src = self._get_table(p.get("source", ""))
+        col = p["column"]
+        func = p.get("func", "sum")
+        idx = src["columns"].index(col)
+        vals = [float(r[idx]) for r in src["rows"] if r[idx] is not None]
+        if not vals:
+            return True, {"value": 0}
+        fn = {"sum": sum,
+              "avg": lambda v: sum(v) / len(v),
+              "min": min, "max": max,
+              "count": lambda v: len(v)}.get(func)
+        if fn is None:
+            return False, {"code": f"unknown func {func!r}"}
+        return True, {"value": round(fn(vals), 6), "func": func}
+
+    def _data_distinct(self, p):
+        src = self._get_table(p.get("source", ""))
+        col = p["column"]
+        idx = src["columns"].index(col)
+        seen = set()
+        rows = []
+        for r in src["rows"]:
+            key = r[idx]
+            mark = json.dumps(key, sort_keys=True, default=str)
+            if mark not in seen:
+                seen.add(mark)
+                rows.append(list(r))
+        out_key = p.get("output_key", "distinct")
+        result = {"columns": list(src["columns"]), "rows": rows,
+                  "count": len(rows)}
+        self._set_table(out_key, result)
+        return True, {**result}
+
+    def _data_slice(self, p):
+        src = self._get_table(p.get("source", ""))
+        start = int(p.get("start", 0))
+        stop = p.get("stop")
+        rows = src["rows"][start:(int(stop) if stop is not None else None)]
+        out_key = p.get("output_key", "sliced")
+        result = {"columns": list(src["columns"]), "rows": rows,
+                  "count": len(rows)}
+        self._set_table(out_key, result)
+        return True, {**result}
+
+    def _data_json_to_table(self, p):
+        items = p.get("items") or []
+        columns: List[str] = []
+        for it in items:
+            if isinstance(it, dict):
+                for k in it.keys():
+                    if k not in columns:
+                        columns.append(k)
+        rows = [[it.get(c) for c in columns] for it in items]
+        table = {"columns": columns, "rows": rows}
+        self._set_table(p.get("key", "from_json"), table)
+        return True, {**table, "count": len(rows)}
 
     def _data_create(self, p):
         cols = p.get("columns", [])

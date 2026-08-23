@@ -19,6 +19,7 @@ import { CatalogPanel } from "../../components/designer/CatalogPanel";
 import { ParamsPanel } from "../../components/designer/ParamsPanel";
 import { TestRunPanel } from "../../components/designer/TestRunPanel";
 import { SpyPanel } from "../../components/designer/SpyPanel";
+import { ScrapePanel } from "../../components/designer/ScrapePanel";
 import "../../types/desktop";
 
 /** 模板信息（/api/templates 返回结构）。 */
@@ -232,6 +233,29 @@ export function DesignerPage() {
     }
   }
 
+
+
+  function addGeneratedSteps(steps: unknown[], label: string) {
+    setSteps(prev => {
+      const converted: DStep[] = (steps as Record<string, unknown>[]).map(
+        (raw, i) => {
+          const { params, ...rest } = raw as Record<string, unknown>;
+          return {
+            ...(rest as unknown as DStep),
+            id: String(raw.id ?? `gen_${prev.length + i + 1}`),
+            type: String(raw.type ?? ""),
+            action: String(raw.action ?? ""),
+            target: "",
+            condition: "",
+            output_as: "",
+            on_failure_goto: "",
+            params_json: JSON.stringify(params ?? {}, null, 2),
+          };
+        });
+      return [...prev, ...converted];
+    });
+    setStatusMsg(`抓取向导：已插入 ${label} ✓`);
+  }
 
   function captureSpyElement(el: {
     role: string; title: string; app_name: string;
@@ -450,6 +474,8 @@ export function DesignerPage() {
           <TestRunPanel yaml={yamlText} />
 
           <SpyPanel onCapture={captureSpyElement} />
+
+          <ScrapePanel onGenerate={addGeneratedSteps} />
 
           {/* 模板库 */}
           <TemplateLibrary onPick={importTemplate} />

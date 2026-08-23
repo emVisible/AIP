@@ -86,6 +86,7 @@ def create_app(
     """构建 FastAPI 实例。依赖注入：所有外部交互通过参数传入。"""
     _recorder = None  # RecorderService 惰性单例（录制会话注册表）
     _spy = spy_service  # SpyService 注入点（None 则惰性构造）
+    _scrape = None  # ScrapeWizardService 惰性单例
 
     from .studio import StudioServer  # 延迟导入复用现有逻辑
 
@@ -302,6 +303,79 @@ def create_app(
             headers={"Cache-Control": "no-cache",
                      "X-Accel-Buffering": "no"},
         )
+
+    # ---- 数据抓取向导（M3）----
+    @app.post("/api/scrape/start")
+    async def scrape_start(body: RecorderStartRequest):
+        nonlocal _scrape
+        from .scrape_service import ScrapeError, ScrapeWizardService
+        if _scrape is None:
+            _scrape = ScrapeWizardService()
+        try:
+            return _scrape.start(body.url)
+        except ScrapeError as e:
+            raise HTTPException(409, str(e))
+
+    def _scrape_get(sid: str):
+        from .scrape_service import ScrapeError
+        if _scrape is None:
+            raise HTTPException(404, "no scrape session")
+        try:
+            return _scrape._get(sid)
+        except ScrapeError as e:
+            raise HTTPException(404, str(e))
+
+    @app.get("/api/scrape/status/{sid}")
+    async def scrape_status(sid: str):
+        _scrape_get(sid)
+        from .scrape_service import ScrapeError
+        try:
+            return _scrape.status(sid)
+        except ScrapeError as e:
+            raise HTTPException(404, str(e))
+
+    @app.post("/api/scrape/{sid}/assign")
+    async def scrape_assign(sid: str, body: dict):
+        _scrape_get(sid)
+        from .scrape_service import ScrapeError
+        try:
+            return _scrape.assign(sid, str(body.get("role", "")),
+                                  str(body.get("name", "")))
+        except ScrapeError as e:
+            raise HTTPException(409, str(e))
+
+    @app.post("/api/scrape/{sid}/preview")
+    async def scrape_preview(sid: str, body: dict):
+        _scrape_get(sid)
+        from .scrape_service import ScrapeError
+        try:
+            return _scrape.preview(sid,
+                                   max_rows=int(body.get("max_rows", 5)))
+        except ScrapeError as e:
+            raise HTTPException(409, str(e))
+
+    @app.post("/api/scrape/{sid}/generate")
+    async def scrape_generate(sid: str, body: dict):
+        _scrape_get(sid)
+        from .scrape_service import ScrapeError
+        try:
+            return _scrape.generate(
+                sid, base_id=str(body.get("base_id", "scrape")),
+                with_loop=bool(body.get("with_loop", False)),
+                body_action=str(body.get("body_action", "")),
+                body_params=body.get("body_params") or {})
+        except ScrapeError as e:
+            raise HTTPException(409, str(e))
+
+    @app.post("/api/scrape/{sid}/stop")
+    async def scrape_stop(sid: str):
+        from .scrape_service import ScrapeError
+        if _scrape is None:
+            return {"stopped": False}
+        try:
+            return _scrape.stop(sid)
+        except ScrapeError:
+            return {"stopped": False}
 
     # ---- SSE journal stream ----
     @app.get("/api/journal/stream")

@@ -1,4 +1,4 @@
-import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
 /**
  * APA 低代码流程设计器 — Activity Pipeline Editor。
  */
@@ -54,6 +54,7 @@ export function DesignerPage() {
     const [processList, setProcessList] = useState([]);
     const [catalog, setCatalog] = useState({});
     const [currentFile, setCurrentFile] = useState("");
+    const [recording, setRecording] = useState(null);
     const [rfNodes, setRfNodes, onNodesChange] = useNodesState([]);
     const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState([]);
     // steps → RF graph sync
@@ -170,6 +171,54 @@ export function DesignerPage() {
             setStatusMsg(`模板导入失败: ${e instanceof Error ? e.message : e}`);
         }
     }
+    // ---- 浏览器录制 ----------------------------------------------------------
+    function startRecording() {
+        if (!recording || !recording.url.startsWith("http"))
+            return;
+        post("/api/recorder/start", { url: recording.url })
+            .then((r) => {
+            if (!r.session_id)
+                throw new Error(r.detail ?? "启动失败");
+            setRecording({ url: recording.url, events: 0,
+                sid: r.session_id, phase: "running" });
+            setStatusMsg("录制中：在打开的浏览器里操作…");
+        })
+            .catch((e) => setStatusMsg(`录制启动失败: ${e instanceof Error ? e.message : e}`));
+    }
+    function pollRecording(sid) {
+        api(`/api/recorder/status/${sid}`)
+            .then(st => setRecording(prev => prev
+            ? { ...prev, events: st.events }
+            : prev))
+            .catch(() => { });
+    }
+    const recSid = recording?.phase === "running" ? recording.sid : null;
+    useEffect(() => {
+        if (!recSid)
+            return;
+        const t = setInterval(() => pollRecording(recSid), 1500);
+        return () => clearInterval(t);
+    }, [recSid]);
+    function stopRecording() {
+        if (!recording)
+            return;
+        post(`/api/recorder/stop/${recording.sid}`, { process_id: "recorded_flow" })
+            .then(async (r) => {
+            setRecording(null);
+            if (r.yaml) {
+                setYamlText(r.yaml);
+                await loadFromYaml();
+                setStatusMsg(`录制完成：${r.steps} 个步骤已导入画布 ✓`);
+            }
+            else {
+                setStatusMsg("录制结束，但未捕获到任何操作");
+            }
+        })
+            .catch((e) => {
+            setRecording(null);
+            setStatusMsg(`停止录制失败: ${e instanceof Error ? e.message : e}`);
+        });
+    }
     async function openFile(fileId) {
         try {
             const d = await api(`/api/processes/get/${fileId}`);
@@ -183,14 +232,19 @@ export function DesignerPage() {
             setStatusMsg(`加载失败: ${e instanceof Error ? e.message : e}`);
         }
     }
-    return (_jsxs("div", { className: "h-full flex flex-col overflow-hidden", children: [_jsxs("div", { className: "flex items-center gap-3 px-4 py-2 border-b bg-white shadow-sm z-10", children: [_jsx("input", { className: "w-48 px-2 py-1 text-sm border rounded-md outline-none", placeholder: "\u6D41\u7A0B ID\u2026", value: metaId, onChange: e => setMetaId(e.target.value) }), _jsx("input", { className: "w-72 px-2 py-1 text-sm border rounded-md", placeholder: "\u89E6\u53D1\u4E8B\u4EF6\u2026", value: triggerName, onChange: e => setTriggerName(e.target.value) }), _jsx("input", { className: "w-20 px-2 py-1 text-sm border rounded", type: "number", value: maxActions, onChange: e => setMaxActions(+e.target.value || 50) }), _jsx("button", { className: "ml-auto px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors", onClick: () => void save(), children: "\uD83D\uDCBE \u4FDD\u5B58" })] }), _jsxs("div", { className: "flex-1 grid grid-cols-[220px_1fr_260px] overflow-hidden", children: [_jsx("div", { className: "border-r p-3 overflow-y-auto bg-white", children: _jsx(CatalogPanel, { onInsert: (action) => {
+    return (_jsxs("div", { className: "h-full flex flex-col overflow-hidden", children: [_jsxs("div", { className: "flex items-center gap-3 px-4 py-2 border-b bg-white shadow-sm z-10", children: [_jsx("input", { className: "w-48 px-2 py-1 text-sm border rounded-md outline-none", placeholder: "\u6D41\u7A0B ID\u2026", value: metaId, onChange: e => setMetaId(e.target.value) }), _jsx("input", { className: "w-72 px-2 py-1 text-sm border rounded-md", placeholder: "\u89E6\u53D1\u4E8B\u4EF6\u2026", value: triggerName, onChange: e => setTriggerName(e.target.value) }), _jsx("input", { className: "w-20 px-2 py-1 text-sm border rounded", type: "number", value: maxActions, onChange: e => setMaxActions(+e.target.value || 50) }), _jsx("button", { className: "ml-auto px-4 py-1.5 text-xs font-semibold text-white bg-violet-600 rounded-md hover:bg-violet-700 transition-colors", onClick: () => setRecording({ sid: "", url: "https://",
+                            events: 0, phase: "enter" }), children: "\uD83C\uDF99 \u5F55\u5236" }), _jsx("button", { className: "px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors", onClick: () => void save(), children: "\uD83D\uDCBE \u4FDD\u5B58" })] }), _jsxs("div", { className: "flex-1 grid grid-cols-[220px_1fr_260px] overflow-hidden", children: [_jsx("div", { className: "border-r p-3 overflow-y-auto bg-white", children: _jsx(CatalogPanel, { onInsert: (action) => {
                                 setSteps(prev => [...prev, stepFromAction(action, prev.length)]);
                             } }) }), _jsxs("div", { className: "overflow-y-auto p-3", children: [_jsx("div", { style: { height: Math.max(280, rfNodes.length * 80 + 60) }, className: "border rounded-xl min-h-[250px] overflow-hidden", children: _jsxs(ReactFlow, { nodes: rfNodes, edges: rfEdges, onNodesChange: onNodesChange, onEdgesChange: onEdgesChange, nodeTypes: nodeTypes, fitView: true, children: [_jsx(Background, { variant: BackgroundVariant.Dots, gap: 20, size: 1.5, color: "#cbd5e1" }), _jsx(Controls, { showInteractive: false })] }) }), _jsx("div", { className: "mt-3 space-y-2", children: steps.map((s, i) => (_jsxs("div", { onClick: () => setSelectedIdx(i), className: `cursor-pointer rounded-lg border px-3 py-2 text-xs ${selectedIdx === i
                                         ? "ring-1 ring-blue-300 border-blue-300 bg-blue-50"
                                         : "border-slate-200 bg-white"}`, children: [_jsxs("span", { className: "font-semibold mr-2", children: [i + 1, ". ", s.id] }), _jsx("span", { className: "text-slate-400 font-mono", children: s.action || (s.type ? `[${s.type}]` : "(未设置)") })] }, s.id || i))) }), _jsx("button", { onClick: () => setSteps(prev => [...prev, blankStep(prev.length)]), className: "w-full mt-2 py-2 text-xs border border-dashed border-slate-300\n                       rounded-lg text-slate-400 hover:border-blue-400 transition-colors", children: "\uFF0B \u6DFB\u52A0\u6B65\u9AA4" }), _jsxs("details", { className: "mt-4", children: [_jsx("summary", { className: "text-xs text-slate-400 cursor-pointer", children: "YAML" }), _jsx("textarea", { className: "w-full mt-1 p-2 text-xs font-mono border rounded resize-y min-h-[120px]", rows: 10, value: yamlText, onChange: e => setYamlText(e.target.value) }), _jsxs("div", { className: "flex gap-2 mt-1", children: [_jsx("button", { onClick: () => void syncToYaml(), className: "px-3 py-1 text-xs border rounded hover:bg-slate-50", children: "\u8868\u5355 \u2192 YAML" }), _jsx("button", { onClick: () => void loadFromYaml(), className: "px-3 py-1 text-xs border rounded hover:bg-slate-50", children: "YAML \u2192 \u8868\u5355" })] })] })] }), _jsxs("div", { className: "border-l p-3 space-y-3 overflow-y-auto bg-white", children: [_jsx("p", { className: "text-xs font-semibold", children: "\u5C5E\u6027\u9762\u677F" }), _jsx(ParamsPanel, { steps: steps, selectedIdx: selectedIdx, onUpdate: updateStep, catalog: catalog }), selectedIdx != null && steps[selectedIdx] && (_jsxs("div", { className: "space-y-2 text-xs", children: [_jsxs("div", { children: [_jsx("label", { className: "text-slate-400", children: "ID" }), _jsx("input", { className: "w-full px-2 py-1 border rounded mt-0.5", value: steps[selectedIdx]?.id ?? "", onChange: e => setSteps(prev => prev.map((s, j) => j === selectedIdx
                                                     ? { ...s, id: e.target.value } : s)) })] }), _jsxs("div", { children: [_jsx("label", { className: "text-slate-400", children: "\u52A8\u4F5C\u540D" }), _jsx("input", { className: "w-full px-2 py-1 border rounded mt-0.5", value: steps[selectedIdx]?.action ?? "", onChange: e => setSteps(prev => prev.map((s, j) => j === selectedIdx
                                                     ? { ...s, action: e.target.value } : s)) })] }), _jsxs("div", { children: [_jsx("label", { className: "text-slate-400", children: "\u53C2\u6570 (JSON)" }), _jsx("textarea", { className: "w-full px-2 py-1 border rounded mt-0.5 font-mono", rows: 4, value: steps[selectedIdx]?.params_json ?? "{}", onChange: e => setSteps(prev => prev.map((s, j) => j === selectedIdx
-                                                    ? { ...s, params_json: e.target.value } : s)) })] })] })), selectedIdx == null && (_jsx("p", { className: "text-xs text-slate-400 pt-2", children: "\u70B9\u51FB\u753B\u5E03\u4E2D\u7684\u8282\u70B9\u4EE5\u7F16\u8F91\u5C5E\u6027" })), _jsx(TestRunPanel, { yaml: yamlText }), _jsx(TemplateLibrary, { onPick: importTemplate }), _jsxs("details", { className: "mt-3", children: [_jsxs("summary", { className: "text-xs text-slate-400 cursor-pointer", children: ["\u5DF2\u4FDD\u5B58\u6D41\u7A0B (", processList.filter(p => p.valid).length, ")"] }), _jsxs("div", { className: "mt-1 space-y-0.5", children: [processList.map(p => (_jsxs("div", { onClick: () => void openFile(p.id), className: "flex items-center justify-between px-2 py-1 text-xs\n                                hover:bg-slate-50 rounded cursor-pointer", children: [_jsx("span", { className: "font-mono", children: p.id }), _jsx("span", { className: p.valid ? "text-emerald-500" : "text-red-400", children: p.valid ? `${p.steps} 步骤` : "\u26a0" })] }, p.id))), !processList.length && (_jsx("p", { className: "text-xs text-slate-300", children: "\uFF08\u6682\u65E0\uFF09" }))] })] })] })] }), _jsxs("div", { className: "px-4 py-1 bg-slate-900 text-slate-300 text-xs flex justify-between", children: [_jsx("span", { children: statusMsg }), _jsx("span", { children: currentFile })] })] }));
+                                                    ? { ...s, params_json: e.target.value } : s)) })] })] })), selectedIdx == null && (_jsx("p", { className: "text-xs text-slate-400 pt-2", children: "\u70B9\u51FB\u753B\u5E03\u4E2D\u7684\u8282\u70B9\u4EE5\u7F16\u8F91\u5C5E\u6027" })), _jsx(TestRunPanel, { yaml: yamlText }), _jsx(TemplateLibrary, { onPick: importTemplate }), _jsxs("details", { className: "mt-3", children: [_jsxs("summary", { className: "text-xs text-slate-400 cursor-pointer", children: ["\u5DF2\u4FDD\u5B58\u6D41\u7A0B (", processList.filter(p => p.valid).length, ")"] }), _jsxs("div", { className: "mt-1 space-y-0.5", children: [processList.map(p => (_jsxs("div", { onClick: () => void openFile(p.id), className: "flex items-center justify-between px-2 py-1 text-xs\n                                hover:bg-slate-50 rounded cursor-pointer", children: [_jsx("span", { className: "font-mono", children: p.id }), _jsx("span", { className: p.valid ? "text-emerald-500" : "text-red-400", children: p.valid ? `${p.steps} 步骤` : "\u26a0" })] }, p.id))), !processList.length && (_jsx("p", { className: "text-xs text-slate-300", children: "\uFF08\u6682\u65E0\uFF09" }))] })] })] })] }), _jsxs("div", { className: "px-4 py-1 bg-slate-900 text-slate-300 text-xs flex justify-between", children: [_jsx("span", { children: statusMsg }), _jsx("span", { children: currentFile })] }), recording && (_jsx("div", { className: "fixed inset-0 bg-black/40 flex items-center\n                        justify-center z-50", children: _jsxs("div", { className: "bg-white rounded-xl shadow-xl p-5 w-[380px]", children: [_jsx("p", { className: "text-sm font-semibold mb-3", children: "\uD83C\uDF99 \u6D4F\u89C8\u5668\u64CD\u4F5C\u5F55\u5236" }), recording.phase === "enter" ? (_jsxs(_Fragment, { children: [_jsx("input", { autoFocus: true, className: "w-full px-3 py-2 text-sm border rounded-md mb-3", placeholder: "\u8D77\u59CB URL\uFF08https://\u2026\uFF09", value: recording.url, onChange: e => setRecording({ ...recording,
+                                        url: e.target.value }), onKeyDown: e => {
+                                        if (e.key === "Enter")
+                                            startRecording();
+                                    } }), _jsxs("div", { className: "flex gap-2 justify-end", children: [_jsx("button", { onClick: () => setRecording(null), className: "px-3 py-1.5 text-xs border rounded-md\n                               hover:bg-slate-50", children: "\u53D6\u6D88" }), _jsx("button", { onClick: startRecording, className: "px-4 py-1.5 text-xs font-semibold text-white\n                               bg-violet-600 rounded-md hover:bg-violet-700", children: "\u5F00\u59CB\u5F55\u5236" })] })] })) : (_jsxs(_Fragment, { children: [_jsx("p", { className: "text-xs text-slate-500 mb-1", children: recording.url }), _jsxs("p", { className: "text-2xl font-bold text-violet-700 mb-3", children: ["\u5DF2\u6355\u83B7 ", recording.events, " \u4E2A\u4E8B\u4EF6", _jsx("span", { className: "ml-2 inline-block w-2 h-2 rounded-full\n                                   bg-red-500 animate-pulse align-middle" })] }), _jsx("p", { className: "text-xs text-slate-400 mb-4", children: "\u5728\u6253\u5F00\u7684\u6D4F\u89C8\u5668\u7A97\u53E3\u4E2D\u70B9\u51FB/\u8F93\u5165\uFF1B\u5B8C\u6210\u540E\u70B9\u300C\u505C\u6B62\u5E76\u5BFC\u5165\u300D\u3002" }), _jsxs("div", { className: "flex gap-2 justify-end", children: [_jsx("button", { onClick: () => setRecording(null), className: "px-3 py-1.5 text-xs border rounded-md\n                               hover:bg-slate-50", children: "\u540E\u53F0\u8FD0\u884C" }), _jsx("button", { onClick: stopRecording, className: "px-4 py-1.5 text-xs font-semibold text-white\n                               bg-red-600 rounded-md hover:bg-red-700", children: "\u25A0 \u505C\u6B62\u5E76\u5BFC\u5165" })] })] }))] }) }))] }));
 }
 function post(path, json) {
     return fetch(`/api${path}`, {

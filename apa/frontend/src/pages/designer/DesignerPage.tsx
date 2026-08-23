@@ -22,6 +22,14 @@ import { TestRunPanel } from "../../components/designer/TestRunPanel";
 /** 模板信息（/api/templates 返回结构）。 */
 interface TemplateInfo { id: string; name: string; description: string; yaml: string }
 
+/** 录制会话状态（DesignerPage 内联模态使用）。 */
+interface RecordingState {
+  sid: string;
+  url: string;
+  events: number;
+  phase: "enter" | "running";
+}
+
 interface DStep {
   id: string;
   type: string;
@@ -92,6 +100,7 @@ export function DesignerPage() {
   const [processList, setProcessList] = useState<ProcessInfo[]>([]);
   const [catalog, setCatalog] = useState<Record<string, ActionMeta>>({});
   const [currentFile, setCurrentFile] = useState("");
+  const [recording, setRecording] = useState<RecordingState | null>(null);
 
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<Node>([]);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -221,6 +230,56 @@ export function DesignerPage() {
     }
   }
 
+  // ---- 浏览器录制 ----------------------------------------------------------
+  function startRecording() {
+    if (!recording || !recording.url.startsWith("http")) return;
+    post("/api/recorder/start", { url: recording.url })
+      .then((r: { session_id?: string; detail?: string }) => {
+        if (!r.session_id) throw new Error(r.detail ?? "启动失败");
+        setRecording({ url: recording.url, events: 0,
+                       sid: r.session_id, phase: "running" });
+        setStatusMsg("录制中：在打开的浏览器里操作…");
+      })
+      .catch((e: unknown) => setStatusMsg(
+        `录制启动失败: ${e instanceof Error ? e.message : e}`));
+  }
+
+  function pollRecording(sid: string) {
+    api<{ events: number; active: boolean; error: string | null }>(
+      `/api/recorder/status/${sid}`)
+      .then(st => setRecording(prev => prev
+        ? { ...prev, events: st.events }
+        : prev))
+      .catch(() => {});
+  }
+
+  const recSid = recording?.phase === "running" ? recording.sid : null;
+  useEffect(() => {
+    if (!recSid) return;
+    const t = setInterval(() => pollRecording(recSid), 1500);
+    return () => clearInterval(t);
+  }, [recSid]);
+
+  function stopRecording() {
+    if (!recording) return;
+    post(`/api/recorder/stop/${recording.sid}`,
+         { process_id: "recorded_flow" })
+      .then(async (r: { yaml?: string; steps?: number }) => {
+        setRecording(null);
+        if (r.yaml) {
+          setYamlText(r.yaml);
+          await loadFromYaml();
+          setStatusMsg(`录制完成：${r.steps} 个步骤已导入画布 ✓`);
+        } else {
+          setStatusMsg("录制结束，但未捕获到任何操作");
+        }
+      })
+      .catch((e: unknown) => {
+        setRecording(null);
+        setStatusMsg(`停止录制失败: ${e instanceof Error ? e.message : e}`);
+      });
+  }
+
   async function openFile(fileId: string) {
     try {
       const d = await api<{ yaml: string }>(`/api/processes/get/${fileId}`);
@@ -248,7 +307,13 @@ export function DesignerPage() {
           value={maxActions}
           onChange={e => setMaxActions(+e.target.value || 50)} />
         <button
-          className="ml-auto px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+          className="ml-auto px-4 py-1.5 text-xs font-semibold text-white bg-violet-600 rounded-md hover:bg-violet-700 transition-colors"
+          onClick={() => setRecording({ sid: "", url: "https://",
+                                        events: 0, phase: "enter" })}>
+          🎙 录制
+        </button>
+        <button
+          className="px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
           onClick={() => void save()}>
           💾 保存
         </button>
@@ -393,6 +458,65 @@ export function DesignerPage() {
         <span>{statusMsg}</span>
         <span>{currentFile}</span>
       </div>
+
+      {/* 录制模态 */}
+      {recording && (
+        <div className="fixed inset-0 bg-black/40 flex items-center
+                        justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-5 w-[380px]">
+            <p className="text-sm font-semibold mb-3">
+              🎙 浏览器操作录制
+            </p>
+            {recording.phase === "enter" ? (
+              <>
+                <input autoFocus
+                  className="w-full px-3 py-2 text-sm border rounded-md mb-3"
+                  placeholder="起始 URL（https://…）"
+                  value={recording.url}
+                  onChange={e => setRecording({ ...recording,
+                                                url: e.target.value })}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") startRecording();
+                  }} />
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setRecording(null)}
+                    className="px-3 py-1.5 text-xs border rounded-md
+                               hover:bg-slate-50">取消</button>
+                  <button onClick={startRecording}
+                    className="px-4 py-1.5 text-xs font-semibold text-white
+                               bg-violet-600 rounded-md hover:bg-violet-700">
+                    开始录制
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-xs text-slate-500 mb-1">
+                  {recording.url}
+                </p>
+                <p className="text-2xl font-bold text-violet-700 mb-3">
+                  已捕获 {recording.events} 个事件
+                  <span className="ml-2 inline-block w-2 h-2 rounded-full
+                                   bg-red-500 animate-pulse align-middle" />
+                </p>
+                <p className="text-xs text-slate-400 mb-4">
+                  在打开的浏览器窗口中点击/输入；完成后点「停止并导入」。
+                </p>
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setRecording(null)}
+                    className="px-3 py-1.5 text-xs border rounded-md
+                               hover:bg-slate-50">后台运行</button>
+                  <button onClick={stopRecording}
+                    className="px-4 py-1.5 text-xs font-semibold text-white
+                               bg-red-600 rounded-md hover:bg-red-700">
+                    ■ 停止并导入
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -139,63 +139,69 @@ def events_to_process(
 # 2. RecorderSession —— Playwright 包装（延迟导入）
 # ---------------------------------------------------------------------------
 
-_LISTENER_JS = """
-() => {
-  if (window.__apa_recorder_installed) return;
-  window.__apa_recorder_installed = true;
-
-  function pick(el) {
-    const attrs = {};
-    for (const a of el.attributes || []) {
+_LISTENER_JS_TMPL = """
+(() => {{
+  const GEN = {gen};
+  function pick(el) {{
+    const attrs = {{}};
+    for (const a of el.attributes || []) {{
       attrs[a.name] = a.value;
-      if (attrs.length > 12) break;
-    }
+    }}
     // 只保留关键属性，减小传输量
-    const keep = {};
-    for (const k of ['data-apa-id','name','aria-label','class','type','href']) {
+    const keep = {{}};
+    for (const k of ['data-apa-id','name','aria-label','class','type','href']) {{
       if (attrs[k] !== undefined) keep[k] = attrs[k];
-    }
-    return {
+    }}
+    return {{
       tag: el.tagName ? el.tagName.toLowerCase() : 'div',
       id: el.id || '',
       text: (el.innerText || '').slice(0, 60),
       attrs: keep,
-    };
-  }
+    }};
+  }}
 
-  document.addEventListener('click', (e) => {
-    try {
-      window.__apa_record({
-        kind: 'click', element: pick(e.target),
-      });
-    } catch (_) {}
-  }, true);
+  const send = (ev) => {{
+    try {{ ev.gen = GEN; window.__apa_record(ev); }} catch (_) {{}}
+  }};
 
-  document.addEventListener('change', (e) => {
-    try {
-      const t = e.target;
-      const kind = t.tagName === 'SELECT' ? 'select' : 'input';
-      window.__apa_record({
-        kind, element: pick(t), value: t.value || '',
-      });
-    } catch (_) {}
-  }, true);
-}
+  // capture 阶段：真实输入与 JS 合成事件都能捕获
+  document.addEventListener('click', (e) => {{
+    send({{ kind: 'click', element: pick(e.target) }});
+  }}, true);
+
+  document.addEventListener('change', (e) => {{
+    const t = e.target;
+    const kind = t.tagName === 'SELECT' ? 'select' : 'input';
+    send({{ kind, element: pick(t), value: t.value || '' }});
+  }}, true);
+}})();
 """
 
 
 class RecorderSession:
-    """有头浏览器录制会话。close 后 events 可导出。"""
+    """有头浏览器录制会话。close 后 events 可导出。
+
+    注入策略（实证结论）：
+      - init_script / document.open() 之前挂的监听器会被 set_content
+        与硬导航清除，无法存活；
+      - 唯一可靠方式是「页面就绪后 evaluate 注入」；
+      - 同一文档多次注入会产生重复监听器 → 用世代号(gen)在 Python 侧
+        去重：每次注入 gen+1，旧世代事件丢弃。
+    """
 
     def __init__(self, url: str, headless: bool = False) -> None:
         self.url = url
         self.headless = headless
         self.events: List[Dict[str, Any]] = []
         self._pw = self._browser = self._page = None
+        self._gen = 0
 
     def _on_event(self, ev: Dict[str, Any]) -> None:
-        if isinstance(ev, dict):
-            self.events.append(ev)
+        if not isinstance(ev, dict):
+            return
+        if ev.get("gen", self._gen) != self._gen:
+            return  # 旧世代监听器的事件（重复注入残留）→ 丢弃
+        self.events.append(ev)
 
     def start(self) -> None:
         from playwright.sync_api import sync_playwright  # 延迟导入
@@ -204,19 +210,26 @@ class RecorderSession:
         self._browser = self._pw.chromium.launch(headless=self.headless)
         self._page = self._browser.new_page()
 
-        self._page.expose_binding("__apa_record", lambda src, ev: self._on_event(ev))
-        self._page.add_init_script(_LISTENER_JS)
+        self._page.expose_binding("__apa_record",
+                                  lambda src, ev: self._on_event(ev))
 
-        # 页面跳转后重新注入监听器
-        def _ensure():
-            try:
-                self._page.evaluate(_LISTENER_JS)
-            except Exception:
-                pass
+        def _ensure(*_a) -> None:
+            self.reinject()
 
         self._page.on("load", _ensure)
-        self._events_snapshot = []
+        self._page.on("domcontentloaded", _ensure)
         self._page.goto(self.url, wait_until="networkidle")
+        self.reinject()
+
+    def reinject(self) -> None:
+        """注入当前世代的监听器（页面加载/set_content 后调用）。"""
+        if self._page is None:
+            return
+        try:
+            self._gen += 1
+            self._page.evaluate(_LISTENER_JS_TMPL.format(gen=self._gen))
+        except Exception:
+            self._gen -= 1
 
     def wait_until_closed(self) -> None:
         """阻塞直到用户关闭浏览器窗口。"""

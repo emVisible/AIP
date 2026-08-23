@@ -132,10 +132,21 @@ def create_app(
     @app.get("/api/templates")
     async def list_templates():
         """内置场景模板库（只读，供设计器一键导入）。"""
+        import os
         import pathlib
-        tdir = pathlib.Path(__file__).resolve().parents[3] / "templates"
+
+        candidates = []
+        if os.environ.get("APA_TEMPLATES_DIR"):
+            candidates.append(pathlib.Path(os.environ["APA_TEMPLATES_DIR"]))
+        import sys
+        if getattr(sys, "frozen", False):
+            base = pathlib.Path(getattr(
+                sys, "_MEIPASS", pathlib.Path(sys.executable).parent))
+            candidates.append(base / "templates")
+        candidates.append(pathlib.Path(__file__).resolve().parents[3] / "templates")
+        tdir = next((c for c in candidates if c.is_dir()), None)
         items = []
-        if tdir.is_dir():
+        if tdir is not None and tdir.is_dir():
             for f in sorted(tdir.glob("*.yaml")):
                 try:
                     import yaml as _y

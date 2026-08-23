@@ -51,8 +51,8 @@
     ],
     "extraResources": [
       {
-        "from": "desktop-resources/apa-runtime",
-        "to": "apa-runtime",
+        "from": "desktop-resources/frozen/apa_server",
+        "to": "apa-server",
         "filter": [
           "**/*"
         ]
@@ -61,7 +61,7 @@
     "mac": {
       "target": [
         {
-          "target": "dir",
+          "target": "dmg",
           "arch": [
             "arm64"
           ]

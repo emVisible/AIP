@@ -142,11 +142,26 @@ class _AgentShell:
 
 
 def default_registries() -> List[Path]:
-    """仓库内置注册表集合（core/browser/desktop/document/api/excel/ocr/dataops）。"""
+    """仓库内置注册表集合（8 文件）；PyInstaller 冻结态从可执行文件旁解析。"""
+    import sys
+
+    if getattr(sys, "frozen", False):
+        # COLLECT 布局：<bundle>/_internal/... ；资源由 spec datas 放入 _internal
+        base = Path(getattr(sys, "_MEIPASS",
+                            Path(sys.executable).parent))
+        for cand in (base / "registries",
+                     Path(sys.executable).parent / "registries"):
+            if cand.is_dir():
+                return [cand / n for n in _REGISTRY_FILES]
+        return []
+
     apa_root = Path(__file__).resolve().parents[3]
-    return [apa_root / "registries" / n for n in
-            ("core.yaml", "browser.yaml", "desktop.yaml", "document.yaml",
-             "api.yaml", "excel.yaml", "ocr.yaml", "dataops.yaml")]
+    return [apa_root / "registries" / n for n in _REGISTRY_FILES]
+
+
+_REGISTRY_FILES = ("core.yaml", "browser.yaml", "desktop.yaml",
+                   "document.yaml", "api.yaml", "excel.yaml",
+                   "ocr.yaml", "dataops.yaml")
 
 
 def run_process(

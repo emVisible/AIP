@@ -31,19 +31,19 @@ function resolveLayout() {
       cwd: apaDir,
     };
   }
-  // 打包态：Resources/apa-runtime（stage-desktop.cjs 产物）
-  const rt = path.join(process.resourcesPath, "apa-runtime");
+  // 打包态：Resources/apa-server（stage-desktop.cjs 的 PyInstaller 冻结产物）
+  const rt = path.join(process.resourcesPath, "apa-server");
   const userData = app.getPath("userData");   // ~/Library/Application Support/APA Desktop
   fs.mkdirSync(path.join(userData, "processes"), { recursive: true });
   fs.mkdirSync(path.join(userData, "journals"), { recursive: true });
   return {
     apaDir: rt,
-    venvPy: path.join(rt, ".venv", "bin", "python"),
-    registriesDir: path.join(rt, "registries"),
+    serverBin: rt,                // 冻结可执行文件 <...>/apa-server/apa_server
+    registriesDir: null,          // 注册表/模板已打进 _internal，冻结态自动解析
     processesDir: path.join(userData, "processes"),
     journalGlob: path.join(userData, "journals", "*.jsonl"),
     logFile: path.join(userData, "serve.log"),
-    cwd: rt,
+    cwd: userData,
   };
 }
 
@@ -75,21 +75,20 @@ function waitHealthy(port, timeoutMs = 30_000) {
 }
 
 async function startServe(port, L) {
-  const args = [
-    "-m", "apa_core.cli", "serve",
-    "--port", String(port),
-    "--journals", L.journalGlob,
-    "--processes-dir", L.processesDir,
-    "--frontend-dist", path.join(__dirname, "..", "dist"),
-  ];
-  if (L.registriesDir) {
-    args.push("--registries",
-      ...fs.readdirSync(L.registriesDir)
-          .filter(f => f.endsWith(".yaml"))
-          .map(f => path.join(L.registriesDir, f)));
-  }
+  const isFrozen = !!L.serverBin;
+  const bin = isFrozen ? path.join(L.serverBin, "apa_server") : L.venvPy;
+  const args = isFrozen
+    ? ["serve", "--port", String(port),
+       "--journals", L.journalGlob,
+       "--processes-dir", L.processesDir]
+    : ["-m", "apa_core.cli", "serve",
+       "--port", String(port),
+       "--journals", L.journalGlob,
+       "--processes-dir", L.processesDir,
+       "--frontend-dist", path.join(__dirname, "..", "dist")];
+
   const logFd = fs.openSync(L.logFile, "a");
-  pythonProc = spawn(L.venvPy, args,
+  pythonProc = spawn(bin, args,
     { cwd: L.cwd, stdio: ["ignore", logFd, logFd] });
 
   await waitHealthy(port);
@@ -99,12 +98,19 @@ async function startServe(port, L) {
 async function main() {
   const L = resolveLayout();
 
-  // 启动前置检查：依赖必须已通过 pnpm setup / 打包暂存安装
+  // 启动前置检查：冻结二进制存在 / 开发态依赖已装
+  const checkBin = isDev
+    ? L.venvPy
+    : path.join(L.serverBin, "apa_server");
   try {
-    execSync(`"${L.venvPy}" -c "import apa_core"`, { timeout: 10_000 });
+    if (isDev) {
+      execSync(`"${checkBin}" -c "import apa_core"`, { timeout: 10_000 });
+    } else {
+      fs.accessSync(checkBin, fs.constants.X_OK);
+    }
   } catch {
     console.error(
-      "[desktop] Python dependencies not installed.\n" +
+      "[desktop] server runtime not available.\n" +
       (isDev
         ? "         Run first: cd apa/frontend && pnpm setup"
         : "         Runtime missing — reinstall the application"));

@@ -8,6 +8,7 @@ from .desktop_executor import (
     MockDesktopBackend,
     OsascriptBackend,
 )
+from .data_executor import DataExecutor
 from .document_executor import DocumentExecutor
 
 __all__ = [
@@ -17,6 +18,7 @@ __all__ = [
     "DesktopExecutor",
     "MacOSInputEngine",
     "MacOSWindowManager",
+    "DataExecutor",
     "DocumentExecutor",
     "MockDesktopBackend",
     "OsascriptBackend",

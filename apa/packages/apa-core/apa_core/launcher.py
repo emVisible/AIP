@@ -142,11 +142,11 @@ class _AgentShell:
 
 
 def default_registries() -> List[Path]:
-    """仓库内置注册表集合（core/browser/desktop/document/api）。"""
+    """仓库内置注册表集合（core/browser/desktop/document/api/excel/ocr/dataops）。"""
     apa_root = Path(__file__).resolve().parents[3]
     return [apa_root / "registries" / n for n in
             ("core.yaml", "browser.yaml", "desktop.yaml", "document.yaml",
-             "api.yaml")]
+             "api.yaml", "excel.yaml", "ocr.yaml", "dataops.yaml")]
 
 
 def run_process(

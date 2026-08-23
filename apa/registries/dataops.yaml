@@ -1,0 +1,147 @@
+# ============================================================
+# DataOps Action Registry — data.* / file.* / string.* / email.*
+# C3：读操作 required+retries>0；写/发操作 none+retries=0
+# ============================================================
+data.create:
+  executor_domain: data
+  description: "创建内存表格（columns + rows；同键覆盖幂等）"
+  params:
+    type: object
+    required: [columns]
+    properties:
+      columns: { type: array, items: { type: string } }
+      rows:
+        type: array
+        items: { type: array }
+      key: { type: string, default: default, description: "表格存储键" }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 1
+
+data.filter:
+  executor_domain: data
+  description: "按列条件过滤表格行"
+  params:
+    type: object
+    required: [source, column, op, value]
+    properties:
+      source: { type: string }
+      column: { type: string }
+      op: { enum: ["==", "!=", ">", ">=", "<", "<=", contains, startswith] }
+      value: {}
+      output_key: { type: string, default: filtered }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 2
+
+data.sort:
+  executor_domain: data
+  description: "按列排序表格"
+  params:
+    type: object
+    required: [source, column]
+    properties:
+      source: { type: string }
+      column: { type: string }
+      reverse: { type: boolean, default: false }
+      output_key: { type: string, default: sorted }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 2
+
+data.to_csv:
+  executor_domain: data
+  description: "表格序列化为 CSV 文本"
+  params:
+    type: object
+    required: [source]
+    properties:
+      source: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 2
+
+file.read_text:
+  executor_domain: data
+  description: "读取文本文件（UTF-8）"
+  params:
+    type: object
+    required: [path]
+    properties:
+      path: { type: string }
+  idempotency: required
+  risk: L1
+  timeout_ms: 15000
+  retries: 2
+
+file.write_text:
+  executor_domain: data
+  description: "写文本文件（同内容重写幂等）"
+  params:
+    type: object
+    required: [path, content]
+    properties:
+      path: { type: string }
+      content: { type: string }
+  idempotency: required
+  risk: L2
+  timeout_ms: 15000
+  retries: 1
+
+string.replace:
+  executor_domain: data
+  description: "字符串替换"
+  params:
+    type: object
+    required: [text, old, new]
+    properties:
+      text: { type: string }
+      old: { type: string }
+      new: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+string.split:
+  executor_domain: data
+  description: "字符串分隔 → parts 数组"
+  params:
+    type: object
+    required: [text]
+    properties:
+      text: { type: string }
+      delimiter: { type: string, default: "," }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+email.send:
+  executor_domain: email
+  description: "SMTP 发送邮件（TLS，支持附件/CC）；C4：password 走凭据注入"
+  params:
+    type: object
+    required: [to, subject]
+    properties:
+      smtp_host: { type: string }
+      smtp_port: { type: integer, minimum: 1, maximum: 65535 }
+      username: { type: string }
+      password: { type: string, writeOnly: true }
+      use_tls: { type: boolean, default: true }
+      from: { type: string }
+      to: { type: string }
+      cc: { type: string }
+      subject: { type: string }
+      body: { type: string }
+      body_type: { enum: [plain, html], default: plain }
+      attachments: { type: array, items: { type: string } }
+  idempotency: none
+  risk: L2
+  timeout_ms: 60000
+  retries: 0
+  audit_fields: [to, subject]

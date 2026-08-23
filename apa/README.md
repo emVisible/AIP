@@ -9,6 +9,9 @@
 APA：       语义事件 → AI决策（最小上下文）→ 可靠动作 → 协议级恢复 → 自愈
 ```
 
+**当前状态**：`poc` 分支，192 pytest 通过 · conformance 20/20 · 11 个动作域
+45 个注册动作 · React 设计器 + 浏览器录制器 · Electron 桌面打包 · `apa doctor` 全绿。
+
 ## 核心不变量
 
 | 约束 | 含义 |
@@ -16,76 +19,139 @@ APA：       语义事件 → AI决策（最小上下文）→ 可靠动作 → 
 | P1 | 语义优先，永远不传遥测/DOM/截图 |
 | P2 | AI 永远不持有最终执行权（Gateway 校验链不可绕过） |
 | C3 | idempotency/risk 只来自 Action Registry，禁止消息携带 |
-| C4 | 凭据禁止进入任何 AIP 消息 payload |
+| C4 | 凭据禁止进入任何 AIP 消息 payload（Vault 执行器内解析） |
 | C5/C6 | 大对象只传引用；VLM 在 Executor 本地终止 |
 | C7 | Session 状态在 Gateway 侧，Decision Engine 无状态 |
 | CoD-1/2/3 | 事件 data ≤ 4KB；context.get 禁 `["*"]`；ContextStore 由 Executor 持有 |
 
-## 目录结构
+## 五分钟上手
+
+```bash
+cd apa
+python3 -m venv .venv && .venv/bin/pip install -e packages/apa-core \
+  -e packages/apa-executors -e ../sdk/python fastapi uvicorn pyyaml httpx openpyxl playwright
+.venv/bin/playwright install chromium          # 浏览器录制/自动化需要
+
+# ① 自检：13 项环境验证（依赖/Chromium 实启/registry 加载/目录可写）
+.venv/bin/python -m apa_core.cli doctor --check-browser
+
+# ② 录制：操作浏览器 → 自动生成 process.yaml（影刀同款体验）
+.venv/bin/python -m apa_core.cli record https://erp.example.com/orders \
+    --process-id monthly_report --out data/processes/monthly_report.yaml
+
+# ③ 运行常驻服务（FastAPI + 调度器 + 本地执行 + MockERP 沙盒）
+.venv/bin/python -m apa_core.cli serve --port 8686 --journals 'data/*.jsonl'
+# → http://127.0.0.1:8686 打开设计器 / 运行 / HITL 审批
+```
+
+Webhook 触发已就绪：
+
+```bash
+curl -X POST localhost:8686/api/events \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"webhook.order.created","data":{"order_id":"WH-777"}}'
+```
+
+桌面应用（macOS）：
+
+```bash
+cd frontend && pnpm install && pnpm dist:dir   # → release/mac-arm64/APA Desktop.app
+```
+
+## 动作域总览（45 actions）
+
+| 域 | 动作 | 后端 |
+|---|---|---|
+| browser.* | navigate/click/input/select_option/wait_element/scroll/screenshot/extract/**extract_table** | Playwright |
+| api.* | http.get/post/put/patch/delete | httpx + Vault 凭据注入(C4) |
+| excel.* | read_range/append_row/**append_rows**/write_cell/get_formula/set_formula/list_sheets/add_sheet | openpyxl，原子落盘 |
+| ocr.* | extract（mock / http_ocr 云接入点） | 可插拔，C4 凭据 |
+| email.* | send（SMTP+TLS+附件+CC） | stdlib smtplib |
+| data.* | create/filter/sort/to_csv | 内存表格管道 |
+| file.* | read_text/write_text | pathlib |
+| string.* | replace/split | 纯函数 |
+| context.* | get/set/append | ContextStore |
+| erp.* | MockERP 业务沙盒（订单审批等） | 内置 FastAPI |
+| human.* | approval 任务（HITL） | journal 驱动 |
+
+## 流程控制（ProcessEngine）
+
+```yaml
+process:
+  id: monthly_report
+  trigger: { type: event, name: cron.monthly }   # manual / cron / event
+  max_actions: 100                                # §10.2 预算守卫必填
+  steps:
+    - id: scrape
+      action: browser.extract_table               # 结构化抓取
+      params: { row_selector: "table.orders tr",
+                columns: { order_id: ".id", amount: ".amt" } }
+
+    - id: big_only
+      action: data.filter                         # 过滤大额订单
+      params: { column: amount, op: ">", value: 10000 }
+
+    - id: loop                                    # foreach 循环
+      type: foreach
+      params:
+        source: "{{steps.big_only.rows}}"
+        item_var: row
+        body_action: erp.order.approve
+        body_params: { order_id: "{{row.order_id}}" }
+
+    - id: validate                                # 子流程复用
+      type: sub_process
+      params: { process_id: order_validation, input: { src: monthly } }
+
+    - id: ai_pick                                 # AI 决策节点（P2：不执行）
+      type: ai_decision
+      params: { context: ["{{event}}"], available_actions: [approve, reject] }
+
+    - id: report                                  # 邮件报表
+      action: email.send
+      params: { to: boss@example.com, subject: "日报 {{steps.big_only.count}} 笔" }
+```
+
+`.flow` 动词句格式与 process.yaml 双向互转：
+`apa flow-compile x.flow && apa flow-decompile x.yaml`。
+
+## 低代码设计器 + 录制器
+
+React 18 + React Flow 三面板设计器（serve 模式内置）：
+
+- **目录区**：11 域动作搜索 + 流程控制节点（foreach/sub_process/ai_decision）一键插入并预填骨架
+- **画布**：步骤卡片拖拽编排；属性面板 Schema 表单编辑；试运行面板
+- **模板库**：内置场景（数据抓取报表 / 批量审批），一键导入改造
+- **🎙 录制器**：输入 URL → 操作真实浏览器（点击/输入/下拉实时捕获，
+  事件计数轮询）→ 停止即生成流程导入画布。选择器策略：
+  `data-apa-id > #id > [name] > [aria-label] > tag.class`
+
+## 架构组件
 
 ```
 apa/
-├── registries/              # 标准 Action Registry（YAML，§9.3）
-│   ├── core.yaml            #   context.* / human.*
-│   ├── browser.yaml         #   browser.*
-│   ├── desktop.yaml         #   desktop.*
-│   └── api.yaml             #   api.* / erp.* / session.*
+├── registries/*.yaml         # 7 registry 文件，45 动作（C3 单一来源）
+├── templates/*.yaml          # 场景模板库
 ├── packages/
-│   ├── apa-core/            # Gateway / Registry / Policy / Session / Audit / Rules
-│   ├── apa-sdk-python/      # Executor 基类 / 自愈 / DryRun / 语义适配器 / 测试工具
-│   └── apa-executors/       # BrowserExecutor (Playwright) / APIExecutor (httpx)
-├── examples/
-│   ├── hello-rpa/           # 最小可运行示例（真实浏览器 + 规则引擎，0 LLM）
-│   ├── invoice-processing/  # v0.2 验收场景：发票 → 提取 → 写 ERP
-│   └── po-approval/         # v0.3 验收场景：Process Mode 订单审批（批准/驳回分流）
-├── plugins/dsh/             # dsh（DeepSeek Harness）决策引擎插件（TypeScript）
-├── conformance/run.py       # APA-Profile 合规套件（20 用例）
-└── tests/                   # pytest 单元 + 端到端
+│   ├── apa-core/             # Gateway 六步校验链 / ProcessEngine(foreach/
+│   │                         # sub_process/ai_decision) / Scheduler(cron+event)
+│   │                         # / ServeApp 常驻栈 / Recorder / Vault / Analytics
+│   ├── apa-executors/        # Browser/Desktop(Quartz)/API/Document/Data/
+│   │                         # Excel/Email/OCR 执行器
+│   └── apa-sdk-python/       # AIPExecutor 基类（幂等守卫/context.get 免费提供）
+├── frontend/                 # React SPA + Electron 壳 + electron-builder 配置
+├── benchmarks/               # latency(动作往返 p50/p95/p99) + data_throughput
+│                             # （10k 行表格 4ms · 千次 foreach µs级/项）
+├── conformance/run.py        # APA-Profile 合规 20 用例
+└── tests/                    # 192 pytest（含真实浏览器录制 E2E、webhook E2E）
 ```
 
-## 快速启动
+### Gateway 校验链（§8.2）
 
-```bash
-# 10 分钟体验：语义适配器发现审批对话框 → 点击批准 → 提取结果 → 会话完成
-python examples/hello-rpa/run.py --mock     # 无浏览器
-python examples/hello-rpa/run.py            # 真实 Playwright headless
+信封 → 版本 → I9 来源绑定 → Session → 序列 → Registry 查找 → Params Schema
+→ 权限 → Session 状态 → C4 凭据扫描 → 风险策略 → 审计 → RetryScheduler → 转发。
 
-# APA-Profile 合规（CoD / C3 / C4 / I9 / 风险策略 / 幂等重试 …）
-python conformance/run.py                   # → 20/20 passed
-
-# 全部测试
-python -m pytest tests/
-```
-
-环境要求见 [`QUICK_START.md`](QUICK_START.md)。
-
-## 组件速览
-
-### EmbeddedGateway（§13.2 模式 C）
-
-```python
-from apa_core.embedded import EmbeddedGateway
-from apa_core.policy import PolicyConfig
-from apa_core.registry import load_registries
-
-gw = EmbeddedGateway(
-    "s_001",
-    registry=load_registries("registries/browser.yaml"),
-    policy=PolicyConfig(),                      # 默认按风险分级：L3+ → 人工
-    identities={"executor": "browser_01", "agent": "rule_agent_001"},
-)
-gw.attach_executor(executor, "browser_01")      # executor 实现 on_message + peer
-gw.attach_agent(agent, "rule_agent_001")
-gw.run()
-```
-
-Gateway 校验链（§8.2）：信封 → 版本 → I9 来源绑定 → Session → 序列 →
-Registry 查找 → Params Schema → 权限 → Session 状态 → C4 凭据扫描 →
-风险策略 → 审计 → RetryScheduler → 转发。
-
-### 自定义 Executor（30 分钟指南 §14.3）
-
-继承 `apa_sdk.AIPExecutor`，只需实现两个方法：
+### 自定义执行器（30 分钟指南 §14.3）
 
 ```python
 from apa_sdk import AIPExecutor
@@ -97,175 +163,42 @@ class MyExecutor(AIPExecutor):
         return False, {"code": "action_not_supported_by_executor"}
 
     def start_observation(self):
-        ...  # 通过 self.emit(name, data) 发语义事件（data ≤ 4KB，CoD-1）
+        ...  # self.emit(name, data) 发语义事件（data ≤ 4KB，CoD-1）
 ```
 
-协议层职责（幂等守卫、accepted 先回、错误分类、context.get）由基类免费提供。
+## REST API 一览（serve 模式）
 
-### 规则决策引擎（§7.2 L0，0 Token）
-
-```yaml
-rules:
-  - name: approve_small_order
-    once: true                                  # 整个 Session 只执行一次
-    if: { event: erp.order.approval_requested, data: { amount: { lt: 100000 } } }
-    then: { action: browser.click, params: { target: approve-btn-1 } }
+```
+GET  /api/processes              POST /api/processes/save
+GET  /api/processes/get/{id}     POST /api/processes/test        # 试运行
+GET  /api/templates              GET  /api/registry/actions
+GET  /api/sessions               GET  /api/analytics
+POST /api/events                 # ← webhook 触发入口
+POST /api/recorder/start         GET  /api/recorder/status/{sid}
+POST /api/recorder/stop/{sid}    # → 返回生成的 process YAML
+GET  /api/journal/stream         # SSE 实时事件流
 ```
 
-支持事件条件与 action_result 条件、金额比较（lt/le/gt/ge/eq/ne）、
-`{{field}}` 模板插值。L1/L2（小模型/大模型）与 dsh 接入为后续阶段。
-
-## 控制平面补全（Phase 8：Scheduler / Launcher / 统一 CLI）
-
-- [x] **apa-scheduler**（§13.1）：`cron.py` 标准 5 字段表达式（纯 stdlib）+
-  `scheduler.Scheduler` —— Cron 触发（同分钟去重）/ Event 订阅（data 过滤），
-  处理器可直接调用 `launcher.run_process` 一键起会话跑流程
-- [x] **流程启动器泛化**：`launcher.run_process(process.yaml, event, data,
-  executors=..., seed_contexts=...)` —— 任意复合执行器规格 + CoD 预置 +
-  自动 session.complete 收尾；po-approval 验收场景已迁移复用
-- [x] **统一 `apa` CLI**：`apa studio / analytics / tasks / latency`
-  （console script：`pip install -e apa/packages/apa-core`）
-
-## 生产加固（Phase 7）
-
-| 能力 | 说明 |
-|---|---|
-| **TLS 传输安全**（§12.1 第一层） | `WsGatewayServer(ssl_context=...)` 以 wss:// 监听；`generate_dev_certs()` 一键生成开发自签证书；客户端配套 `client_ssl_context_insecure()`（仅测试） |
-| **应用级令牌准入** | `WsGatewayServer(hello_token=...)`：hello 帧须携带匹配 token，错/缺 → UNAUTHORIZED（与 TLS 正交，可叠加租户/I9 校验） |
-| **多会话池** | `WsGatewayServer(gateways={sid: gw, ...})` 单服务并发承载多个会话；hello.session 路由、连接表/出站泵按会话隔离、未知会话显式拒绝 |
-| **SQLite 持久化后端** | `SqliteJournal`（stdlib sqlite3，事务写入）；`open_journal(path)` 按扩展名自动选择 JSONL/SQLite；recover/studio/analytics/human_loop 统一读取层全部兼容 |
-| **常驻服务** | `apa serve --jobs data/scheduler.yaml` —— 面板+设计器+调度器+本地流程执行单进程运行；外部事件入口 `POST /api/events`；内置沙盒 ERP 可关 |
-| **延迟基准**（§14.4） | `python -m benchmarks.latency --n 200` —— 内嵌回路动作往返 p50≈0.03ms / 吞吐 ≈3600 ops/s（Apple Silicon 实测），CI 可作回归阈值 |
-
-```python
-# 生产部署示例：TLS + 令牌 + 多会话
-certs = generate_dev_certs("certs")            # 生产用受信 CA 替换
-server = WsGatewayServer(
-    gateways={"sess_A": gw_a.gateway, "sess_B": gw_b.gateway},
-    port=8765,
-    ssl_context=server_ssl_context(*certs),
-    hello_token="ops-secret",                  # 客户端 hello 携带 token
-)
-```
-
-## 可交互入口
-
-| 交互方式 | 命令 / 地址 |
-|---|---|
-| **一键 WebUI** | `./webui.sh`（自动建 venv/装依赖，可选 `--demo` 灌演示数据、`--token` 认证、`--tenant` 过滤） |
-| 真实浏览器自动化演示 | `python examples/hello-rpa/run.py`（Chromium 自动审批） |
-| **网页人工审批（HITL）** | `python examples/human-approval/run.py` → 打开 `http://127.0.0.1:8690` 点「批准/驳回」，挂起的会话实时恢复并继续流转 |
-| Studio 监控面板 | `python -m apa_core.studio --journals 'data/*.jsonl' [--tenant corp_x]` |
-| 运行指标报告 | `python -m apa_core.analytics --journals 'data/*.jsonl'` |
-| 人工任务查询 | `python -m apa_core.human_loop list --journal data/s.jsonl` |
-| 外部决策端接入 | `ws://127.0.0.1:<port>`（Node 客户端已实测，见 plugins/dsh/tests） |
-
-## v1.0 后续补全（Phase 5：感知与生态）
-
-- [x] **VLM 视觉适配插槽**（§5.5，C6）：`apa_sdk.vision` —— 抽象基类 +
-  OpenAI-compatible 实现（`APA_VISION_*` 环境变量）+ 脚本化 Fake；接入
-  BrowserExecutor 感知降级链（DOM 解析 → VLM 本地分析）；**bounds 坐标
-  在入协议前剥离**，截图只在 Executor 内存消费
-- [x] **Schema 录制模式**（§B.1 问题 1）：`apa_sdk.recorder.SchemaRecorder`
-  —— 记录动作触发的元素与页面状态，生成带 TODO 标注的 schema.yaml 草稿
-  （事件命名需人工审核），可直接被 SemanticAdapter 加载验证
-- [x] **HashiCorp Vault 对接**（§13.1）：KV v2 HTTP 后端
-  （VAULT_ADDR / VAULT_TOKEN / VAULT_MOUNT），get/put/delete/list 全覆盖，
-  与本地加密后端接口一致可互换
-
-## v1.0 范围（§16.2：Policy 完整 / Vault / Analytics / 多租户）
-
-- [x] **Credential Vault**（§12.1 第三层）：纯标准库加密存储（scrypt KDF +
-  HMAC-CTR + encrypt-then-MAC，篡改/错钥检测），可选 Fernet 后端与 EnvVault；
-  会话 TTL；`VaultManager` 注入门面 —— **C4**：auth 规格只含引用名，
-  机密在 Executor 本地解析注入（schema 层 `additionalProperties: false`
-  直接拒绝 literal 机密）
-- [x] **API 凭据注入端到端**：api.http.* 的 `params.auth` → 本地解析 →
-  Bearer 头注入；协议面帧与审计均无机密值
-- [x] **Policy Engine 完整**：`deny_patterns` / `require_approval_patterns`
-  通配规则、`principals_deny` 主体黑名单、规则级 `source` 条件
-- [x] **速率限制**：`rate_limit_per_minute` 按来源滑动窗口（60s）→
-  `rate_limited` 拒绝
-- [x] **多租户隔离**（§12.1）：journal 全量记录 tenant、WS hello 租户绑定
-  校验（不匹配 → UNAUTHORIZED）、Studio/Analytics 按 `--tenant` 过滤
-- [x] **Analytics 服务**（§13.1）：journal → 会话状态分布/动作成功率/
-  耗时 p50/p95/风险失败分布；CLI `python -m apa_core.analytics`；
-  Studio `/api/analytics`
-- [x] **MockERP 参考实现**（§B.3-4）：标准 REST 模拟 ERP（订单审批/
-  发票/通知 + 可选 Bearer 认证），示例已统一复用
-
-## v0.3 范围（§16.2：Process Mode / Desktop / 多 Bot / Studio）
-
-- [x] **Process Mode 流程编排**（§10.2 模式 B）：`process.py` —— YAML 流程定义、
-  `{{ }}` 模板与点路径条件（AST 白名单安全求值，拒绝任何调用/下标）、
-  `ai_decision` 插槽节点（C1）、on_failure/goto 错误处理器、max_actions 预算守卫
-  （C3：steps 中出现 idempotency/risk 加载即拒绝）
-- [x] **验收场景** [`examples/po-approval`](examples/po-approval/)：
-  订单审批流程（CoD 取数 → 金额分流批准/驳回 → ERP 落地 → 完成）双分支全绿
-- [x] **DesktopExecutor**（§5.4）：可插拔后端 —— macOS `OsascriptBackend` +
-  测试用 `MockDesktopBackend`；窗口观察事件（appeared/focused 去重）
-- [x] **API 感知**：`APIExecutor.poll_once` 轮询观察（§B.3），新资源去重发事件
-- [x] **WS 多 Bot 域路由**（§10.3）：executor hello 声明能力域，action 按
-  Registry.executor_domain 精确路由；断线重连补发按域过滤
-- [x] **APA-Studio v1**（§16.1 最小版）：零依赖单文件 —— 会话总览/游标/
-  人工任务/审计尾部，`python -m apa_core.studio --journals 'data/*.jsonl'`
-
-### v0.3 审视补漏（对已有构建的修正）
-
-- **修复协议缺陷**：Gateway 自有回执此前未占用 `(session, gateway)` 流的连续
-  seq，真实对端 Receiver 会判 stale 丢弃（被拒结果/人工任务回执静默丢失）。
-  现在 `_assign_seq` 统一分配。
-- **紧急熔断**（§12.4）：`gateway.abort()` —— 未决 action 标记 timeout、
-  Session → CANCELLED、挂起任务关闭
-- **expect 跟踪**（AIP §4.2）：Registry.expect 的动作 → 期望事件配对，
-  `summary.expects_pending/satisfied`
-- **Session 空闲过期**（K2）：`session_ttl_ms` 无活动超时 → SESSION_EXPIRED
-- **多 Bot 身份**：identities 的 executor 侧支持列表成员校验（I9）
-- **规则引擎防悬挂**：context.get 失败默认停止而非无限等待
-
-## v0.1 范围（对照设计文档 §16.1 MVP）
-
-- [x] `examples/hello-rpa` 一键跑通（mock 与真实浏览器双模式）
-- [x] BrowserExecutor 基础动作（navigate/click/input/extract/select_option/wait_element/scroll/screenshot）
-- [x] APA-Gateway 校验链 + 重试调度 + Session 状态机 + 审计
-- [x] 纯规则 Decision Engine（无 LLM 依赖）
-- [x] APA-Profile 合规套件（20 用例 > 要求的 ≥10）
-- [x] 自定义 Executor 文档（本页「自定义 Executor」+ QUICK_START）
-- [x] pytest 测试（单元 + MockPage 端到端 + 子进程冒烟）
-
-## v0.2 范围（§16.2：LLM 接口 / Human-in-Loop / 持久化 / 文档域）
-
-- [x] **LLM 决策接口**：OpenAI-compatible 客户端（默认 DeepSeek，`APA_LLM_*`
-  环境变量）+ `parse_decision` 防御性解析
-- [x] **Zero-LLM Cascade**（§7.2）：`CascadingAgent` L0 规则 → L1/L2 模型 →
-  DE-5 不确定自动转人工；决策分布统计；预算保护
-- [x] **WebSocket 独立网关**（§13）：`ws_gateway.WsGatewayServer` —— 绑定层
-  hello/cursors/ping-pong（D1/D4），外部决策引擎经 WS 接入
-- [x] **dsh 插件参考实现**：[`plugins/dsh/`](plugins/dsh/)（TypeScript +
-  cordis，AIP TS SDK 直连网关，协议核心本地可 typecheck）
-- [x] **Human-in-the-Loop 完整闭环**（§4.3）：human.task.create → SUSPENDED →
-  `resolve_human_task` → RUNNING；任务 CLI
-- [x] **Session 持久化**（§10.1）：JSONL 日志、游标精确恢复、终态 TTL 释放
-- [x] **DocumentExecutor**（doc.extract_text/extract_fields/classify）+
-  [`examples/invoice-processing`](examples/invoice-processing/)（发票 → 提取 →
-  写 ERP，v0.2 验收场景）
-- [x] 整值模板插值保留原生类型（number 参数直达 schema 校验）
-
-**v0.2 显式不包含**：OCR/VLM 文档感知层、Desktop Executor、Process Mode 编排、
-Vault 多租户。dsh 插件的 cordis 运行时联调需在 dsh 仓库侧执行（见插件 README）。
-
-## License
-
-Apache 2.0（衍生需署名）。协议基础 AIP Kernel v0.1 — MIT (emVisible/AIP)。
-## 环境配置（.env，DeepSeek 底座）
-
-复制模板并填入真实 Key（`.env` 已 gitignore）：
+## 性能基准（M 系列）
 
 ```bash
-cp .env.example .env
-# 填入 DEEPSEEK_API_KEY 后，LLM 决策级联与 VLM 感知即可用
+.venv/bin/python -m apa_core.cli latency --n 200     # 动作往返 p50/p95/p99
+.venv/bin/python benchmarks/data_throughput.py       # 万行管道 / 千次循环 / Excel IO
 ```
 
-加载规则：`APA_LLM_*` / `APA_VISION_*` 优先，缺省回退 `DEEPSEEK_API_KEY` /
-`DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL`；不覆盖已有环境变量。
-包管理统一使用 pnpm（CI 与 dsh 插件构建均已对齐）。
+| 路径 | 结果 |
+|---|---|
+| 数据管道 10k 行（create→filter→sort→csv） | ~4 ms |
+| foreach 千次子流程迭代 | ~3.4 µs/项 |
+| Excel 万行批量写 + 回读 | 写 20 批 4.7 s · 读 0.22 s |
+
+## 开发
+
+```bash
+.venv/bin/python -m pytest tests/ -q            # 192 tests
+.venv/bin/python conformance/run.py             # 20/20
+cd frontend && pnpm exec tsc --noEmit           # TS strict 清洁
+cd frontend && pnpm build                       # vite 生产构建
+```
+
+环境要求与更多细节见 [`QUICK_START.md`](QUICK_START.md)。

@@ -3,10 +3,10 @@
  * 职责：Python serve sidecar 编排 + BrowserWindow 加载 React SPA。
  */
 const { app, BrowserWindow } = require("electron");
-const { spawn } = require("child_process");
+const { spawn, execSync } = require("child_process");
 const path = require("path");
 
-const APA_DIR = path.resolve(__dirname, "..");
+const APA_DIR = path.resolve(__dirname, "..", "..");
 const REPO_ROOT = path.resolve(APA_DIR, "..");
 const VENV_PY = path.join(APA_DIR, ".venv", "bin", "python");
 const isDev = !app.isPackaged;
@@ -45,7 +45,8 @@ async function startServe(port) {
     ["-m", "apa_core.cli", "serve",
      "--port", String(port),
      "--journals", path.join(APA_DIR, "data", "*.jsonl"),
-     "--processes-dir", path.join(APA_DIR, "data", "processes")],
+     "--processes-dir", path.join(APA_DIR, "data", "processes"),
+     "--frontend-dist", path.join(__dirname, "..", "dist")],
     { cwd: APA_DIR, stdio: ["ignore", logFd, logFd] });
 
   await waitHealthy(port);
@@ -53,22 +54,15 @@ async function startServe(port) {
 }
 
 async function main() {
-  // Python 自举（首次）
+  // 启动前置检查：依赖必须已通过 pnpm setup 安装（不在运行时装载）
   try {
     execSync(`"${VENV_PY}" -c "import apa_core"`, { timeout: 10_000 });
   } catch {
-    console.log("[desktop] bootstrapping venv ...");
-    execSync(
-      `python3 -m venv "${path.join(APA_DIR, ".venv")}" && ` +
-      `"${VENV_PY}" -m pip install -q -U pip && ` +
-      `"${VENV_PY}" -m pip install -q ` +
-      `-e "${path.join(REPO_ROOT, "sdk/python")}" ` +
-      `-e "${path.join(APA_DIR, "packages/apa-core")}" ` +
-      `-e "${path.join(APA_DIR, "packages/apa-sdk-python")}" ` +
-      `-e "${path.join(APA_DIR, "packages/apa-executors")}" ` +
-      `pyyaml jsonschema httpx websockets`,
-      { cwd: REPO_ROOT, timeout: 300_000, stdio: "inherit" },
-    );
+    console.error(
+      "[desktop] Python dependencies not installed.\n" +
+      "         Run first: cd apa/frontend && pnpm setup");
+    app.quit();
+    return;
   }
 
   const port = await freePort();
@@ -80,13 +74,7 @@ async function main() {
     webPreferences: { nodeIntegration: false, contextIsolation: true },
   });
 
-  if (isDev) {
-    // 开发模式：加载 Vite dev server
-    mainWindow.loadURL("http://127.0.0.1:5173");
-  } else {
-    // 生产：加载构建产物
-    mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
-  }
+  mainWindow.loadURL(`http://127.0.0.1:${port}`);
 }
 
 app.whenReady().then(main);

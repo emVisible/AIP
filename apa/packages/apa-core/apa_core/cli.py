@@ -55,6 +55,7 @@ def _cmd_serve(args) -> int:
         journals=args.journals,
         port=args.port,
         processes_dir=args.processes_dir or None,
+        frontend_dist=args.frontend_dist or None,
         registry=reg,
         runs_dir=args.runs_dir or None,
         mock_erp=not args.no_mock_erp,
@@ -124,6 +125,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve.add_argument("--port", type=int, default=8686)
     p_serve.add_argument("--jobs", default=None, help="scheduler.yaml 任务文件")
     p_serve.add_argument("--processes-dir", default="data/processes")
+    p_serve.add_argument("--frontend-dist", default=None,
+                         help="React SPA 构建产物目录")
     p_serve.add_argument("--runs-dir", default=None)
     p_serve.add_argument("--registries", nargs="+", default=None)
     p_serve.add_argument("--no-mock-erp", action="store_true",

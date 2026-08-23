@@ -9,7 +9,8 @@
     "typecheck": "tsc -b --noEmit",
     "desktop": "electron .",
     "start": "electron .",
-    "postinstall": "node -e \"const fs=require('fs'),p=require('path');try{const ep=p.dirname(require.resolve('electron/package.json'));if(!fs.existsSync(p.join(ep,'path.txt'))){fs.writeFileSync(p.join(ep,'path.txt'),'Electron.app/Contents/MacOS/Electron')}}catch(e){}\""
+    "postinstall": "node -e \"const fs=require('fs'),p=require('path');try{const ep=p.dirname(require.resolve('electron/package.json'));if(!fs.existsSync(p.join(ep,'path.txt'))){fs.writeFileSync(p.join(ep,'path.txt'),'Electron.app/Contents/MacOS/Electron')}}catch(e){}\"",
+    "setup": "node electron/setup.cjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.0",

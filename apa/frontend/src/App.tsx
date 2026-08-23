@@ -4,6 +4,10 @@ import { BrowserRouter, Route, Routes } from "react-router";
 import { AppLayout } from "./components/layout/AppLayout";
 import { Dashboard } from "./pages/Dashboard";
 import { DesignerPage } from "./pages/designer/DesignerPage";
+import { Runs } from "./pages/Runs";
+import { Hitl } from "./pages/Hitl";
+import { Assistant } from "./pages/Assistant";
+import { Settings } from "./pages/Settings";
 import { ComingSoon } from "./pages/ComingSoon";
 
 const queryClient = new QueryClient({
@@ -21,9 +25,10 @@ export function App() {
           <Route element={<AppLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="designer" element={<DesignerPage />} />
-            <Route path="runs" element={<ComingSoon title="运行历史" />} />
-            <Route path="hitl" element={<ComingSoon title="审批中心" />} />
-            <Route path="settings" element={<ComingSoon title="设置" />} />
+            <Route path="runs" element={<Runs />} />
+            <Route path="hitl" element={<Hitl />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="ai" element={<Assistant />} />
             <Route path="*" element={<ComingSoon title="404" />} />
           </Route>
         </Routes>

@@ -145,12 +145,35 @@ class StudioHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
-
     def do_GET(self):
         if not self._authorized():
-            self._send(b'{"error":"unauthorized"}', "application/json", 401)
+            self._send(b'{"error":"unauthorized"}',
+                       "application/json", 401)
             return
         st = self.studio
+
+        # SPA 静态文件服务（frontend/dist）
+        if st.frontend_dist and st.frontend_dist.is_dir():
+            req_path = self.path.split("?")[0]
+            if not req_path.startswith("/api/"):
+                fp = (st.frontend_dist /
+                      ("index.html" if req_path == "/"
+                       else req_path.lstrip("/")))
+                if not fp.is_file():
+                    fp = st.frontend_dist / "index.html"  # SPA fallback
+                if fp.is_file():
+                    ctype = {
+                        ".html": "text/html",
+                        ".js": "application/javascript",
+                        ".css": "text/css",
+                        ".svg": "image/svg+xml",
+                    }.get(fp.suffix, "application/octet-stream")
+                    self.send_response(200)
+                    self.send_header("Content-Type", ctype)
+                    self.end_headers()
+                    self.wfile.write(fp.read_bytes())
+                    return
+
         if self.path == "/api/sessions":
             self._send(json.dumps(st.sessions(), ensure_ascii=False).encode(),
                        "application/json")
@@ -165,6 +188,10 @@ class StudioHandler(BaseHTTPRequestHandler):
                        "application/json")
         elif self.path.startswith("/api/journal/stream"):
             self._stream_journal()
+        elif self.path == "/api/ai/status":
+            self._send(json.dumps(st.ai_status,
+                                  ensure_ascii=False).encode(),
+                       "application/json")
         elif self.path == "/api/analytics":
             from .analytics import summarize
             data = summarize(st.journal_paths, tenant=st.tenant)
@@ -225,8 +252,8 @@ class StudioHandler(BaseHTTPRequestHandler):
                                   ensure_ascii=False).encode(),
                        "application/json")
         else:
-            self._send(render_html(st.sessions(), st.audit_tail()).encode(),
-                       "text/html; charset=utf-8")
+            self._send(b'{"error":"not_found"}',
+                       "application/json", 404)
 
     def do_POST(self):
         if not self._authorized():
@@ -291,10 +318,14 @@ class StudioServer:
                  token: Optional[str] = None,
                  registry=None,
                  processes_dir: Optional[str] = None,
+                 frontend_dist: Optional[str] = None,
+                 ai_status: Optional[Dict[str, Any]] = None,
                  dispatch_event: Optional[Callable[[str, dict], dict]] = None,
                  resolve_task=None) -> None:
         # 外部事件入口（serve 模式接 Scheduler.dispatch_event）
         self.dispatch_event_cb = dispatch_event
+        self.ai_status = ai_status or {}
+        self.frontend_dist = (Path(frontend_dist) if frontend_dist else None)
         # 惰性展开：journal 文件可能在服务启动后才产生（HITL 交互场景）
         self.journal_patterns = list(journals)
         self.port = port

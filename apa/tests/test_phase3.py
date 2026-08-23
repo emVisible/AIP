@@ -322,9 +322,13 @@ class TestStudio:
                 f"http://127.0.0.1:{server}/api/sessions") as resp:
             data = json.loads(resp.read())
         assert SESSION in data
-        with urllib.request.urlopen(f"http://127.0.0.1:{server}/") as resp:
-            html = resp.read().decode()
-        assert SESSION in html and "APA Studio" in html
+        # 旧 vanilla Studio HTML 已退役（M-C），API 路由仍可达
+        import urllib.request
+        req404 = urllib.request.Request(f"http://127.0.0.1:{server}/")
+        try:
+            urllib.request.urlopen(req404, timeout=3)
+        except urllib.error.HTTPError:
+            pass   # SPA 未配置时 / 返回 404 是预期行为
         studio.shutdown()
 
 

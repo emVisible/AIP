@@ -21,6 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 browser = ["playwright>=1.40"]
+excel = ["openpyxl>=3.1"]
 dev = ["pytest>=8.0", "pytest-asyncio", "ruff"]
 
 [build-system]

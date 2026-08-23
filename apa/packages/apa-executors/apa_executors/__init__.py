@@ -10,6 +10,7 @@ from .desktop_executor import (
 )
 from .data_executor import DataExecutor
 from .document_executor import DocumentExecutor
+from .excel_executor import ExcelExecutor
 
 __all__ = [
     "APIExecutor",
@@ -20,6 +21,7 @@ __all__ = [
     "MacOSWindowManager",
     "DataExecutor",
     "DocumentExecutor",
+    "ExcelExecutor",
     "MockDesktopBackend",
     "OsascriptBackend",
     "PageOps",

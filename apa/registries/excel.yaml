@@ -1,0 +1,111 @@
+# ============================================================
+# Excel Action Registry — excel.*（openpyxl 后端）
+# C3：写操作 retries=0（非幂等）；只读操作可重试
+# ============================================================
+excel.read_range:
+  executor_domain: excel
+  description: "读取工作表区域 → 列名+行数据"
+  params:
+    type: object
+    required: [file]
+    properties:
+      file: { type: string }
+      sheet: { type: string, description: "默认活动表" }
+      range: { type: string, pattern: "^[A-Z]+[0-9]+:[A-Z]+[0-9]+$" }
+      header: { type: boolean, default: true }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 2
+
+excel.append_row:
+  executor_domain: excel
+  description: "追加一行数据到工作表末尾"
+  params:
+    type: object
+    required: [file, values]
+    properties:
+      file: { type: string }
+      sheet: { type: string }
+      values:
+        type: array
+        items: {}
+  idempotency: none
+  risk: L1
+  timeout_ms: 30000
+  retries: 0
+
+excel.write_cell:
+  executor_domain: excel
+  description: "写单元格值"
+  params:
+    type: object
+    required: [file, cell, value]
+    properties:
+      file: { type: string }
+      sheet: { type: string }
+      cell: { type: string, pattern: "^[A-Z]+[0-9]+$" }
+      value: {}
+  idempotency: optional
+  risk: L1
+  timeout_ms: 30000
+  retries: 1
+
+excel.get_formula:
+  executor_domain: excel
+  description: "读取单元格公式文本"
+  params:
+    type: object
+    required: [file, cell]
+    properties:
+      file: { type: string }
+      sheet: { type: string }
+      cell: { type: string, pattern: "^[A-Z]+[0-9]+$" }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 2
+
+excel.set_formula:
+  executor_domain: excel
+  description: "写单元格公式（自动补 = 前缀）"
+  params:
+    type: object
+    required: [file, cell, formula]
+    properties:
+      file: { type: string }
+      sheet: { type: string }
+      cell: { type: string, pattern: "^[A-Z]+[0-9]+$" }
+      formula: { type: string }
+  idempotency: optional
+  risk: L1
+  timeout_ms: 30000
+  retries: 1
+
+excel.list_sheets:
+  executor_domain: excel
+  description: "列出工作簿全部工作表"
+  params:
+    type: object
+    required: [file]
+    properties:
+      file: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 15000
+  retries: 2
+
+excel.add_sheet:
+  executor_domain: excel
+  description: "新建工作表（重复名报错）"
+  params:
+    type: object
+    required: [file, sheet]
+    properties:
+      file: { type: string }
+      sheet: { type: string }
+      index: { type: integer, minimum: 0 }
+  idempotency: optional
+  risk: L1
+  timeout_ms: 30000
+  retries: 1

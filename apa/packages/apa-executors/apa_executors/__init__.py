@@ -15,6 +15,8 @@ __all__ = [
     "BrowserExecutor",
     "DesktopBackend",
     "DesktopExecutor",
+    "MacOSInputEngine",
+    "MacOSWindowManager",
     "DocumentExecutor",
     "MockDesktopBackend",
     "OsascriptBackend",

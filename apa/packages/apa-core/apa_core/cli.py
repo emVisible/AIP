@@ -102,6 +102,40 @@ def json_dumps(data: dict) -> str:
 
 
 
+def _cmd_record(args) -> int:
+    """交互式浏览器录制 → process.yaml。"""
+    import yaml as _y
+    from pathlib import Path as _P
+    from .recorder import RecorderSession, events_to_process
+
+    session = RecorderSession(args.url)
+    print(f"▶ 录制中：{args.url}")
+    print("  在打开的浏览器窗口中操作；关闭窗口即结束录制。")
+    try:
+        session.start()
+        session.wait_until_closed()
+    finally:
+        events = session.snapshot_events()
+        session.stop()
+
+    proc = events_to_process(
+        events,
+        process_id=args.process_id,
+        trigger_name=args.trigger,
+    )
+    yaml_out = _y.safe_dump(proc, allow_unicode=True, sort_keys=False)
+    if args.out:
+        out = _P(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(yaml_out, encoding="utf-8")
+        print(f"→ {args.out}")
+    else:
+        print(yaml_out)
+    n_steps = len(proc["process"]["steps"])
+    print(f"✅ 录制完成：{n_steps} 个步骤")
+    return 0
+
+
 def _cmd_flow_compile(args) -> int:
     from .flow import parse_flow
     from pathlib import Path as _P
@@ -186,6 +220,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_flow_d.add_argument("input", help="process.yaml 文件")
     p_flow_d.add_argument("--out", default=None)
     p_flow_d.set_defaults(fn=_cmd_flow_decompile)
+
+    p_rec = sub.add_parser("record", help="浏览器录制：操作→自动生成 process.yaml")
+    p_rec.add_argument("url", help="起始 URL")
+    p_rec.add_argument("--process-id", default="recorded_flow")
+    p_rec.add_argument("--trigger", default=None,
+                       help="事件触发名（默认 manual）")
+    p_rec.add_argument("--out", default=None, help="输出 YAML 文件")
+    p_rec.set_defaults(fn=_cmd_record)
 
     p_lat = sub.add_parser("latency", help="动作往返延迟基准")
     p_lat.add_argument("--n", type=int, default=200)

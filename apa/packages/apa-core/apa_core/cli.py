@@ -96,6 +96,111 @@ def _cmd_latency(args) -> int:
     return 0
 
 
+def _cmd_doctor(args) -> int:
+    """环境自检：依赖 / 浏览器 / registry / 目录可写性。"""
+    import os
+    import shutil
+    from pathlib import Path as _P
+
+    # cli.py 位于 <root>/packages/apa-core/apa_core/ → 根为 parents[3]
+    # 安装态（site-packages）下用 APA_ROOT 环境变量指定仓库根
+    root = _P(os.environ.get("APA_ROOT",
+                             _P(__file__).resolve().parents[3]))
+    checks: list[tuple[str, bool, str]] = []
+
+    def check(name: str, ok: bool, detail: str = "") -> None:
+        checks.append((name, ok, detail))
+
+    # Python 版本
+    v = sys.version_info
+    check("python>=3.12", v >= (3, 12), f"{v.major}.{v.minor}.{v.micro}")
+
+    # 核心依赖
+    for mod, label in [
+        ("fastapi", "fastapi"), ("uvicorn", "uvicorn"),
+        ("yaml", "pyyaml"), ("pydantic", "pydantic"),
+        ("httpx", "httpx"),
+    ]:
+        try:
+            __import__(mod)
+            check(label, True)
+        except ImportError:
+            check(label, False, "missing — uv pip install " + label)
+
+    # 可选依赖
+    try:
+        import openpyxl  # noqa: F401
+        check("openpyxl (excel.*)", True)
+    except ImportError:
+        check("openpyxl (excel.*)", False,
+              'missing — uv pip install openpyxl 或 pip install "apa[excel]"')
+    try:
+        import playwright  # noqa: F401
+        check("playwright (browser.*/record)", True)
+    except ImportError:
+        check("playwright (browser.*/record)", False,
+              "missing — uv pip install playwright && playwright install chromium")
+
+    # Playwright Chromium 二进制
+    if args.check_browser:
+        try:
+            from playwright.sync_api import sync_playwright
+            pw = sync_playwright().start()
+            b = pw.chromium.launch(headless=True)
+            ver = b.version
+            b.close()
+            pw.stop()
+            check("chromium launch", True, ver)
+        except Exception as e:  # noqa: BLE001
+            check("chromium launch", False, str(e)[:80])
+
+    # Registry 加载
+    reg_dir = root / "registries"
+    if reg_dir.is_dir():
+        try:
+            from .registry import load_registries
+            n = len(load_registries(*[str(p) for p in sorted(reg_dir.glob("*.yaml"))]))
+            check("registries load", True, f"{n} actions")
+        except Exception as e:  # noqa: BLE001
+            check("registries load", False, str(e)[:80])
+    else:
+        check("registries dir", False, f"not found: {reg_dir}")
+
+    # 数据目录可写
+    data_dir = root / "data"
+    try:
+        data_dir.mkdir(parents=True, exist_ok=True)
+        probe = data_dir / ".doctor_write_probe"
+        probe.write_text("ok")
+        probe.unlink()
+        check("data dir writable", True, str(data_dir))
+    except OSError as e:
+        check("data dir writable", False, str(e)[:80])
+
+    # 前端构建产物
+    fe = root / "frontend" / "dist" / "index.html"
+    check("frontend dist", fe.is_file(),
+          "" if fe.is_file() else "cd frontend && pnpm build")
+
+    # 外部工具（可选）
+    if shutil.which("node"):
+        check("node (electron)", True, shutil.which("node") or "")
+    else:
+        check("node (electron)", False, "optional — 前端/Electron 开发需要")
+
+    failed = [c for c in checks if not c[1]]
+    icon = lambda ok: "✅" if ok else "❌"  # noqa: E731
+    for name, ok, detail in checks:
+        line = f"{icon(ok)} {name}"
+        if detail:
+            line += f"  ({detail})"
+        print(line)
+
+    print(f"\n{'❌' if failed else '✅'} doctor: "
+          f"{len(checks) - len(failed)}/{len(checks)} passed")
+    return 1 if (failed and not args.no_fail) else 0
+
+
 def json_dumps(data: dict) -> str:
     import json
     return json.dumps(data, indent=2)
@@ -228,6 +333,13 @@ def build_parser() -> argparse.ArgumentParser:
                        help="事件触发名（默认 manual）")
     p_rec.add_argument("--out", default=None, help="输出 YAML 文件")
     p_rec.set_defaults(fn=_cmd_record)
+
+    p_doc = sub.add_parser("doctor", help="环境自检：依赖/浏览器/registry/目录")
+    p_doc.add_argument("--check-browser", action="store_true",
+                       help="额外启动一次 headless Chromium 验证")
+    p_doc.add_argument("--no-fail", action="store_true",
+                       help="有缺失项也不返回非零退出码")
+    p_doc.set_defaults(fn=_cmd_doctor)
 
     p_lat = sub.add_parser("latency", help="动作往返延迟基准")
     p_lat.add_argument("--n", type=int, default=200)

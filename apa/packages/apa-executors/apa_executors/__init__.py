@@ -11,6 +11,7 @@ from .desktop_executor import (
 from .data_executor import DataExecutor
 from .document_executor import DocumentExecutor
 from .excel_executor import ExcelExecutor
+from .ocr_executor import OCRExecutor
 
 __all__ = [
     "APIExecutor",
@@ -22,6 +23,7 @@ __all__ = [
     "DataExecutor",
     "DocumentExecutor",
     "ExcelExecutor",
+    "OCRExecutor",
     "MockDesktopBackend",
     "OsascriptBackend",
     "PageOps",

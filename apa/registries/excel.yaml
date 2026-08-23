@@ -37,7 +37,7 @@ excel.append_row:
 
 excel.write_cell:
   executor_domain: excel
-  description: "写单元格值"
+  description: "写单元格值（同值重写幂等）"
   params:
     type: object
     required: [file, cell, value]
@@ -46,7 +46,7 @@ excel.write_cell:
       sheet: { type: string }
       cell: { type: string, pattern: "^[A-Z]+[0-9]+$" }
       value: {}
-  idempotency: optional
+  idempotency: required
   risk: L1
   timeout_ms: 30000
   retries: 1
@@ -68,7 +68,7 @@ excel.get_formula:
 
 excel.set_formula:
   executor_domain: excel
-  description: "写单元格公式（自动补 = 前缀）"
+  description: "写单元格公式（自动补 = 前缀；同式重写幂等）"
   params:
     type: object
     required: [file, cell, formula]
@@ -77,7 +77,7 @@ excel.set_formula:
       sheet: { type: string }
       cell: { type: string, pattern: "^[A-Z]+[0-9]+$" }
       formula: { type: string }
-  idempotency: optional
+  idempotency: required
   risk: L1
   timeout_ms: 30000
   retries: 1
@@ -97,7 +97,7 @@ excel.list_sheets:
 
 excel.add_sheet:
   executor_domain: excel
-  description: "新建工作表（重复名报错）"
+  description: "新建工作表（重复名报错，非幂等）"
   params:
     type: object
     required: [file, sheet]
@@ -105,7 +105,7 @@ excel.add_sheet:
       file: { type: string }
       sheet: { type: string }
       index: { type: integer, minimum: 0 }
-  idempotency: optional
+  idempotency: none
   risk: L1
   timeout_ms: 30000
-  retries: 1
+  retries: 0

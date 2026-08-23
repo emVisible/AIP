@@ -43,38 +43,46 @@ def _cmd_tasks(args) -> int:
 
 
 def _cmd_serve(args) -> int:
-    import time as _time
+    import uvicorn
 
+    from .api import create_app
     from .launcher import default_registries
     from .registry import load_registries
     from .serve import ServeApp
 
     reg_paths = args.registries or [str(p) for p in default_registries()]
     reg = load_registries(*reg_paths)
-    app = ServeApp(
+
+    serve_app = ServeApp(
         journals=args.journals,
         port=args.port,
         processes_dir=args.processes_dir or None,
-        frontend_dist=args.frontend_dist or None,
         registry=reg,
         runs_dir=args.runs_dir or None,
         mock_erp=not args.no_mock_erp,
         erp_base_url=args.erp_url or "",
         token=args.token or None,
         tenant=args.tenant or None,
+        frontend_dist=args.frontend_dist or None,
     )
     if args.jobs:
-        n = app.load_jobs(args.jobs)
+        n = serve_app.load_jobs(args.jobs)
         print(f"==> 已加载调度任务 {n} 个")
-    port = app.studio_start_background()
-    print(f"==> APA 常驻服务: http://127.0.0.1:{port}   （Ctrl-C 退出）")
-    try:
-        while True:
-            _time.sleep(3600)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        app.shutdown()
+
+    fast_app = create_app(
+        journals=args.journals,
+        processes_dir=args.processes_dir or None,
+        registry=reg,
+        frontend_dist=args.frontend_dist or None,
+        token=args.token or None,
+        ai_status={"mode": "rules_only", "model": "deepseek-chat"},
+        dispatch_event=serve_app.dispatch_external_event,
+        resolve_task=None,
+    )
+
+    print(f"==> APA 常驻服务: http://127.0.0.1:{args.port}   （Ctrl-C 退出）")
+    uvicorn.run(fast_app, host="127.0.0.1", port=args.port,
+                log_level="warning")
     return 0
 
 

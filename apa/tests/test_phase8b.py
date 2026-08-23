@@ -1,5 +1,6 @@
 """Phase 8 测试：Cron 解析 / Scheduler 双触发 / ProcessRunner 启动器 / apa CLI。"""
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -188,8 +189,6 @@ class TestApaCli:
             [str(venv_py), "-m", "apa_core.cli", "analytics",
              "--journals", str(jpath)],
             capture_output=True, text=True, timeout=30,
-            env={"PYTHONPATH": str(APA_ROOT / "packages" / "apa-core") +
-                 ":" + str(APA_ROOT / "sdk" / "python"),
-                 "PATH": "/usr/bin:/bin"})
+)
         assert r.returncode == 0, r.stderr
         assert "APA Analytics" in r.stdout

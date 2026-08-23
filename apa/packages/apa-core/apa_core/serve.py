@@ -46,6 +46,7 @@ class ServeApp:
         erp_base_url: str = "",
         token: Optional[str] = None,
         tenant: Optional[str] = None,
+        frontend_dist: Optional[str] = None,
         tick_interval_s: float = 1.0,
         session_timeout_s: float = 30.0,
     ) -> None:
@@ -67,9 +68,11 @@ class ServeApp:
 
         self.studio = StudioServer(
             journals, port=port, token=token, tenant=tenant,
-            registry=registry,             processes_dir=processes_dir,
+            registry=registry,
+            processes_dir=processes_dir,
+            frontend_dist=frontend_dist,
             dispatch_event=self._dispatch_external,
-            resolve_task=None,   # 由 register_local_gateway 注入解析回调
+            resolve_task=None,
         )
         self.processes_dir = self.studio.processes_dir
         self.scheduler = Scheduler()

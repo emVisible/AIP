@@ -6,3 +6,19 @@ usage: apa [-h] {studio,analytics,tasks,serve,latency} ...
 apa: error: unrecognized arguments: --frontend-dist /Users/young/Code/AIP/apa/frontend/dist
 usage: apa [-h] {studio,analytics,tasks,serve,latency} ...
 apa: error: unrecognized arguments: --frontend-dist /Users/young/Code/AIP/apa/frontend/dist
+Traceback (most recent call last):
+  File "<frozen runpy>", line 203, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/young/Code/AIP/apa/packages/apa-core/apa_core/cli.py", line 153, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "/Users/young/Code/AIP/apa/packages/apa-core/apa_core/cli.py", line 149, in main
+    return int(args.fn(args) or 0)
+               ~~~~~~~^^^^^^
+  File "/Users/young/Code/AIP/apa/packages/apa-core/apa_core/cli.py", line 54, in _cmd_serve
+    app = ServeApp(
+        journals=args.journals,
+    ...<8 lines>...
+        tenant=args.tenant or None,
+    )
+TypeError: ServeApp.__init__() got an unexpected keyword argument 'frontend_dist'

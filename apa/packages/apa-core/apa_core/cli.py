@@ -101,6 +101,39 @@ def json_dumps(data: dict) -> str:
     return json.dumps(data, indent=2)
 
 
+
+def _cmd_flow_compile(args) -> int:
+    from .flow import parse_flow
+    from pathlib import Path as _P
+    import yaml as _y
+
+    text = _P(args.input).read_text(encoding="utf-8")
+    proc = parse_flow(text)
+    yaml_out = _y.safe_dump({"process": proc}, allow_unicode=True,
+                            sort_keys=False)
+    if args.out:
+        _P(args.out).write_text(yaml_out, encoding="utf-8")
+        print(f"→ {args.out}")
+    else:
+        print(yaml_out)
+    return 0
+
+
+def _cmd_flow_decompile(args) -> int:
+    from .flow import decompile_flow
+    from pathlib import Path as _P
+    import yaml as _y
+
+    data = _y.safe_load(_P(args.input).read_text(encoding="utf-8"))
+    text = decompile_flow(data)
+    if args.out:
+        _P(args.out).write_text(text, encoding="utf-8")
+        print(f"→ {args.out}")
+    else:
+        print(text)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="apa",
@@ -143,6 +176,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve.add_argument("--token", default=None)
     p_serve.add_argument("--tenant", default=None)
     p_serve.set_defaults(fn=_cmd_serve)
+
+    p_flow_c = sub.add_parser("flow-compile", help=".flow → process.yaml")
+    p_flow_c.add_argument("input", help=".flow 文件")
+    p_flow_c.add_argument("--out", default=None, help="输出 YAML 文件")
+    p_flow_c.set_defaults(fn=_cmd_flow_compile)
+
+    p_flow_d = sub.add_parser("flow-decompile", help="process.yaml → .flow")
+    p_flow_d.add_argument("input", help="process.yaml 文件")
+    p_flow_d.add_argument("--out", default=None)
+    p_flow_d.set_defaults(fn=_cmd_flow_decompile)
 
     p_lat = sub.add_parser("latency", help="动作往返延迟基准")
     p_lat.add_argument("--n", type=int, default=200)

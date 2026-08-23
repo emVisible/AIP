@@ -1,15 +1,51 @@
 /**
  * APA Desktop — Electron 主进程。
  * 职责：Python serve sidecar 编排 + BrowserWindow 加载 React SPA。
+ *
+ * 两种模式：
+ *   开发态（app.isPackaged=false）：APA_DIR = 仓库 apa/ 目录，
+ *     直接用 .venv 与仓库 registries/templates/data。
+ *   打包态：apa-runtime 由 stage-desktop.cjs 暂存到 Resources，
+ *     可写数据放 userData（journals/processes/logs）。
  */
 const { app, BrowserWindow } = require("electron");
 const { spawn, execSync } = require("child_process");
+const { mkdtempSync } = require("fs");
+const fs = require("fs");
+const os = require("os");
 const path = require("path");
 
-const APA_DIR = path.resolve(__dirname, "..", "..");
-const REPO_ROOT = path.resolve(APA_DIR, "..");
-const VENV_PY = path.join(APA_DIR, ".venv", "bin", "python");
 const isDev = !app.isPackaged;
+
+// ---- 路径解析 ---------------------------------------------------------------
+function resolveLayout() {
+  if (isDev) {
+    const apaDir = path.resolve(__dirname, "..", "..");
+    return {
+      apaDir,
+      venvPy: path.join(apaDir, ".venv", "bin", "python"),
+      registriesDir: null,          // serve 用默认 default_registries()
+      processesDir: path.join(apaDir, "data", "processes"),
+      journalGlob: path.join(apaDir, "data", "*.jsonl"),
+      logFile: path.join(apaDir, "serve.log"),
+      cwd: apaDir,
+    };
+  }
+  // 打包态：Resources/apa-runtime（stage-desktop.cjs 产物）
+  const rt = path.join(process.resourcesPath, "apa-runtime");
+  const userData = app.getPath("userData");   // ~/Library/Application Support/APA Desktop
+  fs.mkdirSync(path.join(userData, "processes"), { recursive: true });
+  fs.mkdirSync(path.join(userData, "journals"), { recursive: true });
+  return {
+    apaDir: rt,
+    venvPy: path.join(rt, ".venv", "bin", "python"),
+    registriesDir: path.join(rt, "registries"),
+    processesDir: path.join(userData, "processes"),
+    journalGlob: path.join(userData, "journals", "*.jsonl"),
+    logFile: path.join(userData, "serve.log"),
+    cwd: rt,
+  };
+}
 
 let pythonProc = null;
 let mainWindow = null;
@@ -38,35 +74,46 @@ function waitHealthy(port, timeoutMs = 30_000) {
   });
 }
 
-async function startServe(port) {
-  const fs = require("fs");
-  const logFd = fs.openSync(path.join(APA_DIR, "serve.log"), "a");
-  pythonProc = spawn(VENV_PY,
-    ["-m", "apa_core.cli", "serve",
-     "--port", String(port),
-     "--journals", path.join(APA_DIR, "data", "*.jsonl"),
-     "--processes-dir", path.join(APA_DIR, "data", "processes"),
-     "--frontend-dist", path.join(__dirname, "..", "dist")],
-    { cwd: APA_DIR, stdio: ["ignore", logFd, logFd] });
+async function startServe(port, L) {
+  const args = [
+    "-m", "apa_core.cli", "serve",
+    "--port", String(port),
+    "--journals", L.journalGlob,
+    "--processes-dir", L.processesDir,
+    "--frontend-dist", path.join(__dirname, "..", "dist"),
+  ];
+  if (L.registriesDir) {
+    args.push("--registries",
+      ...fs.readdirSync(L.registriesDir)
+          .filter(f => f.endsWith(".yaml"))
+          .map(f => path.join(L.registriesDir, f)));
+  }
+  const logFd = fs.openSync(L.logFile, "a");
+  pythonProc = spawn(L.venvPy, args,
+    { cwd: L.cwd, stdio: ["ignore", logFd, logFd] });
 
   await waitHealthy(port);
   console.log(`[desktop] serve ready on :${port}`);
 }
 
 async function main() {
-  // 启动前置检查：依赖必须已通过 pnpm setup 安装（不在运行时装载）
+  const L = resolveLayout();
+
+  // 启动前置检查：依赖必须已通过 pnpm setup / 打包暂存安装
   try {
-    execSync(`"${VENV_PY}" -c "import apa_core"`, { timeout: 10_000 });
+    execSync(`"${L.venvPy}" -c "import apa_core"`, { timeout: 10_000 });
   } catch {
     console.error(
       "[desktop] Python dependencies not installed.\n" +
-      "         Run first: cd apa/frontend && pnpm setup");
+      (isDev
+        ? "         Run first: cd apa/frontend && pnpm setup"
+        : "         Runtime missing — reinstall the application"));
     app.quit();
     return;
   }
 
   const port = await freePort();
-  await startServe(port);
+  await startServe(port, L);
 
   mainWindow = new BrowserWindow({
     width: 1280, height: 800, minWidth: 900,

@@ -1,8 +1,5 @@
 /**
- * APA 低代码流程设计器（§10.2 模式 B 可视化编辑）。
- *
- * 三面板布局：动作目录（左）· React Flow 画布（中）· 属性+试运行（右）。
- * 步骤数组为逻辑执行顺序；画布位置仅视觉布局，不影响执行序。
+ * APA 低代码流程设计器 — Activity Pipeline Editor。
  */
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -17,7 +14,10 @@ import {
 } from "@xyflow/react";
 
 import { api } from "../../api/client";
-import type { ProcessInfo } from "../../api/types";
+import type { ActionMeta, ProcessInfo } from "../../api/types";
+import { CatalogPanel } from "../../components/designer/CatalogPanel";
+import { ParamsPanel } from "../../components/designer/ParamsPanel";
+import { TestRunPanel } from "../../components/designer/TestRunPanel";
 
 interface DStep {
   id: string;
@@ -28,12 +28,6 @@ interface DStep {
   condition: string;
   output_as: string;
   on_failure_goto: string;
-}
-
-interface ProcessMeta {
-  id: string;
-  trigger_name: string;
-  max_actions: number;
 }
 
 function blankStep(i: number): DStep {
@@ -48,11 +42,8 @@ type StepNodeData = { label: string; sub?: string; tone: string };
 
 function StepNodeView({ data }: { data: StepNodeData }) {
   return (
-    <div className={`rounded-lg border-2 px-3 py-2 min-w-[140px]
-                     shadow-sm bg-white ${data.tone}`}>
-      <p className="text-xs font-semibold text-slate-700 truncate">
-        {data.label}
-      </p>
+    <div className={`rounded-lg border-2 px-3 py-2 min-w-[150px] shadow-sm bg-white ${data.tone}`}>
+      <p className="text-xs font-semibold text-slate-700 truncate">{data.label}</p>
       {data.sub && (
         <p className="text-[10px] text-slate-400 mt-0.5 truncate">{data.sub}</p>
       )}
@@ -63,82 +54,68 @@ function StepNodeView({ data }: { data: StepNodeData }) {
 const nodeTypes = { step: StepNodeView };
 
 export function DesignerPage() {
-  // ---- 状态 ----
-  const [meta, setMeta] = useState<ProcessMeta>({
-    id: "", trigger_name: "", max_actions: 50 });
+  const [metaId, setMetaId] = useState("");
+  const [triggerName, setTriggerName] = useState("");
+  const [maxActions, setMaxActions] = useState(50);
   const [steps, setSteps] = useState<DStep[]>([blankStep(0)]);
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [yamlText, setYamlText] = useState("");
   const [statusMsg, setStatusMsg] = useState("就绪");
   const [processList, setProcessList] = useState<ProcessInfo[]>([]);
+  const [catalog, setCatalog] = useState<Record<string, ActionMeta>>({});
+  const [currentFile, setCurrentFile] = useState("");
 
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<Node>([]);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
-  // ---- steps → RF 同步 ----
-  const syncGraph = useCallback(() => {
+  // steps → RF graph sync
+  useEffect(() => {
     const nodes: Node[] = steps.map((s, i) => ({
       id: s.id || `n${i}`,
       type: "step" as const,
       position: { x: 200, y: i * 100 },
       data: {
         label: s.id || `step_${i + 1}`,
-        sub: s.action || s.type || "",
-        tone: s.condition ? "border-amber-300" : "border-slate-300",
+        sub: s.action || s.type || "\u2014",
+        tone: selectedIdx === i
+          ? "border-blue-500 ring-2 ring-blue-200"
+          : s.condition
+            ? "border-amber-300"
+            : "border-slate-300",
       } satisfies StepNodeData,
     }));
     const edges: Edge[] = [];
     for (let i = 0; i < steps.length - 1; i++) {
       edges.push({
         id: `e${i}`,
-        source: steps[i]!.id || `n${i}`,
-        target: steps[i + 1]!.id || `n${i + 1}`,
-        animated: Boolean(steps[i]!.condition),
+        source: steps[i]?.id ?? `n${i}`,
+        target: steps[i + 1]?.id ?? `n${i + 1}`,
+        animated: true,
       });
     }
     setRfNodes(nodes);
     setRfEdges(edges);
-  }, [steps, setRfNodes, setRfEdges]);
+  }, [steps, selectedIdx, setRfNodes, setRfEdges]);
 
-  useEffect(() => { syncGraph(); }, [syncGraph]);
+  // 数据加载
+  useEffect(() => {
+    api<ProcessInfo[]>("/api/processes").then(setProcessList).catch(() => {});
+    api<Record<string, ActionMeta>>("/api/registry/actions")
+      .then(setCatalog)
+      .catch(() => {});
+  }, []);
 
-  // ---- 步骤 CRUD ----
   const updateStep = useCallback(
     (i: number, patch: Partial<DStep>) =>
-      setSteps(prev => prev.map(
-        (s, j) => (j === i ? { ...s, ...patch } : s))),
+      setSteps(prev => prev.map((s, j) => (j === i ? { ...s, ...patch } : s))),
     [],
   );
 
-  const addStep = useCallback(
-    () => setSteps(prev => [...prev, blankStep(prev.length)]),
-    [],
-  );
-
-  const removeStep = useCallback(
-    (i: number) => setSteps(prev => prev.filter((_, j) => j !== i)),
-    [],
-  );
-
-  const moveStep = useCallback(
-    (i: number, dir: -1 | 1) =>
-      setSteps(prev => {
-        const next = [...prev];
-        const j = i + dir;
-        if (j < 0 || j >= next.length) return prev;
-        const tmp = next[i]!;
-        next[i] = next[j]!;
-        next[j] = tmp;
-        return next;
-      }),
-    [],
-  );
-
-  // ---- YAML 双向 ----
   function buildForm() {
     return {
-      id: meta.id,
-      trigger_name: meta.trigger_name,
-      max_actions: meta.max_actions,
+      id: metaId,
+      trigger_name: triggerName,
+      max_actions: maxActions,
       steps: steps.map(s => {
         let parsed: Record<string, unknown> = {};
         try { parsed = JSON.parse(s.params_json || "{}"); } catch {}
@@ -150,10 +127,11 @@ export function DesignerPage() {
 
   async function syncToYaml() {
     try {
+      const form = buildForm();
       const d = await api<{ yaml: string }>("/api/processes/from-form", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ form: buildForm() }),
+        body: JSON.stringify({ form }),
       });
       setYamlText(d.yaml);
       setStatusMsg("已同步 YAML ✓");
@@ -168,15 +146,14 @@ export function DesignerPage() {
         form: { id: string; trigger_name: string;
                 max_actions: number; steps: DStep[] };
       }
-      const d = await api<FormResponse>(
-        "/api/processes/to-form",
-        { method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ yaml: yamlText }) });
-      setMeta({
-        id: d.form.id, trigger_name: d.form.trigger_name,
-        max_actions: d.form.max_actions,
+      const d = await api<FormResponse>("/api/processes/to-form", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yaml: yamlText }),
       });
+      setMetaId(d.form.id);
+      setTriggerName(d.form.trigger_name);
+      setMaxActions(d.form.max_actions);
       setSteps(d.form.steps.map(s => ({
         ...s, params_json:
           typeof s.params_json === "string"
@@ -190,23 +167,18 @@ export function DesignerPage() {
 
   async function save() {
     try {
-      const form = buildForm();
-      const yd = await api<{ yaml: string }>(
-        "/api/processes/from-form",
-        { method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ form }) });
-      await api("/api/processes/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: meta.id || "untitled", yaml: yd.yaml }),
+      await post("/api/processes/save", {
+        id: metaId || "untitled", yaml: yamlText || "{}",
       });
-      setStatusMsg(`已保存 ${meta.id} ✓`);
+      setStatusMsg(`已保存 ${metaId} ✓`);
       void refreshProcessList();
     } catch (e) {
       setStatusMsg(`保存失败: ${e instanceof Error ? e.message : e}`);
     }
+  }
+
+  function refreshProcessList() {
+    api<ProcessInfo[]>("/api/processes").then(setProcessList).catch(() => {});
   }
 
   async function openFile(fileId: string) {
@@ -214,183 +186,177 @@ export function DesignerPage() {
       const d = await api<{ yaml: string }>(`/api/processes/get/${fileId}`);
       setYamlText(d.yaml);
       await loadFromYaml();
-      setMeta(m => ({ ...m, id: fileId }));
+      setMetaId(fileId);
+      setCurrentFile(fileId);
       setStatusMsg(`已加载 ${fileId} ✓`);
     } catch (e) {
       setStatusMsg(`加载失败: ${e instanceof Error ? e.message : e}`);
     }
   }
 
-  async function refreshProcessList() {
-    try {
-      setProcessList(await api<ProcessInfo[]>("/api/designer/list"));
-    } catch { /* ignore */ }
-  }
-  useEffect(() => { void refreshProcessList(); }, []);
-
-  // ---- 渲染 ----
-  const stepRows = steps.map((s, i) => (
-    <div key={s.id || i}
-      className="flex gap-2 items-end flex-wrap border border-slate-100
-                 rounded-lg px-2 py-1.5 bg-slate-50 text-xs">
-      <div className="w-24">
-        <label className="text-[10px] text-slate-300">ID</label>
-        <input className="w-full px-1 py-0.5 text-xs border rounded"
-          value={s.id}
-          onChange={e => updateStep(i, { id: e.target.value })}/>
-      </div>
-      <div className="flex-[2]">
-        <label className="text-[10px] text-slate-300">action</label>
-        <input className="w-full px-1 py-0.5 text-xs border rounded"
-          value={s.action}
-          onChange={e => updateStep(i, { action: e.target.value })}/>
-      </div>
-      <div className="flex-[2]">
-        <label className="text-[10px] text-slate-300">condition</label>
-        <input className="w-full px-1 py-0.5 text-xs border rounded"
-          value={s.condition}
-          onChange={e => updateStep(i, { condition: e.target.value })}/>
-      </div>
-      <button onClick={() => moveStep(i, -1)} title="上移">↑</button>
-      <button onClick={() => moveStep(i, 1)} title="下移">↓</button>
-      <button onClick={() => removeStep(i)}
-        className="text-red-400 hover:text-red-600 px-1">✕</button>
-    </div>
-  ));
-
-  const processItems = processList.map(p => (
-    <div key={p.id}
-         className="flex items-center justify-between px-2 py-1 text-xs
-                    hover:bg-slate-50 rounded cursor-pointer"
-         onClick={() => void openFile(p.id)}>
-      <span>{p.id}</span>
-      <span className={p.valid ? "text-emerald-500" : "text-red-400"}>
-        {p.valid ? `${p.steps} 步骤` : p.error}
-      </span>
-    </div>
-  ));
-
   return (
-    <div className="space-y-4">
-      {/* 元信息 */}
-      <div className="flex gap-3 items-end flex-wrap">
-        <div>
-          <label className="text-[11px] text-slate-400">流程 ID</label>
-          <input className="w-48 px-2 py-1 text-sm border rounded"
-            value={meta.id}
-            onChange={e => setMeta(m => ({ ...m, id: e.target.value }))}/>
-        </div>
-        <div>
-          <label className="text-[11px] text-slate-400">触发事件</label>
-          <input className="w-64 px-2 py-1 text-sm border rounded"
-            value={meta.trigger_name}
-            onChange={e => setMeta(m => ({ ...m, trigger_name: e.target.value }))}/>
-        </div>
-        <div>
-          <label className="text-[11px] text-slate-400">max_actions</label>
-          <input className="w-20 px-2 py-1 text-sm border rounded" type="number"
-            value={meta.max_actions}
-            onChange={e => setMeta(m => ({ ...m, maxActions: +e.target.value || 50}))}/>
-        </div>
-        <button onClick={() => void save()}
-          className="ml-auto px-4 py-1.5 text-sm font-semibold text-white
-                     bg-brand rounded-lg hover:bg-blue-700 transition-colors">
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* 工具栏 */}
+      <div className="flex items-center gap-3 px-4 py-2 border-b bg-white shadow-sm z-10">
+        <input className="w-48 px-2 py-1 text-sm border rounded-md outline-none"
+          placeholder="流程 ID…" value={metaId}
+          onChange={e => setMetaId(e.target.value)} />
+        <input className="w-72 px-2 py-1 text-sm border rounded-md"
+          placeholder="触发事件…"
+          value={triggerName} onChange={e => setTriggerName(e.target.value)} />
+        <input className="w-20 px-2 py-1 text-sm border rounded" type="number"
+          value={maxActions}
+          onChange={e => setMaxActions(+e.target.value || 50)} />
+        <button
+          className="ml-auto px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+          onClick={() => void save()}>
           💾 保存
         </button>
       </div>
 
       {/* 三面板 */}
-      <div className="grid grid-cols-[240px_1fr_280px] gap-3 items-start">
+      <div className="flex-1 grid grid-cols-[220px_1fr_260px] overflow-hidden">
 
-        {/* 动作目录 */}
-        <CatalogPanel />
+        {/* 左：动作目录 */}
+        <div className="border-r p-3 overflow-y-auto bg-white">
+          <CatalogPanel onInsert={(_action: string) => {
+            setSteps(prev => [...prev, blankStep(prev.length)]);
+          }} />
+        </div>
 
-        {/* React Flow 画布 */}
-        <div className="space-y-2 min-w-0">
-          <div style={{ height: 420 }}
-               className="border border-slate-200 rounded-xl overflow-hidden">
+        {/* 中：画布 + 步骤编辑 */}
+        <div className="overflow-y-auto p-3">
+          <div style={{ height: Math.max(280, rfNodes.length * 80 + 60) }}
+               className="border rounded-xl min-h-[250px] overflow-hidden">
             <ReactFlow
-              nodes={rfNodes}
-              edges={rfEdges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              nodeTypes={nodeTypes}
-              fitView
+              nodes={rfNodes} edges={rfEdges}
+              onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
+              nodeTypes={nodeTypes} fitView
             >
-              <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-              <Controls />
+              <Background variant={BackgroundVariant.Dots}
+                          gap={20} size={1.5} color="#cbd5e1" />
+              <Controls showInteractive={false} />
             </ReactFlow>
           </div>
 
-          {/* 步骤卡片列表 */}
-          {stepRows}
-          <button onClick={addStep}
-            className="px-3 py-1 text-xs border border-dashed border-slate-300
-                       rounded-lg text-slate-500 hover:border-brand hover:text-brand
-                       transition-colors">
+          <div className="mt-3 space-y-2">
+            {steps.map((s, i) => (
+              <div key={s.id || i} onClick={() => setSelectedIdx(i)}
+                className={`cursor-pointer rounded-lg border px-3 py-2 text-xs ${
+                  selectedIdx === i
+                    ? "ring-1 ring-blue-300 border-blue-300 bg-blue-50"
+                    : "border-slate-200 bg-white"}`}>
+                <span className="font-semibold mr-2">{i + 1}. {s.id}</span>
+                <span className="text-slate-400 font-mono">
+                  {s.action || "(未设置)"}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <button onClick={() =>
+            setSteps(prev => [...prev, blankStep(prev.length)])}
+            className="w-full mt-2 py-2 text-xs border border-dashed border-slate-300
+                       rounded-lg text-slate-400 hover:border-blue-400 transition-colors">
             ＋ 添加步骤
           </button>
 
           {/* YAML 编辑区 */}
-          <details className="mt-2">
-            <summary className="text-xs text-slate-400 cursor-pointer">
-              YAML 预览 / 手动编辑</summary>
-            <textarea
-              className="w-full mt-1 p-3 text-xs font-mono border rounded
-                         resize-y min-h-[200px]"
-              rows={14}
-              value={yamlText}
-              onChange={e => setYamlText(e.target.value)} />
-            <button onClick={() => void syncToYaml()} className="mr-1">YAML ← 表单</button>
-            <button onClick={() => void loadFromYaml()}
-              className="mt-1 px-3 py-1 text-xs border rounded hover:bg-slate-50">
-              YAML → 表单
-            </button>
+          <details className="mt-4">
+            <summary className="text-xs text-slate-400 cursor-pointer">YAML</summary>
+            <textarea className="w-full mt-1 p-2 text-xs font-mono border rounded resize-y min-h-[120px]"
+              rows={10} value={yamlText} onChange={e => setYamlText(e.target.value)} />
+            <div className="flex gap-2 mt-1">
+              <button onClick={() => void syncToYaml()}
+                className="px-3 py-1 text-xs border rounded hover:bg-slate-50">
+                表单 → YAML
+              </button>
+              <button onClick={() => void loadFromYaml()}
+                className="px-3 py-1 text-xs border rounded hover:bg-slate-50">
+                YAML → 表单
+              </button>
+            </div>
           </details>
         </div>
 
-        {/* 属性面板 */}
-        <div className="space-y-4">
-          <TestRunPanelLazy />
+        {/* 右：属性面板 + 试运行 */}
+        <div className="border-l p-3 space-y-3 overflow-y-auto bg-white">
+          <p className="text-xs font-semibold">属性面板</p>
+          <ParamsPanel
+            steps={steps} selectedIdx={selectedIdx}
+            onUpdate={updateStep} catalog={catalog}
+          />
+          {selectedIdx != null && steps[selectedIdx] && (
+            <div className="space-y-2 text-xs">
+              <div>
+                <label className="text-slate-400">ID</label>
+                <input className="w-full px-2 py-1 border rounded mt-0.5"
+                  value={steps[selectedIdx]?.id ?? ""}
+                  onChange={e => setSteps(prev =>
+                    prev.map((s, j) => j === selectedIdx
+                      ? { ...s, id: e.target.value } : s))} />
+              </div>
+              <div>
+                <label className="text-slate-400">动作名</label>
+                <input className="w-full px-2 py-1 border rounded mt-0.5"
+                  value={steps[selectedIdx]?.action ?? ""}
+                  onChange={e => setSteps(prev =>
+                    prev.map((s, j) => j === selectedIdx
+                      ? { ...s, action: e.target.value } : s))} />
+              </div>
+              <div>
+                <label className="text-slate-400">参数 (JSON)</label>
+                <textarea className="w-full px-2 py-1 border rounded mt-0.5 font-mono"
+                  rows={4} value={steps[selectedIdx]?.params_json ?? "{}"}
+                  onChange={e => setSteps(prev =>
+                    prev.map((s, j) => j === selectedIdx
+                      ? { ...s, params_json: e.target.value } : s))} />
+              </div>
+            </div>
+          )}
+          {selectedIdx == null && (
+            <p className="text-xs text-slate-400 pt-2">点击画布中的节点以编辑属性</p>
+          )}
+
+          <TestRunPanel yaml={yamlText} />
+
+          {/* 已保存流程列表 */}
+          <details className="mt-3">
+            <summary className="text-xs text-slate-400 cursor-pointer">
+              已保存流程 ({processList.filter(p => p.valid).length})
+            </summary>
+            <div className="mt-1 space-y-0.5">
+              {processList.map(p => (
+                <div key={p.id}
+                     onClick={() => void openFile(p.id)}
+                     className="flex items-center justify-between px-2 py-1 text-xs
+                                hover:bg-slate-50 rounded cursor-pointer">
+                  <span className="font-mono">{p.id}</span>
+                  <span className={p.valid ? "text-emerald-500" : "text-red-400"}>
+                    {p.valid ? `${p.steps} 步骤` : "\u26a0"}
+                  </span>
+                </div>
+              ))}
+              {!processList.length && (
+                <p className="text-xs text-slate-300">（暂无）</p>
+              )}
+            </div>
+          </details>
         </div>
       </div>
 
-      <p className="text-xs text-slate-500">{statusMsg}</p>
-
-      {/* 已保存流程列表 */}
-      <details className="mt-2">
-        <summary className="text-xs text-slate-400 cursor-pointer">
-          已保存流程 ({processList.filter(p => p.valid).length})</summary>
-        <div className="mt-1 space-y-1">{processItems}</div>
-      </details>
+      {/* 状态栏 */}
+      <div className="px-4 py-1 bg-slate-900 text-slate-300 text-xs flex justify-between">
+        <span>{statusMsg}</span>
+        <span>{currentFile}</span>
+      </div>
     </div>
   );
+}
 
-  // --- 内部辅助 ---
-  function TestRunPanelLazy() {
-    return (
-      <div className="space-y-2 p-1">
-        <p className="text-[10px] font-semibold text-slate-400 uppercase">
-          沙盒试运行</p>
-        <p className="text-xs text-slate-400 p-2">
-          试运行由 M-B 后续迭代提供完整 UI；当前通过 CLI 触发</p>
-        <button onClick={() => void syncToYaml()}
-          className="px-3 py-1 text-xs border rounded hover:bg-slate-50">
-          同步 YAML
-        </button>
-      </div>
-    );
-  }
-
-  function CatalogPanel() {
-    return (
-      <div className="space-y-1">
-        <p className="text-[10px] font-semibold text-slate-400 uppercase">动作目录</p>
-        <input className="w-full px-2 py-1 text-xs border rounded"
-               placeholder="搜索动作…" />
-        <p className="text-xs text-slate-400 p-2">
-          完整动作目录需接入 /api/registry/actions（M-B 后续迭代）</p>
-      </div>
-    );
-  }
+function post(path: string, json: unknown) {
+  return fetch(`/api${path}`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(json),
+  }).then(r => r.json());
 }

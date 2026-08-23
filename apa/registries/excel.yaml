@@ -109,3 +109,20 @@ excel.add_sheet:
   risk: L1
   timeout_ms: 30000
   retries: 0
+excel.append_rows:
+  executor_domain: excel
+  description: "批量追加多行（单次落盘；rows=[[...],[...]]）"
+  params:
+    type: object
+    required: [file, rows]
+    properties:
+      file: { type: string }
+      sheet: { type: string }
+      rows:
+        type: array
+        items:
+          type: array
+  idempotency: none
+  risk: L1
+  timeout_ms: 120000
+  retries: 0

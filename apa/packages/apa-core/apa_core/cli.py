@@ -87,7 +87,9 @@ def _cmd_serve(args) -> int:
 
 
 def _cmd_latency(args) -> int:
-    bench_dir = Path(__file__).resolve().parents[2] / "benchmarks"
+    from pathlib import Path as _P
+
+    bench_dir = _P(__file__).resolve().parents[3] / "benchmarks"
     sys.path.insert(0, str(bench_dir))
     from benchmarks.latency import run as latency_run  # type: ignore
 

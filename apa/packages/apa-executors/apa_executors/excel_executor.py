@@ -68,6 +68,7 @@ class ExcelExecutor(AIPExecutor):
         handlers = {
             "excel.read_range": self._read_range,
             "excel.append_row": self._append_row,
+            "excel.append_rows": self._append_rows,
             "excel.write_cell": self._write_cell,
             "excel.get_formula": self._get_formula,
             "excel.set_formula": self._set_formula,
@@ -129,6 +130,23 @@ class ExcelExecutor(AIPExecutor):
             self._atomic_save(wb, p["file"])
             return True, {
                 "appended": len(values),
+                "row_index": ws.max_row,
+                "sheet": ws.title,
+            }
+        finally:
+            wb.close()
+
+    def _append_rows(self, p: dict) -> Tuple[bool, dict]:
+        """批量追加多行（单次落盘，万行级吞吐）。"""
+        rows = p["rows"]
+        wb = self._wb(p["file"])
+        try:
+            ws = wb[p["sheet"]] if p.get("sheet") else wb.active
+            for r in rows:
+                ws.append(r)
+            self._atomic_save(wb, p["file"])
+            return True, {
+                "appended": len(rows),
                 "row_index": ws.max_row,
                 "sheet": ws.title,
             }

@@ -169,3 +169,21 @@ browser.take_screenshot:
   timeout_ms: 5000
   retries: 2
   audit_fields: [output_context]
+browser.extract_table:
+  executor_domain: browser
+  description: "结构化表格抓取：按行选择器+列选择器提取多行数据"
+  params:
+    type: object
+    required: [row_selector, columns]
+    properties:
+      row_selector: { type: string, description: "行级 CSS 选择器" }
+      columns:
+        type: object
+        description: "字段名→列内子选择器映射"
+        additionalProperties: { type: string }
+      max_rows: { type: integer, minimum: 1, maximum: 1000 }
+  idempotency: idempotent
+  risk: L0
+  timeout_ms: 60000
+  retries: 1
+  audit_fields: [row_selector]

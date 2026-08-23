@@ -48,6 +48,11 @@ class PageOps:
     def inner_text(self, target: str) -> str:
         raise NotImplementedError
 
+    def extract_table(self, row_selector: str,
+                      columns: Dict[str, str],
+                      max_rows: int = 100) -> List[Dict[str, str]]:
+        raise NotImplementedError
+
     def select_option(self, target: str, value: str) -> None:
         raise NotImplementedError
 
@@ -114,6 +119,24 @@ class PlaywrightPageOps(PageOps):
 
     def inner_text(self, target: str) -> str:
         return self._locator(target).inner_text()
+
+    def extract_table(self, row_selector: str,
+                      columns: Dict[str, str],
+                      max_rows: int = 100) -> List[Dict[str, str]]:
+        """结构化表格抓取：按行选择器 + 每列子选择器提取。"""
+        rows_out: List[Dict[str, str]] = []
+        row_locs = self.page.locator(row_selector)
+        count = min(row_locs.count(), max_rows)
+        for i in range(count):
+            row: Dict[str, str] = {}
+            for field, col_sel in columns.items():
+                try:
+                    row[field] = row_locs.nth(i).locator(col_sel) \
+                        .first.inner_text().strip()
+                except Exception:
+                    row[field] = ""
+            rows_out.append(row)
+        return rows_out
 
     def select_option(self, target: str, value: str) -> None:
         self._locator(target).select_option(value)
@@ -313,6 +336,20 @@ class BrowserExecutor(AIPExecutor):
             case "browser.scroll":
                 self.page.scroll(params["direction"])
                 return True, {"direction": params["direction"]}
+
+            case "browser.extract_table":
+                rows = self.page.extract_table(
+                    params["row_selector"],
+                    params["columns"],
+                    params.get("max_rows", 100),
+                )
+                ref = params.get("output_context",
+                                 self.context_store.make_ref(
+                                     self.peer.session_id, "table"))
+                self.context_store.put(ref, {"rows": rows,
+                                             "count": len(rows)})
+                self._record(name, params)
+                return True, {"output_context": ref, "count": len(rows)}
 
             case "browser.take_screenshot":
                 data = self.page.screenshot_bytes()

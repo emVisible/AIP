@@ -257,11 +257,13 @@ class ProcessEngine:
         *,
         decision_fn: Optional[Callable[[list, list], dict]] = None,
         complete_fn: Optional[Callable[[str], None]] = None,
+        process_loader: Optional[Callable[[str], "ProcessDef"]] = None,
     ) -> None:
         self.proc = proc
         self.send_fn = send_fn
         self.decision_fn = decision_fn
         self.complete_fn = complete_fn
+        self.process_loader = process_loader
         self.run = ProcessRun(proc)
 
     # --- 入口 ---------------------------------------------------------------
@@ -298,6 +300,10 @@ class ProcessEngine:
         # ---- foreach 循环（对标 RF FOR / 影刀循环指令）----
         if step.type == "foreach":
             return self._exec_foreach(step)
+
+        # ---- 子流程调用 ----
+        if step.type == "sub_process":
+            return self._exec_sub_process(step)
 
         # ---- AI 决策节点 ----
         if step.type == "ai_decision":
@@ -408,6 +414,68 @@ class ProcessEngine:
             "iterations": len(results), "all_ok": all_ok,
         })
         return all_ok
+
+    def _exec_sub_process(self, step: StepDef) -> bool:
+        """子流程调用：加载并执行另一个 process.yaml。
+
+        YAML 示例：
+            - id: validate
+              type: sub_process
+              params:
+                process_id: order_validation
+                input:
+                  order_id: "{{event.order_id}}"
+        """
+        run = self.run
+        key = step.output_as or step.id
+
+        if self.process_loader is None:
+            run.scopes.setdefault("steps", {})[key] = {
+                "outcome": "no_loader"}
+            run.steps.append({"step": step.id, "type": "sub_process",
+                              "status": "skipped_no_loader"})
+            return True
+
+        pid = render(step.params.get("process_id"), run.scopes)
+        try:
+            sub_form = self.process_loader(pid)
+        except Exception as e:
+            run.steps.append({"step": step.id, "type": "sub_process",
+                              "status": "load_failed", "detail": str(e)})
+            return self._goto_handler(step, reason="sub_process_load_failed")
+
+        if sub_form is None:
+            run.steps.append({"step": step.id, "type": "sub_process",
+                              "status": "not_found", "process_id": pid})
+            return self._goto_handler(step, reason="sub_process_not_found")
+
+        input_data = render(step.params.get("input") or {}, run.scopes) or {}
+
+        sub_engine = ProcessEngine(
+            sub_form,
+            self.send_fn,
+            decision_fn=self.decision_fn,
+            process_loader=self.process_loader,
+        )
+        merged_event: Dict[str, Any] = dict(run.scopes.get("event") or {})
+        if isinstance(input_data, dict):
+            merged_event.update(input_data)
+        sub_engine.run.scopes["event"] = merged_event
+        for k, v in run.scopes.get("steps", {}).items():
+            sub_engine.run.scopes.setdefault("steps", {})[k] = v
+
+        sub_engine._run_from(0)
+        outcome = sub_engine.run.outcome or "unknown"
+        run.actions_sent += sub_engine.run.actions_sent
+        run.scopes.setdefault("steps", {})[key] = {
+            "outcome": outcome,
+            "steps_log": sub_engine.run.steps,
+        }
+        run.steps.append({"step": step.id, "type": "sub_process",
+                          "process_id": pid, "outcome": outcome})
+        if outcome != "success":
+            return self._goto_handler(step, reason=f"sub_process_{outcome}")
+        return True
 
     def _goto_handler(self, step: StepDef, *, reason: str,
                       default_goto: Optional[str] = None) -> bool:

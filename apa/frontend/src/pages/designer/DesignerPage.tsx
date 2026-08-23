@@ -19,6 +19,9 @@ import { CatalogPanel } from "../../components/designer/CatalogPanel";
 import { ParamsPanel } from "../../components/designer/ParamsPanel";
 import { TestRunPanel } from "../../components/designer/TestRunPanel";
 
+/** 模板信息（/api/templates 返回结构）。 */
+interface TemplateInfo { id: string; name: string; description: string; yaml: string }
+
 interface DStep {
   id: string;
   type: string;
@@ -36,6 +39,31 @@ function blankStep(i: number): DStep {
     params_json: "{}", condition: "", output_as: "",
     on_failure_goto: "",
   };
+}
+
+/** 按目录选择生成带模板参数的步骤（流程控制节点预填骨架）。 */
+function stepFromAction(action: string, i: number): DStep {
+  const base = blankStep(i);
+  if (action === "flow.foreach") {
+    return { ...base, type: "foreach", id: `loop_${i + 1}`,
+      params_json: JSON.stringify({
+        source: "{{steps.extract_table.rows}}", item_var: "row",
+        body_action: "", body_params: {},
+      }, null, 2) };
+  }
+  if (action === "flow.sub_process") {
+    return { ...base, type: "sub_process", id: `sub_${i + 1}`,
+      params_json: JSON.stringify({
+        process_id: "", input: {},
+      }, null, 2) };
+  }
+  if (action === "flow.ai_decision") {
+    return { ...base, type: "ai_decision", id: `decision_${i + 1}`,
+      params_json: JSON.stringify({
+        context: [], available_actions: [],
+      }, null, 2) };
+  }
+  return { ...base, action };
 }
 
 type StepNodeData = { label: string; sub?: string; tone: string };
@@ -181,6 +209,18 @@ export function DesignerPage() {
     api<ProcessInfo[]>("/api/processes").then(setProcessList).catch(() => {});
   }
 
+  async function importTemplate(t: TemplateInfo) {
+    try {
+      setYamlText(t.yaml);
+      await loadFromYaml();
+      setMetaId(`${t.id}_${Date.now().toString(36).slice(-4)}`);
+      setCurrentFile("");
+      setStatusMsg(`已从模板导入 ${t.name} ✓（记得另存）`);
+    } catch (e) {
+      setStatusMsg(`模板导入失败: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
   async function openFile(fileId: string) {
     try {
       const d = await api<{ yaml: string }>(`/api/processes/get/${fileId}`);
@@ -219,8 +259,8 @@ export function DesignerPage() {
 
         {/* 左：动作目录 */}
         <div className="border-r p-3 overflow-y-auto bg-white">
-          <CatalogPanel onInsert={(_action: string) => {
-            setSteps(prev => [...prev, blankStep(prev.length)]);
+          <CatalogPanel onInsert={(action: string) => {
+            setSteps(prev => [...prev, stepFromAction(action, prev.length)]);
           }} />
         </div>
 
@@ -248,7 +288,7 @@ export function DesignerPage() {
                     : "border-slate-200 bg-white"}`}>
                 <span className="font-semibold mr-2">{i + 1}. {s.id}</span>
                 <span className="text-slate-400 font-mono">
-                  {s.action || "(未设置)"}
+                  {s.action || (s.type ? `[${s.type}]` : "(未设置)")}
                 </span>
               </div>
             ))}
@@ -320,6 +360,9 @@ export function DesignerPage() {
 
           <TestRunPanel yaml={yamlText} />
 
+          {/* 模板库 */}
+          <TemplateLibrary onPick={importTemplate} />
+
           {/* 已保存流程列表 */}
           <details className="mt-3">
             <summary className="text-xs text-slate-400 cursor-pointer">
@@ -359,4 +402,41 @@ function post(path: string, json: unknown) {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify(json),
   }).then(r => r.json());
+}
+
+/** 模板库侧栏：从 /api/templates 拉取，点击导入画布。 */
+function TemplateLibrary({ onPick }: { onPick: (t: TemplateInfo) => void }) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<TemplateInfo[]>([]);
+
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    if (next && !items.length) {
+      api<{ templates: TemplateInfo[] }>("/api/templates")
+        .then(d => setItems(d.templates ?? []))
+        .catch(() => {});
+    }
+  }
+
+  return (
+    <details className="mt-3" open={open} onToggle={(e) => {
+      if ((e.target as HTMLDetailsElement).open !== open) toggle();
+    }}>
+      <summary className="text-xs text-slate-400 cursor-pointer">模板库</summary>
+      <div className="mt-1 space-y-0.5">
+        {items.map(t => (
+          <div key={t.id}
+               onClick={() => void onPick(t)}
+               className="px-2 py-1 text-xs hover:bg-violet-50 rounded
+                          cursor-pointer text-violet-700">
+            📋 {t.name}
+          </div>
+        ))}
+        {!items.length && (
+          <p className="text-xs text-slate-300">（加载中…）</p>
+        )}
+      </div>
+    </details>
+  );
 }

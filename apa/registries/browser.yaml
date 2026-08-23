@@ -171,7 +171,7 @@ browser.take_screenshot:
   audit_fields: [output_context]
 browser.extract_table:
   executor_domain: browser
-  description: "结构化表格抓取：按行选择器+列选择器提取多行数据"
+  description: "结构化表格抓取：按行选择器+列选择器提取多行数据（只读）"
   params:
     type: object
     required: [row_selector, columns]
@@ -182,7 +182,7 @@ browser.extract_table:
         description: "字段名→列内子选择器映射"
         additionalProperties: { type: string }
       max_rows: { type: integer, minimum: 1, maximum: 1000 }
-  idempotency: idempotent
+  idempotency: required
   risk: L0
   timeout_ms: 60000
   retries: 1

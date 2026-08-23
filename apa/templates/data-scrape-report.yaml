@@ -1,0 +1,35 @@
+# 模板：网页数据抓取 → 过滤 → 邮件报表（影刀「数据抓取+报表」经典场景）
+process:
+  id: data_scrape_report
+  mode: process
+  trigger: { type: manual }
+  max_actions: 50
+  steps:
+    - id: open_page
+      action: browser.navigate
+      params: { url: "https://example.com/orders" }
+
+    - id: scrape_table
+      action: browser.extract_table
+      params:
+        row_selector: "table.orders tr"
+        columns:
+          order_id: ".order-id"
+          customer: ".customer"
+          amount: ".amount"
+        max_rows: 200
+
+    - id: big_orders
+      action: data.filter
+      params:
+        column: amount
+        op: ">"
+        value: 1000
+
+    - id: report
+      action: email.send
+      params:
+        to: "boss@example.com"
+        subject: "大额订单日报 ({{steps.big_orders.count}} 笔)"
+        body_type: html
+        body: "<p>今日大额订单 {{steps.big_orders.count}} 笔，详见附件系统。</p>"

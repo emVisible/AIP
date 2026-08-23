@@ -1,0 +1,23 @@
+# 模板：批量订单审批 —— foreach 循环 + 子流程复用
+process:
+  id: batch_approve
+  mode: process
+  trigger: { type: event, name: erp.batch.ready }
+  max_actions: 100
+  steps:
+    - id: loop_orders
+      type: foreach
+      params:
+        source: "{{event.order_ids}}"
+        item_var: oid
+        body_action: context.set
+        body_params:
+          key: "last_approved"
+          value: "{{oid}}"
+
+    - id: done
+      action: email.send
+      params:
+        to: "ops@example.com"
+        subject: "批量审批完成"
+        body: "共处理 {{steps.loop_orders.count}} 笔订单。"

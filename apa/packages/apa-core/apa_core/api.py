@@ -120,6 +120,30 @@ def create_app(
     async def list_processes():
         return server.list_processes()
 
+    @app.get("/api/templates")
+    async def list_templates():
+        """内置场景模板库（只读，供设计器一键导入）。"""
+        import pathlib
+        tdir = pathlib.Path(__file__).resolve().parents[3] / "templates"
+        items = []
+        if tdir.is_dir():
+            for f in sorted(tdir.glob("*.yaml")):
+                try:
+                    import yaml as _y
+                    doc = _y.safe_load(f.read_text(encoding="utf-8")) or {}
+                    proc = doc.get("process") or {}
+                    items.append({
+                        "id": f.stem,
+                        "name": proc.get("id", f.stem),
+                        "description": (doc.get("process", {}).get(
+                            "description") or
+                            f.stem.replace("-", " ")),
+                        "yaml": f.read_text(encoding="utf-8"),
+                    })
+                except Exception:
+                    continue
+        return {"templates": items}
+
     @app.get("/api/processes/get/{proc_id}")
     async def get_process(proc_id: str):
         content = server.load_process_yaml(proc_id)

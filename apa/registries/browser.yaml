@@ -55,6 +55,7 @@ browser.input:
 browser.select_option:
   executor_domain: browser
   description: "选择下拉选项"
+  when_to_use: "下拉框选择选项"
   params:
     type: object
     required: [target, value]
@@ -70,6 +71,7 @@ browser.select_option:
 browser.extract:
   executor_domain: browser
   description: "按选择器提取文本到 ContextStore"
+  when_to_use: "提取页面元素文本（单值）"
   params:
     type: object
     required: [selectors]
@@ -198,6 +200,7 @@ browser.extract_table:
 browser.tab_new:
   executor_domain: browser
   description: "新开标签页并可导航，激活为新活动页"
+  when_to_use: "多标签操作：新开标签页"
   params:
     type: object
     properties:
@@ -212,6 +215,7 @@ browser.tab_new:
 browser.tab_list:
   executor_domain: browser
   description: "列出全部标签页（ref/url/title/active）"
+  when_to_use: "列出全部标签页供切换参考"
   params: { type: object, properties: {} }
   idempotency: required
   risk: L0
@@ -221,6 +225,7 @@ browser.tab_list:
 browser.tab_switch:
   executor_domain: browser
   description: "切换活动标签页"
+  when_to_use: "切换活动标签页"
   params:
     type: object
     required: [ref]
@@ -233,6 +238,7 @@ browser.tab_switch:
 browser.tab_close:
   executor_domain: browser
   description: "关闭标签页（缺省当前页；关最后一张自动补空白页）"
+  when_to_use: "关闭标签页"
   params:
     type: object
     properties: { ref: { type: string } }
@@ -244,6 +250,7 @@ browser.tab_close:
 browser.execute_js:
   executor_domain: browser
   description: "在活动页执行 JS（可能有副作用，不重试）"
+  when_to_use: "执行自定义 JS 脚本操作 DOM 或获取数据"
   params:
     type: object
     required: [script]
@@ -258,6 +265,7 @@ browser.execute_js:
 browser.upload:
   executor_domain: browser
   description: "向 file input 上传本地文件（同参重传幂等）"
+  when_to_use: "向文件上传控件提交本地文件"
   params:
     type: object
     required: [target, files]
@@ -272,6 +280,7 @@ browser.upload:
 browser.download:
   executor_domain: browser
   description: "下载文件：url 直链（携带会话 Cookie）或 trigger_target 点击触发；同参重下幂等"
+  when_to_use: "下载文件到本地路径"
   params:
     type: object
     required: [path]
@@ -320,6 +329,7 @@ browser.cookies_clear:
 browser.hover:
   executor_domain: browser
   description: "悬停目标元素"
+  when_to_use: "悬停触发 hover 菜单/提示"
   params:
     type: object
     required: [target]
@@ -332,6 +342,7 @@ browser.hover:
 browser.double_click:
   executor_domain: browser
   description: "双击目标元素"
+  when_to_use: "双击元素（编辑进入/选中行）"
   params:
     type: object
     required: [target]
@@ -344,6 +355,7 @@ browser.double_click:
 browser.right_click:
   executor_domain: browser
   description: "右键点击目标元素"
+  when_to_use: "右键打开上下文菜单"
   params:
     type: object
     required: [target]
@@ -356,6 +368,7 @@ browser.right_click:
 browser.get_page_info:
   executor_domain: browser
   description: "读取活动页 url 与标题"
+  when_to_use: "读取当前 URL 与标题（条件判断/日志）"
   params: { type: object, properties: {} }
   idempotency: required
   risk: L0
@@ -365,6 +378,7 @@ browser.get_page_info:
 browser.element_attr:
   executor_domain: browser
   description: "读取目标元素属性值"
+  when_to_use: "读取元素属性值（href/class/data-*）"
   params:
     type: object
     required: [target, attr]
@@ -383,6 +397,7 @@ browser.element_attr:
 browser.iframe_switch:
   executor_domain: browser
   description: "进入子 frame（后续定位在其内解析；可嵌套）"
+  when_to_use: "进入 iframe 子文档定位元素"
   params:
     type: object
     properties:
@@ -398,6 +413,7 @@ browser.iframe_switch:
 browser.frame_reset:
   executor_domain: browser
   description: "返回主文档 frame"
+  when_to_use: "返回主文档 frame"
   params: { type: object, properties: {} }
   idempotency: required
   risk: L0
@@ -407,6 +423,7 @@ browser.frame_reset:
 browser.storage_state_save:
   executor_domain: browser
   description: "保存登录态（cookies+storage → JSON），跨次运行免登录"
+  when_to_use: "保存登录态跨次运行免登录"
   params:
     type: object
     required: [path]
@@ -419,6 +436,7 @@ browser.storage_state_save:
 browser.storage_state_load:
   executor_domain: browser
   description: "加载已保存登录态（同源重放幂等）"
+  when_to_use: "加载已保存登录态"
   params:
     type: object
     required: [path]
@@ -474,6 +492,7 @@ browser.get_similar_elements:
 browser.dialog_handle:
   executor_domain: browser
   description: "武装一次性对话框处理器（accept/dismiss/prompt 填文）"
+  when_to_use: "处理浏览器弹窗 alert/confirm/prompt"
   params:
     type: object
     properties:
@@ -487,6 +506,7 @@ browser.dialog_handle:
 browser.drag_drop:
   executor_domain: browser
   description: "从源元素拖拽到目标元素"
+  when_to_use: "拖拽元素到目标位置"
   params:
     type: object
     required: [from, to]

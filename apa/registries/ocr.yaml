@@ -37,6 +37,7 @@ ocr.extract:
 ocr.screen_text:
   executor_domain: ocr
   description: "屏幕区域文字识别（Apple Vision，需屏幕录制权限）"
+  when_to_use: "屏幕区域文字识别（非网页内容的 OCR 读取）"
   params:
     type: object
     properties:
@@ -55,6 +56,7 @@ ocr.screen_text:
 ocr.wait_text:
   executor_domain: ocr
   description: "轮询等待屏幕文字出现（超时返回 text_timeout）"
+  when_to_use: "等待屏幕出现目标文字再继续"
   params:
     type: object
     required: [text]
@@ -77,6 +79,7 @@ ocr.wait_text:
 if.text_on_screen:
   executor_domain: ocr
   description: "谓词：屏幕上存在目标文字(OCR) → matched + bounds"
+  when_to_use: "谓词：屏幕上是否存在目标文字"
   params:
     type: object
     required: [text]

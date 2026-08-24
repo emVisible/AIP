@@ -5,6 +5,7 @@
 excel.read_range:
   executor_domain: excel
   description: "读取工作表区域 → 列名+行数据"
+  when_to_use: "读取 Excel 区域数据 → 管道源"
   params:
     type: object
     required: [file]
@@ -21,6 +22,7 @@ excel.read_range:
 excel.append_row:
   executor_domain: excel
   description: "追加一行数据到工作表末尾"
+  when_to_use: "Excel 追加一行（逐条写入）"
   params:
     type: object
     required: [file, values]
@@ -38,6 +40,7 @@ excel.append_row:
 excel.write_cell:
   executor_domain: excel
   description: "写单元格值（同值重写幂等）"
+  when_to_use: "写单元格值"
   params:
     type: object
     required: [file, cell, value]
@@ -69,6 +72,7 @@ excel.get_formula:
 excel.set_formula:
   executor_domain: excel
   description: "写单元格公式（自动补 = 前缀；同式重写幂等）"
+  when_to_use: "写公式（SUM/VLOOKUP 等）"
   params:
     type: object
     required: [file, cell, formula]
@@ -184,6 +188,7 @@ excel.set_column_width:
 excel.add_chart:
   executor_domain: excel
   description: "插入柱状/折线图（重复执行会叠加图表，非幂等）"
+  when_to_use: "插入图表（柱状/折线）"
   params:
     type: object
     required: [file, data_range]
@@ -203,6 +208,7 @@ excel.add_chart:
 excel.rename_sheet:
   executor_domain: excel
   description: "重命名工作表（状态迁移，不重试）"
+  when_to_use: "重命名工作表"
   params:
     type: object
     required: [file, old, new]

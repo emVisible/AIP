@@ -22,6 +22,7 @@ data.create:
 data.filter:
   executor_domain: data
   description: "按列条件过滤表格行"
+  when_to_use: "按条件过滤表格行（金额>阈值/状态=待审）"
   params:
     type: object
     required: [source, column, op, value]
@@ -39,6 +40,7 @@ data.filter:
 data.sort:
   executor_domain: data
   description: "按列排序表格"
+  when_to_use: "按列排序"
   params:
     type: object
     required: [source, column]
@@ -153,6 +155,7 @@ email.send:
 string.regex_extract:
   executor_domain: data
   description: "正则提取所有匹配（可指定分组）"
+  when_to_use: "正则提取匹配（工单号/金额/日期）"
   params:
     type: object
     required: [text, pattern]
@@ -234,6 +237,7 @@ string.lower:
 string.format_template:
   executor_domain: data
   description: "{name} 占位模板填充（缺变量保留原样）"
+  when_to_use: "{name} 占位模板填充（邮件正文/通知）"
   params:
     type: object
     required: [template]
@@ -278,6 +282,7 @@ string.starts_with:
 string.contains:
   executor_domain: data
   description: "包含判断（可选忽略大小写）"
+  when_to_use: "包含判断（分类路由/质检规则）"
   params:
     type: object
     required: [text, needle]
@@ -472,6 +477,7 @@ uuid.gen:
 data.aggregate:
   executor_domain: data
   description: "列聚合 sum/avg/min/max/count"
+  when_to_use: "列聚合 sum/avg/min/max/count"
   params:
     type: object
     required: [source, column]
@@ -487,6 +493,7 @@ data.aggregate:
 data.distinct:
   executor_domain: data
   description: "按列去重保留首现行"
+  when_to_use: "按列去重"
   params:
     type: object
     required: [source, column]
@@ -518,6 +525,7 @@ data.slice:
 data.json_to_table:
   executor_domain: data
   description: "dict 列表 → 内存表格（列取键并集保序）"
+  when_to_use: "JSON 数组转内存表格"
   params:
     type: object
     required: [items]
@@ -688,6 +696,7 @@ email.receive:
 data.merge:
   executor_domain: data
   description: "两表合并：concat 纵向拼接 / inner|left 按 key 连接"
+  when_to_use: "两表拼接或按键连接"
   params:
     type: object
     required: [a, b]
@@ -894,6 +903,7 @@ db.sqlite.execute:
 notify.dingtalk:
   executor_domain: data
   description: "钉钉群机器人通知（text/markdown，可 @ 手机号）"
+  when_to_use: "钉钉群机器人预警/日报推送"
   params:
     type: object
     required: [webhook_url, message]
@@ -911,6 +921,7 @@ notify.dingtalk:
 notify.wecom_webhook:
   executor_domain: data
   description: "企业微信群机器人 markdown 通知"
+  when_to_use: "企微群 markdown 通知"
   params:
     type: object
     required: [webhook_url, message]
@@ -926,6 +937,7 @@ notify.wecom_webhook:
 notify.feishu_webhook:
   executor_domain: data
   description: "飞书群机器人文本通知"
+  when_to_use: "飞书群文本通知"
   params:
     type: object
     required: [webhook_url, message]

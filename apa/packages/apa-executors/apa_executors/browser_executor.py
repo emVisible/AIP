@@ -503,6 +503,64 @@ class BrowserExecutor(AIPExecutor):
                 self.page.reset_frame()
                 return True, {"frame": "main"}
 
+            case "browser.get_similar_elements":
+                sel = params["selector"]
+                limit = int(params.get("limit", 100))
+                locs = self.page.resolve(sel)
+                count = min(locs.count(), limit)
+                items = []
+                for i in range(count):
+                    el = locs.nth(i)
+                    try:
+                        text = el.inner_text().strip()[:120]
+                    except Exception:
+                        text = ""
+                    try:
+                        bb = el.bounding_box() or {}
+                    except Exception:
+                        bb = {}
+                    items.append({"index": i, "text": text,
+                                  "bounds": {k: round(v, 1)
+                                              for k, v in bb.items()}
+                                  if bb else None})
+                ref = params.get("output_context")
+                if ref and self.context_store is not None:
+                    r = self.context_store.make_ref(self.peer.session_id,
+                                                     str(ref))
+                    self.context_store.put(r, {"elements": items,
+                                                "count": len(items)})
+                return True, {"elements": items, "count": len(items),
+                              **({"output_context": ref} if ref else {})}
+
+            case "browser.dialog_handle":
+                # 注册一次性 dialog 处理器：下一个弹窗自动应答
+                action = params.get("action", "accept")
+                prompt_text = str(params.get("prompt_text", ""))
+
+                def _on_dialog(dlg):
+                    try:
+                        if dlg.type == "prompt" and \
+                                action == "accept":
+                            dlg.accept(prompt_text)
+                        elif action == "dismiss":
+                            dlg.dismiss()
+                        else:
+                            dlg.accept()
+                    finally:
+                        self.page.page.remove_listener(
+                            "dialog", _on_dialog)
+
+                self.page.page.on("dialog", _on_dialog)
+                return True, {"armed": action}
+
+            case "browser.drag_drop":
+                src = self.page.resolve(params["from"])
+                dst = self.page.resolve(params["to"])
+                src.drag_to(dst)
+                self._record(name, params)
+                return True, {"from": params["from"],
+                              "to": params["to"]}
+
             case "if.element_visible":
                 try:
                     visible = self.page.resolve(

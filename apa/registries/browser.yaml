@@ -454,3 +454,47 @@ if.url_contains:
   timeout_ms: 5000
   retries: 2
 
+
+
+browser.get_similar_elements:
+  executor_domain: browser
+  description: "获取相似元素列表（循环相似元素的 foreach source）"
+  params:
+    type: object
+    required: [selector]
+    properties:
+      selector: { type: string }
+      limit: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      output_context: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 2
+
+browser.dialog_handle:
+  executor_domain: browser
+  description: "武装一次性对话框处理器（accept/dismiss/prompt 填文）"
+  params:
+    type: object
+    properties:
+      action: { enum: [accept, dismiss], default: accept }
+      prompt_text: { type: string }
+  idempotency: none
+  risk: L1
+  timeout_ms: 15000
+  retries: 0
+
+browser.drag_drop:
+  executor_domain: browser
+  description: "从源元素拖拽到目标元素"
+  params:
+    type: object
+    required: [from, to]
+    properties:
+      from: { type: string }
+      to: { type: string }
+  idempotency: none
+  risk: L1
+  timeout_ms: 30000
+  retries: 0
+

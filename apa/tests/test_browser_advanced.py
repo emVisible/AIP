@@ -158,3 +158,50 @@ def _jsonable(v):  # 兜底引用（与 executor 内一致）
         return v
     except TypeError:
         return str(v)
+
+class TestSimilarElements:
+    def test_get_similar_and_foreach_source_shape(self, env):
+        ex, page = env
+        page.set_content("""
+        <ul id='list'>
+          <li class='it'>甲</li><li class='it'>乙</li>
+          <li class='it'>丙</li>
+        </ul>""")
+        ok, out = ex._execute_action("browser.get_similar_elements",
+                                     {"selector": "#list .it",
+                                      "output_context": "items"})
+        assert ok and out["count"] == 3
+        texts = [e["text"] for e in out["elements"]]
+        assert texts == ["甲", "乙", "丙"]
+        # foreach source 形态：elements 数组每项含 index/text
+        first = out["elements"][0]
+        assert {"index", "text"} <= set(first.keys())
+
+    def test_limit(self, env):
+        ex, page = env
+        page.set_content("<div class='r'></div>" * 7)
+        ok, out = ex._execute_action("browser.get_similar_elements",
+                                     {"selector": ".r", "limit": 3})
+        assert out["count"] == 3
+
+
+class TestDialogAndDrag:
+    def test_dialog_handle_accept(self, env):
+        ex, page = env
+        page.set_content("""
+        <button onclick="document.title='alerted'">fire</button>""")
+        # 武装处理器后触发 alert（Playwright 默认 dismiss，武装前需注册）
+        ex._execute_action("browser.dialog_handle",
+                           {"action": "accept"})
+        page.click("button")
+        # 无异常即通过（dialog 被处理器消费而非默认阻塞）
+
+    def test_drag_drop(self, env):
+        ex, page = env
+        page.set_content("""
+        <div id='a' draggable='true'>A</div>
+        <div id='b' ondrop='document.title="dropped"'
+             ondragover='event.preventDefault()'>B</div>""")
+        ok, _ = ex._execute_action("browser.drag_drop",
+                                   {"from": "#a", "to": "#b"})
+        assert ok

@@ -1293,3 +1293,237 @@ notify.feishu_webhook:
   risk: L1
   timeout_ms: 15000
   retries: 0
+
+# ============================================================
+# P24-M1 列表操作
+# ============================================================
+list.create:
+  executor_domain: data
+  description: "创建列表（可含初始元素）"
+  params:
+    type: object
+    properties:
+      key: { type: string, default: my_list }
+      items: { type: array }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+list.append:
+  executor_domain: data
+  description: "列表尾部追加元素"
+  params:
+    type: object
+    required: [item]
+    properties:
+      key: { type: string, default: my_list }
+      item: {}
+  idempotency: none
+  risk: L0
+  timeout_ms: 5000
+  retries: 0
+
+list.insert:
+  executor_domain: data
+  description: "指定下标插入元素"
+  params:
+    type: object
+    required: [index, item]
+    properties:
+      key: { type: string, default: my_list }
+      index: { type: integer, minimum: 0 }
+      item: {}
+  idempotency: none
+  risk: L0
+  timeout_ms: 5000
+  retries: 0
+
+list.remove_at:
+  executor_domain: data
+  description: "按下标移除元素"
+  params:
+    type: object
+    required: [key, index]
+    properties:
+      key: { type: string }
+      index: { type: integer, minimum: 0 }
+  idempotency: none
+  risk: L0
+  timeout_ms: 5000
+  retries: 0
+
+list.remove_value:
+  executor_domain: data
+  description: "按值移除首个匹配元素"
+  params:
+    type: object
+    required: [key, value]
+    properties:
+      key: { type: string }
+      value: {}
+  idempotency: none
+  risk: L0
+  timeout_ms: 5000
+  retries: 0
+
+list.get:
+  executor_domain: data
+  description: "按下标取值"
+  params:
+    type: object
+    required: [key, index]
+    properties:
+      key: { type: string }
+      index: { type: integer, minimum: 0 }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+list.set:
+  executor_domain: data
+  description: "按下标覆盖元素"
+  params:
+    type: object
+    required: [key, index, item]
+    properties:
+      key: { type: string }
+      index: { type: integer, minimum: 0 }
+      item: {}
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 1
+
+list.length:
+  executor_domain: data
+  description: "列表长度"
+  params:
+    type: object
+    properties: { key: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+list.reverse:
+  executor_domain: data
+  description: "原地反转列表"
+  params:
+    type: object
+    properties: { key: { type: string } }
+  idempotency: none
+  risk: L0
+  timeout_ms: 5000
+  retries: 0
+
+list.sort:
+  executor_domain: data
+  description: "排序列表（可选按 dict 子键排序）"
+  params:
+    type: object
+    properties:
+      key: { type: string }
+      reverse: { type: boolean, default: false }
+      sort_key: { type: string, description: "dict 元素排序子键" }
+  idempotency: none
+  risk: L0
+  timeout_ms: 10000
+  retries: 0
+
+# ============================================================
+# P24-M1 字典操作
+# ============================================================
+dict.create:
+  executor_domain: data
+  description: "创建字典（可含初始键值对）"
+  params:
+    type: object
+    properties:
+      key: { type: string, default: my_dict }
+      initial: { type: object }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+dict.get:
+  executor_domain: data
+  description: "按键取值（支持 default）"
+  params:
+    type: object
+    required: [k]
+    properties:
+      key: { type: string, default: my_dict }
+      k: { type: string }
+      default: {}
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+dict.set:
+  executor_domain: data
+  description: "设置键值对"
+  params:
+    type: object
+    required: [k, v]
+    properties:
+      key: { type: string, default: my_dict }
+      k: { type: string }
+      v: {}
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+dict.has_key:
+  executor_domain: data
+  description: "判断键是否存在 → exists"
+  params:
+    type: object
+    required: [k]
+    properties:
+      key: { type: string }
+      k: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+dict.keys:
+  executor_domain: data
+  description: "返回全部键列表"
+  params:
+    type: object
+    properties: { key: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+dict.values:
+  executor_domain: data
+  description: "返回全部值列表"
+  params:
+    type: object
+    properties: { key: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+dict.remove:
+  executor_domain: data
+  description: "删除指定键"
+  params:
+    type: object
+    required: [k]
+    properties:
+      key: { type: string }
+      k: { type: string }
+  idempotency: none
+  risk: L0
+  timeout_ms: 5000
+  retries: 0

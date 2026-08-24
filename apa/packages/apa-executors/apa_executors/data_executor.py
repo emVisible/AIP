@@ -27,6 +27,8 @@ class DataExecutor(AIPExecutor):
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
         self._tables: Dict[str, dict] = {}
+        self._lists: Dict[str, list] = {}
+        self._dicts: Dict[str, dict] = {}
 
     def start_observation(self) -> None:
         pass
@@ -111,6 +113,24 @@ class DataExecutor(AIPExecutor):
             "notify.dingtalk": self._notify_dingtalk,
             "notify.wecom_webhook": self._notify_wecom,
             "notify.feishu_webhook": self._notify_feishu,
+            # ---- P24-M1 列表/字典 ----
+            "list.create": self._list_create,
+            "list.append": self._list_append,
+            "list.insert": self._list_insert,
+            "list.remove_at": self._list_remove_at,
+            "list.remove_value": self._list_remove_value,
+            "list.get": self._list_get,
+            "list.set": self._list_set,
+            "list.length": self._list_length,
+            "list.reverse": self._list_reverse,
+            "list.sort": self._list_sort,
+            "dict.create": self._dict_create,
+            "dict.get": self._dict_get,
+            "dict.set": self._dict_set,
+            "dict.has_key": self._dict_has_key,
+            "dict.keys": self._dict_keys,
+            "dict.values": self._dict_values,
+            "dict.remove": self._dict_remove,
         }
         fn = handler_map.get(name)
         if fn is None:
@@ -917,3 +937,140 @@ class DataExecutor(AIPExecutor):
             "content": {"text":
                 f"{p.get('title', 'APA')}: {p.get('message', '')}"},
         })
+
+    # ==== P24-M1 列表操作 =====================================================
+
+    def _get_list(self, key: str) -> list:
+        return self._lists.get(key, [])
+
+    def _list_create(self, p):
+        key = str(p.get("key", "my_list"))
+        items = p.get("items") or []
+        self._lists[key] = list(items)
+        return True, {"key": key, "count": len(items)}
+
+    def _list_append(self, p):
+        key = str(p.get("key", "my_list"))
+        if key not in self._lists:
+            self._lists[key] = []
+        self._lists[key].append(p.get("item"))
+        return True, {"count": len(self._lists[key])}
+
+    def _list_insert(self, p):
+        key = str(p.get("key", "my_list"))
+        idx = int(p.get("index", 0))
+        if key not in self._lists:
+            self._lists[key] = []
+        self._lists[key].insert(idx, p.get("item"))
+        return True, {"count": len(self._lists[key])}
+
+    def _list_remove_at(self, p):
+        key = str(p.get("key", "my_list"))
+        idx = int(p["index"])
+        lst = self._get_list(key)
+        if 0 <= idx < len(lst):
+            removed = lst.pop(idx)
+            return True, {"removed": removed}
+        return False, {"code": "index_out_of_range"}
+
+    def _list_remove_value(self, p):
+        key = str(p.get("key", "my_list"))
+        val = p.get("value")
+        lst = self._get_list(key)
+        try:
+            lst.remove(val)
+            return True, {"removed": val}
+        except ValueError:
+            return False, {"code": "value_not_found", "value": val}
+
+    def _list_get(self, p):
+        key = str(p.get("key", "my_list"))
+        idx = int(p["index"])
+        lst = self._get_list(key)
+        if 0 <= idx < len(lst):
+            return True, {"value": lst[idx]}
+        return False, {"code": "index_out_of_range"}
+
+    def _list_set(self, p):
+        key = str(p.get("key", "my_list"))
+        idx = int(p["index"])
+        lst = self._get_list(key)
+        if 0 <= idx < len(lst):
+            lst[idx] = p.get("item")
+            return True, {"updated": idx}
+        return False, {"code": "index_out_of_range"}
+
+    def _list_length(self, p):
+        return True, {"count": len(self._get_list(str(p.get("key", ""))))}
+
+    def _list_reverse(self, p):
+        key = str(p.get("key", ""))
+        lst = self._get_list(key)
+        lst.reverse()
+        self._lists[key] = lst
+        return True, {"count": len(lst)}
+
+    def _list_sort(self, p):
+        import operator
+
+        key_name = str(p.get("key", ""))
+        reverse = bool(p.get("reverse", False))
+        sort_key = p.get("sort_key")
+        lst = self._get_list(key_name)
+        try:
+            if sort_key and all(isinstance(x, dict) for x in lst):
+                sk = str(sort_key)
+                lst.sort(key=operator.itemgetter(sk), reverse=reverse)
+            else:
+                lst.sort(reverse=reverse)
+            self._lists[key_name] = lst
+            return True, {"count": len(lst)}
+        except TypeError as e:
+            return False, {"code": "sort_failed", "detail": str(e)}
+
+    # ==== P24-M1 字典操作 =====================================================
+
+    def _get_dict(self, key: str) -> dict:
+        return self._dicts.get(key, {})
+
+    def _dict_create(self, p):
+        key = str(p.get("key", "my_dict"))
+        initial = p.get("initial") or {}
+        self._dicts[key] = dict(initial)
+        return True, {"key": key, "count": len(initial)}
+
+    def _dict_get(self, p):
+        d = self._get_dict(str(p.get("key", "")))
+        k = p.get("k", p.get("key2", ""))
+        default = p.get("default")
+        val = d.get(k, default)
+        return True, {"value": val}
+
+    def _dict_set(self, p):
+        key = str(p.get("key", "my_dict"))
+        if key not in self._dicts:
+            self._dicts[key] = {}
+        k = str(p.get("k", ""))
+        self._dicts[key][k] = p.get("v")
+        return True, {"count": len(self._dicts[key])}
+
+    def _dict_has_key(self, p):
+        d = self._get_dict(str(p.get("key", "")))
+        return True, {"exists": str(p.get("k", "")) in d}
+
+    def _dict_keys(self, p):
+        d = self._get_dict(str(p.get("key", "")))
+        return True, {"keys": list(d.keys())}
+
+    def _dict_values(self, p):
+        d = self._get_dict(str(p.get("key", "")))
+        return True, {"values": list(d.values())}
+
+    def _dict_remove(self, p):
+        key = str(p.get("key", ""))
+        k = str(p.get("k", ""))
+        d = self._get_dict(key)
+        if k in d:
+            del d[k]
+            return True, {"removed": k}
+        return False, {"code": "key_not_found"}

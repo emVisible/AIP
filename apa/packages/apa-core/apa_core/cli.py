@@ -42,6 +42,21 @@ def _cmd_tasks(args) -> int:
     return human_main()
 
 
+
+def _ai_status() -> dict:
+    """决策引擎真实状态：env Key 存在 → cascade_llm 可用；否则 rules_only。
+
+    dsh 外部 agent 的接入状态在运行期由 WS 网关连接表动态判定，
+    此处仅报告配置面。
+    """
+    from .config import env_first
+
+    has_key = bool(env_first("APA_LLM_API_KEY", "DEEPSEEK_API_KEY"))
+    model = env_first("APA_LLM_MODEL", "DEEPSEEK_MODEL") or "deepseek-chat"
+    return {"mode": "cascade_llm" if has_key else "rules_only",
+            "model": model}
+
+
 def _cmd_serve(args) -> int:
     import uvicorn
 
@@ -53,6 +68,7 @@ def _cmd_serve(args) -> int:
     reg_paths = args.registries or [str(p) for p in default_registries()]
     reg = load_registries(*reg_paths)
 
+    ws_port = None if getattr(args, "no_ws", False)         else int(getattr(args, "ws_port", 8765))
     serve_app = ServeApp(
         journals=args.journals,
         port=args.port,
@@ -64,6 +80,7 @@ def _cmd_serve(args) -> int:
         token=args.token or None,
         tenant=args.tenant or None,
         frontend_dist=args.frontend_dist or None,
+        ws_port=ws_port,
     )
     if args.jobs:
         n = serve_app.load_jobs(args.jobs)
@@ -75,7 +92,7 @@ def _cmd_serve(args) -> int:
         registry=reg,
         frontend_dist=args.frontend_dist or None,
         token=args.token or None,
-        ai_status={"mode": "rules_only", "model": "deepseek-chat"},
+        ai_status=_ai_status(),
         dispatch_event=serve_app.dispatch_external_event,
         resolve_task=None,
     )
@@ -335,6 +352,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve.add_argument("--erp-url", default="")
     p_serve.add_argument("--token", default=None)
     p_serve.add_argument("--tenant", default=None)
+    p_serve.add_argument("--ws-port", type=int, default=8765,
+                         help="内嵌 WS 网关端口（外部决策引擎接入）")
+    p_serve.add_argument("--no-ws", action="store_true",
+                         help="禁用内嵌 WS 网关")
     p_serve.set_defaults(fn=_cmd_serve)
 
     p_flow_c = sub.add_parser("flow-compile", help=".flow → process.yaml")

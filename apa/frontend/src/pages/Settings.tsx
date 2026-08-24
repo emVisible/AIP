@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import type { ActionMeta } from "../api/types";
+import { Badge, Card, CardHeader } from "../components/ui";
 
 export function Settings() {
   const [actions, setActions] = useState<Record<string, ActionMeta>>({});
@@ -19,6 +20,11 @@ export function Settings() {
   return (
     <div className="space-y-4 max-w-4xl">
       <h1 className="text-xl font-bold">设置</h1>
+
+      <Card>
+        <CardHeader title="决策引擎" />
+        <EnginePanel />
+      </Card>
 
       {/* 动作注册表浏览 */}
       <div className="rounded-xl border border-slate-200 bg-surface overflow-hidden">
@@ -73,6 +79,54 @@ export function Settings() {
           多租户管理与认证配置将在 M3 产品化阶段提供完整 UI。
         </p>
       </div>
+    </div>
+  );
+}
+
+interface AiStatus {
+  mode: string;
+  model?: string;
+}
+
+/** 决策引擎状态与配置引导（只读；密钥仅经环境变量/.env 注入）。 */
+function EnginePanel() {
+  const [st, setSt] = useState<AiStatus | null>(null);
+
+  useEffect(() => {
+    fetch("/api/ai/status")
+      .then((r) => r.json())
+      .then(setSt)
+      .catch(() => {});
+  }, []);
+
+  const mode = st?.mode ?? "unknown";
+  const tone = mode === "dsh" ? "green"
+    : mode === "cascade_llm" ? "blue" : "neutral";
+  const label = mode === "dsh" ? "DSH 已接入"
+    : mode === "cascade_llm" ? "级联决策 (L0 规则 + LLM)"
+    : mode === "rules_only" ? "仅规则 (L0)" : mode;
+
+  return (
+    <div className="px-3 py-3 space-y-2 text-xs">
+      <div className="flex items-center gap-2">
+        <span className="text-slate-500">当前模式</span>
+        <Badge tone={tone as never}>{label}</Badge>
+        {st?.model && (
+          <span className="font-mono text-[10px] text-slate-400">
+            {st.model}
+          </span>
+        )}
+      </div>
+      <p className="text-[11px] leading-relaxed text-slate-400">
+        启用 LLM 决策：设置环境变量 <code className="font-mono">DEEPSEEK_API_KEY</code>
+        {" "}（可选 <code className="font-mono">DEEPSEEK_MODEL</code>，
+        默认 deepseek-chat）后重启服务。
+        无密钥时 ai_decision 节点自动转人工审批，全部功能离线可用。
+      </p>
+      <p className="text-[11px] leading-relaxed text-slate-400">
+        外部 DSH 宿主：<code className="font-mono">node plugins/dsh/run-agent.mjs
+        --gateway ws://127.0.0.1:8765 --session &lt;会话&gt; --mock</code>
+      </p>
     </div>
   );
 }

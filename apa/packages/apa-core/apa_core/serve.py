@@ -50,12 +50,23 @@ class ServeApp:
         frontend_dist: Optional[str] = None,
         tick_interval_s: float = 1.0,
         session_timeout_s: float = 30.0,
+        ws_port: Optional[int] = None,
+        ws_agent_sources: Optional[List[str]] = None,
     ) -> None:
+        """ws_port 非 None 时启动内嵌 WS 网关（外部决策引擎接入点）。
+
+        ws_agent_sources：允许以 agent 角色接入的额外身份白名单
+        （默认含 "dsh_agent_001"，与 run-agent.mjs 缺省 source 对齐）。
+        """
         self.registry = registry
         self.runs_dir = Path(runs_dir) if runs_dir else Path("data/runs")
         self.runs_dir.mkdir(parents=True, exist_ok=True)
         self.tick_interval_s = max(0.2, float(tick_interval_s))
         self.session_timeout_s = float(session_timeout_s)
+        self.ws_port_requested = ws_port
+        self.ws_agent_sources = list(ws_agent_sources or ["dsh_agent_001"])
+        self.ws_server = None            # WsGatewayServer（WS 线程内）
+        self._ws_thread: Optional[threading.Thread] = None
 
         # 内置沙盒 ERP（默认开启，让示例流程开箱即跑）
         from .mock_erp import MockERP
@@ -226,6 +237,12 @@ class ServeApp:
         runner.router.start_observation()
         self.register_local_gateway(runner.gateway)   # HITL 按钮可解析其任务
 
+        # R3：接入内嵌 WS 网关池 → 外部决策引擎（dsh）可加入该会话
+        if self.ws_server is not None:
+            core_gw = getattr(runner.gateway, "gateway", runner.gateway)
+            self.extend_agent_identities(core_gw, self.ws_agent_sources)
+            self.ws_server.register_session(session, core_gw)
+
         # cron 场景无显式事件名 → 回退到流程自身声明的触发事件
         trigger = trigger_event or proc.trigger_name or ""
         result = runner.trigger(trigger, dict(data),
@@ -254,7 +271,56 @@ class ServeApp:
                              name="apa-serve-tick")
         t.start()
         self._threads.append(t)
+        if self.ws_port_requested is not None:
+            self.start_ws_gateway(self.ws_port_requested)
         return self.http_port
+
+    # ---- 内嵌 WS 网关（外部决策引擎接入点，R3）---------------------------------
+    def start_ws_gateway(self, port: int) -> int:
+        """独立线程 + asyncio loop 启动 WsGatewayServer。返回实际端口。"""
+        import asyncio
+
+        from .ws_gateway import WsGatewayServer
+
+        self.ws_server = WsGatewayServer(port=port)
+
+        def _run() -> None:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            self._ws_loop = loop
+            loop.run_until_complete(self.ws_server.start())
+            print(f"[serve] ws gateway ready on :{self.ws_server.port}")
+            try:
+                loop.run_until_complete(self.ws_server.serve_forever())
+            finally:
+                loop.close()
+
+        t = threading.Thread(target=_run, daemon=True,
+                             name="apa-serve-ws")
+        self._ws_thread = t
+        t.start()
+        # 等待端口就绪（start() 在事件循环里完成）
+        import time as _t
+        deadline = _t.time() + 5
+        while _t.time() < deadline:
+            if getattr(self.ws_server, "_server", None) is not None:
+                break
+            _t.sleep(0.05)
+        return self.ws_server.port
+
+    @staticmethod
+    def extend_agent_identities(gateway, extra_sources: List[str]) -> None:
+        """把外部决策引擎身份并入 gateway agent 白名单（I9）。"""
+        current = gateway.identities.get("agent")
+        merged: List[str] = []
+        for src in ([current] if isinstance(current, str)
+                    else list(current or [])):
+            if src not in merged:
+                merged.append(src)
+        for src in extra_sources:
+            if src not in merged:
+                merged.append(src)
+        gateway.identities["agent"] = merged
 
     def _tick_loop(self) -> None:
         while not self._stop.wait(self.tick_interval_s):

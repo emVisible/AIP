@@ -30,6 +30,7 @@ export interface ApaPluginConfig {
   gatewayUrl: string;
   sessionId: string;
   source: string;
+  tenant?: string;
   allowedActions: string[];
   /** 走 L2 深度推理的事件名集合 */
   thinkEvents?: string[];

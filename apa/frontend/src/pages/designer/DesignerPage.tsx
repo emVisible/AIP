@@ -138,6 +138,29 @@ function StepNodeView({ data }: { data: StepNodeData }) {
 
 const nodeTypes = { step: StepNodeView };
 
+
+/** 决策引擎状态 chip（顶栏）。rules_only 灰 / cascade 蓝 / dsh 绿。 */
+function EngineChip() {
+  const [mode, setMode] = useState("...");
+  useEffect(() => {
+    api<{ mode: string }>("/api/ai/status")
+      .then(d => setMode(d.mode))
+      .catch(() => setMode("offline"));
+  }, []);
+  const tone = mode === "dsh" ? "bg-emerald-50 text-emerald-600"
+    : mode === "cascade_llm" ? "bg-blue-50 text-blue-600"
+    : "bg-slate-100 text-slate-500";
+  const label = mode === "dsh" ? "DSH"
+    : mode === "cascade_llm" ? "L0+LLM" : "规则";
+  return (
+    <span title={`决策引擎: ${mode}`} data-mode={mode}
+          className={`inline-flex items-center h-6 px-2 rounded-md
+                      text-[10px] font-medium ${tone}`}>
+      {label}
+    </span>
+  );
+}
+
 export function DesignerPage() {
   return (
     <ReactFlowProvider>
@@ -504,6 +527,7 @@ function DesignerInner() {
         <span className="text-sm font-semibold tracking-tight text-zinc-900
                          px-1">APA</span>
         <div className="h-4 w-px bg-slate-200" />
+        <EngineChip />
         <input className="w-44 h-8 px-2 text-xs font-medium bg-transparent
                           border border-transparent rounded-md
                           hover:border-slate-200 focus:border-slate-300

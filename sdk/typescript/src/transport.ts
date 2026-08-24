@@ -94,16 +94,29 @@ export class WsServerTransport implements Transport {
 /** WebSocket client-side transport. */
 export class WsClientTransport implements Transport {
   private ws: WebSocket;
+  private _isOpen = false;
+  private _onOpenCb?: () => void;
   onMessage?: (m: Message) => void;
   onError?: (e: Error) => void;
-  /** Binding-level open callback (fires before any AIP message). */
-  onOpen?: () => void;
+
+  /**
+   * Binding-level open callback.
+   * 竞态防护：回环连接可能在调用方赋值 onOpen 前已 OPEN——
+   * setter 语义保证「赋值即补触发」（恰好一次）。
+   */
+  set onOpen(cb: (() => void) | undefined) {
+    this._onOpenCb = cb;
+    if (cb && this._isOpen) queueMicrotask(cb);
+  }
 
   constructor(url: string, options: TransportHandlers = {}) {
     this.onMessage = options.onMessage;
     this.onError = options.onError;
     this.ws = new WebSocket(url);
-    this.ws.on("open", () => this.onOpen?.());
+    this.ws.on("open", () => {
+      this._isOpen = true;
+      this._onOpenCb?.();
+    });
     this.ws.on("message", (data) => this.receive(data.toString()));
     this.ws.on("error", (e) => this.onError?.(e));
   }

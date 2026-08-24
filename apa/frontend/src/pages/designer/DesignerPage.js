@@ -64,6 +64,22 @@ function StepNodeView({ data }) {
                         ${accent}` }), _jsxs("div", { className: "flex items-center gap-1.5", children: [data.index != null && (_jsx("span", { className: "inline-flex items-center justify-center w-4 h-4\n                           rounded-full bg-zinc-900 text-white text-[9px]\n                           font-semibold leading-none", children: data.index + 1 })), _jsx("p", { className: "text-xs font-semibold text-slate-800 truncate", children: data.label })] }), data.sub && (_jsx("p", { className: "mt-0.5 text-[10px] text-slate-400 truncate font-mono", children: data.sub }))] }));
 }
 const nodeTypes = { step: StepNodeView };
+/** 决策引擎状态 chip（顶栏）。rules_only 灰 / cascade 蓝 / dsh 绿。 */
+function EngineChip() {
+    const [mode, setMode] = useState("...");
+    useEffect(() => {
+        api("/api/ai/status")
+            .then(d => setMode(d.mode))
+            .catch(() => setMode("offline"));
+    }, []);
+    const tone = mode === "dsh" ? "bg-emerald-50 text-emerald-600"
+        : mode === "cascade_llm" ? "bg-blue-50 text-blue-600"
+            : "bg-slate-100 text-slate-500";
+    const label = mode === "dsh" ? "DSH"
+        : mode === "cascade_llm" ? "L0+LLM" : "规则";
+    return (_jsx("span", { title: `决策引擎: ${mode}`, "data-mode": mode, className: `inline-flex items-center h-6 px-2 rounded-md
+                      text-[10px] font-medium ${tone}`, children: label }));
+}
 export function DesignerPage() {
     return (_jsx(ReactFlowProvider, { children: _jsx(DesignerInner, {}) }));
 }
@@ -386,7 +402,7 @@ function DesignerInner() {
             setStatusMsg(`加载失败: ${e instanceof Error ? e.message : e}`);
         }
     }
-    return (_jsxs("div", { className: "h-full flex flex-col overflow-hidden", children: [_jsxs("header", { className: "flex items-center gap-2 px-3 py-2 border-b\n                         border-slate-200 bg-white z-10", children: [_jsx("span", { className: "text-sm font-semibold tracking-tight text-zinc-900\n                         px-1", children: "APA" }), _jsx("div", { className: "h-4 w-px bg-slate-200" }), _jsx("input", { className: "w-44 h-8 px-2 text-xs font-medium bg-transparent\n                          border border-transparent rounded-md\n                          hover:border-slate-200 focus:border-slate-300\n                          focus:bg-white outline-none", placeholder: "\u6D41\u7A0B ID", value: metaId, onChange: e => setMetaId(e.target.value) }), _jsx("input", { className: "w-56 h-8 px-2 text-xs bg-transparent\n                          border border-transparent rounded-md\n                          hover:border-slate-200 focus:border-slate-300\n                          focus:bg-white outline-none", placeholder: "\u89E6\u53D1\u4E8B\u4EF6\uFF08\u53EF\u9009\uFF09", value: triggerName, onChange: e => setTriggerName(e.target.value) }), _jsxs("div", { className: "ml-auto flex items-center gap-1.5", children: [_jsxs(Button, { size: "sm", variant: "ghost", onClick: () => void openFile(currentFile), disabled: !currentFile, title: "\u91CD\u65B0\u52A0\u8F7D\u5DF2\u4FDD\u5B58\u7248\u672C", children: [_jsx(FolderOpen, { size: 13 }), " \u91CD\u8F7D"] }), _jsxs(Button, { size: "sm", variant: "secondary", onClick: () => { setRunOpen(o => !o); }, children: [_jsx(Terminal, { size: 13 }), " \u8BD5\u8FD0\u884C"] }), _jsxs(Button, { size: "sm", variant: "secondary", onClick: () => setRecording({ sid: "", url: "https://",
+    return (_jsxs("div", { className: "h-full flex flex-col overflow-hidden", children: [_jsxs("header", { className: "flex items-center gap-2 px-3 py-2 border-b\n                         border-slate-200 bg-white z-10", children: [_jsx("span", { className: "text-sm font-semibold tracking-tight text-zinc-900\n                         px-1", children: "APA" }), _jsx("div", { className: "h-4 w-px bg-slate-200" }), _jsx(EngineChip, {}), _jsx("input", { className: "w-44 h-8 px-2 text-xs font-medium bg-transparent\n                          border border-transparent rounded-md\n                          hover:border-slate-200 focus:border-slate-300\n                          focus:bg-white outline-none", placeholder: "\u6D41\u7A0B ID", value: metaId, onChange: e => setMetaId(e.target.value) }), _jsx("input", { className: "w-56 h-8 px-2 text-xs bg-transparent\n                          border border-transparent rounded-md\n                          hover:border-slate-200 focus:border-slate-300\n                          focus:bg-white outline-none", placeholder: "\u89E6\u53D1\u4E8B\u4EF6\uFF08\u53EF\u9009\uFF09", value: triggerName, onChange: e => setTriggerName(e.target.value) }), _jsxs("div", { className: "ml-auto flex items-center gap-1.5", children: [_jsxs(Button, { size: "sm", variant: "ghost", onClick: () => void openFile(currentFile), disabled: !currentFile, title: "\u91CD\u65B0\u52A0\u8F7D\u5DF2\u4FDD\u5B58\u7248\u672C", children: [_jsx(FolderOpen, { size: 13 }), " \u91CD\u8F7D"] }), _jsxs(Button, { size: "sm", variant: "secondary", onClick: () => { setRunOpen(o => !o); }, children: [_jsx(Terminal, { size: 13 }), " \u8BD5\u8FD0\u884C"] }), _jsxs(Button, { size: "sm", variant: "secondary", onClick: () => setRecording({ sid: "", url: "https://",
                                     events: 0, phase: "enter" }), children: [_jsx(SquareDot, { size: 13, className: "text-red-500" }), " \u5F55\u5236"] }), _jsxs(Button, { size: "sm", variant: "primary", onClick: () => void save(), children: [_jsx(Save, { size: 13 }), " \u4FDD\u5B58"] })] })] }), _jsxs("div", { className: "flex-1 grid grid-cols-[240px_1fr] overflow-hidden relative", children: [_jsxs("aside", { className: "border-r border-slate-200 bg-white flex flex-col\n                          overflow-hidden", children: [_jsx("nav", { className: "flex items-center gap-1 px-2 pt-2", children: [["", "动作"], ["spy", "拾取"],
                                     ["scrape", "抓取"]].map(([k, label]) => (_jsx("button", { onClick: () => setToolTab(k), className: `h-6 px-2 rounded text-[11px] font-medium
                             transition-colors ${toolTab === k

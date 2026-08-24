@@ -23,6 +23,8 @@ export interface ApaDecisionConfig {
   sessionId: string;
   source: string;
   allowedActions: string[];
+  /** 租户绑定（§12.1：Session 不可跨租户）。hello 帧携带。 */
+  tenant?: string;
   /** Events routed with deeper reasoning (L2). Default: none. */
   thinkEvents?: string[];
   maxLlmDecisions?: number;
@@ -96,6 +98,7 @@ export class ApaDecisionAgent {
       this.transport.sendRaw?.(JSON.stringify({
         type: "hello", role: "agent", source: config.source,
         cursors: {}, session: config.sessionId,
+        ...(config.tenant ? { tenant: config.tenant } : {}),
       }));
     };
     if ("sendRaw" in this.transport && typeof this.transport.sendRaw === "function") {

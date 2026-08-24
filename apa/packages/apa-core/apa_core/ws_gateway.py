@@ -82,7 +82,9 @@ class WsGatewayServer:
             sid: {side: [] for side in _SIDES} for sid in self.gateways
         }
         self.executor_meta: Dict[int, dict] = {}   # id(ws) -> {source, domains, session}
-        self._binds: Dict[int, dict] = {}          # id(ws) -> {gw, side, source}
+        self._binds: Dict[int, dict] = {}
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._pending_pumps: List[str] = []   # start 前注册的会话由 start 统一建泵          # id(ws) -> {gw, side, source}
         self._tasks: List[asyncio.Task] = []
         self._server = None
 
@@ -90,19 +92,78 @@ class WsGatewayServer:
             for side in _SIDES:
                 gw.set_handler(side, self._make_enqueuer(sid, side))
 
+    # ---- 动态会话注册（serve 常驻模式：会话随任务动态创建）---------------------
+
+    def register_session(self, sid: str, gateway: APAGateway) -> bool:
+        """向运行中的网关池注册新会话。已存在返回 False。
+
+        线程模型：可在任意线程调用（dict/Queue 构造 GIL 安全；
+        asyncio.Queue 的 loop 绑定推迟到首次使用，3.12 无隐患）。
+        """
+        if sid in self.gateways:
+            return False
+        self.gateways[sid] = gateway
+        self._queues[sid] = {side: asyncio.Queue() for side in _SIDES}
+        self.conns[sid] = {side: [] for side in _SIDES}
+        for side in _SIDES:
+            gateway.set_handler(side, self._make_enqueuer(sid, side))
+
+        if self._loop is not None and self._loop.is_running():
+            # 运行中注册：把建泵任务调度回网关自己的事件循环
+            async def _spawn():
+                for side in _SIDES:
+                    self._tasks.append(asyncio.create_task(self._pump(sid, side)))
+            asyncio.run_coroutine_threadsafe(_spawn(), self._loop)
+        else:
+            self._pending_pumps.append(sid)
+        return True
+
+    def unregister_session(self, sid: str) -> None:
+        self.gateways.pop(sid, None)
+        self._queues.pop(sid, None)
+        self.conns.pop(sid, None)
+
+    def agent_sources(self) -> List[str]:
+        """当前已连接的 agent source 列表（跨会话）。"""
+        out = []
+        for sid in self.conns:
+            for ws in self.conns[sid].get("agent", []):
+                bind = self._binds.get(id(ws))
+                if bind:
+                    out.append(bind["source"])
+        return out
+
     # 向后兼容：主网关（首个会话）
     @property
     def gateway(self) -> APAGateway:
         return next(iter(self.gateways.values()))
 
     def _make_enqueuer(self, gsid: str, side: str):
+        """出站入队 handler。线程安全（嵌入式网关跨线程调用场景）：
+
+        gateway 处理链可能运行在与本服务器不同的事件循环/线程
+        （EmbeddedGateway 模式 C）。asyncio.Queue.put_nowait 跨线程
+        不会唤醒等待中的 getter —— 必须经由 call_soon_threadsafe
+        把投递调度回服务器自己的循环。
+        """
         q = self._queues[gsid][side]
 
         def handler(raw: dict) -> None:
+            loop = self._loop
+            if loop is not None and loop.is_running():
+                try:
+                    asyncio.get_running_loop()
+                    same_thread = loop is asyncio.get_running_loop()
+                except RuntimeError:
+                    same_thread = False
+                if not same_thread:
+                    loop.call_soon_threadsafe(q.put_nowait, raw)
+                    return
             q.put_nowait(raw)
         return handler
 
     async def start(self) -> int:
+        self._loop = asyncio.get_running_loop()
         self._server = await websockets.serve(
             self._client_handler, self.host, self.port_requested,
             ssl=self.ssl_context)

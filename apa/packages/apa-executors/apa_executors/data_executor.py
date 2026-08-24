@@ -10,6 +10,7 @@ import json
 import os
 import re
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -99,6 +100,8 @@ class DataExecutor(AIPExecutor):
             "file.zip": self._file_zip,
             "file.unzip": self._file_unzip,
             "process.kill": self._process_kill,
+            # ---- M5 代码段 ----
+            "code.python": self._code_python,
         }
         fn = handler_map.get(name)
         if fn is None:
@@ -792,6 +795,35 @@ class DataExecutor(AIPExecutor):
                            capture_output=True, timeout=10)
         return True, {"matched": r.returncode == 0,
                       "pattern": str(name)}
+
+    def _code_python(self, p):
+        """独立 subprocess 执行 Python 片段。
+
+        安全形态：进程隔离 + timeout SIGKILL + 完整代码入审计
+        （risk=L3 → PolicyConfig 默认策略强制人工审批后才到达此处）。
+        """
+        import subprocess
+
+        code = str(p.get("code", ""))
+        if not code.strip():
+            return False, {"code": "missing_param", "detail": "code"}
+        timeout_s = min(float(p.get("timeout_s", 30)), 600)
+        try:
+            r = subprocess.run([sys.executable, "-c", code],
+                               capture_output=True, text=True,
+                               timeout=timeout_s)
+            return True, {
+                "exit_code": r.returncode,
+                "stdout": (r.stdout or "")[-20000:],
+                "stderr": (r.stderr or "")[-5000:],
+                "timed_out": False,
+            }
+        except subprocess.TimeoutExpired:
+            return True, {"exit_code": None, "stdout": "", "stderr": "",
+                          "timed_out": True,
+                          "detail": f"killed after {timeout_s}s"}
+        except Exception as e:  # noqa: BLE001
+            return False, {"code": type(e).__name__, "detail": str(e)[:120]}
 
 def keep_columns_guard(flag) -> bool:
     return bool(flag)

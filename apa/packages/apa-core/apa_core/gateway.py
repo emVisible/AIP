@@ -425,6 +425,23 @@ class APAGateway:
             return [make_result(self.session_id, "gateway", "ok", msg.id,
                                 data={"outcome": outcome})]
 
+        # ui.confirm（M5）：HITL 轻量形态——确认型任务，resolve 返回 ok
+        if name == "ui.confirm":
+            task_id = self.human.create(
+                action_id=msg.id,
+                task_type="confirm",
+                assignee_role=params.get("assignee_role", "rpa_operator"),
+                context_ref=params.get("context_ref", ""),
+                priority=params.get("priority", "normal"),
+            )
+            self.sm.suspend_for_human(task_id)
+            self._journal("task", task_id=task_id, status="open",
+                          task_type="confirm",
+                          title=str(params.get("title", ""))[:120],
+                          message=str(params.get("message", ""))[:500])
+            return [make_result(self.session_id, "gateway", "ok",
+                                 msg.id, data={"task_id": task_id})]
+
         # 人工干预：human.task.create 由 Gateway 处理（§4.3）
         # 创建任务 + Session SUSPENDED；人工完成后经 resolve_human_task 恢复
         if name == "human.task.create":

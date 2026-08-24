@@ -357,3 +357,59 @@ class TestScreenshotAction:
             _os.unlink("/tmp/apa_p22_shot.png")
         else:
             assert out["code"] in ("capture_denied",)
+
+class TestCodePython:
+    """P22-M5 code.python —— subprocess 隔离执行。"""
+
+    @pytest.fixture()
+    def dex(self):
+        ex = DataExecutor.__new__(DataExecutor)
+        ex._tables = {}
+        return ex
+
+    def test_basic_stdout(self, dex):
+        ok, out = dex._execute_action("code.python",
+                                      {"code": "print(6*7)"})
+        assert ok and out["exit_code"] == 0
+        assert out["stdout"].strip() == "42"
+
+    def test_nonzero_exit_and_stderr(self, dex):
+        ok, out = dex._execute_action("code.python", {
+            "code": "import sys; print('oops', file=sys.stderr); exit(2)"})
+        assert ok
+        assert out["exit_code"] == 2
+        assert "oops" in out["stderr"]
+
+    def test_timeout_kills_infinite_loop(self, dex):
+        import time as _t
+
+        t0 = _t.monotonic()
+        ok, out = dex._execute_action("code.python", {
+            "code": "while True: pass", "timeout_s": 1})
+        elapsed = _t.monotonic() - t0
+        assert ok and out["timed_out"] is True
+        assert elapsed < 5          # 1s 超时 + 余量，证明强杀生效
+
+    def test_syntax_error_reported(self, dex):
+        ok, out = dex._execute_action("code.python",
+                                      {"code": "def broken("})
+        assert ok and out["exit_code"] != 0
+        assert "SyntaxError" in out["stderr"]
+
+    def test_empty_code_rejected(self, dex):
+        ok, err = dex._execute_action("code.python", {"code": "   "})
+        assert not ok and err["code"] == "missing_param"
+
+
+class TestUiConfirmRegistry:
+    def test_ui_confirm_registered_with_gateway_semantics(self):
+        from apa_core.registry import load_registries
+        from pathlib import Path
+
+        reg = load_registries(*[str(p) for p in sorted(
+            (Path(__file__).resolve().parents[1]
+             / "registries").glob("*.yaml"))])
+        entry = reg.get("ui.confirm")
+        assert entry is not None
+        # ui.confirm 由 Gateway 拦截处理（同 human.task.create）
+        assert entry.executor_domain == "core"

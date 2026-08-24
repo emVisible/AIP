@@ -89,3 +89,38 @@ human.task.reassign:
   timeout_ms: 5000
   retries: 1
   audit_fields: [task_id, from_assignee, to_assignee]
+
+# ============================================================
+# M5 交互 + 代码段
+# ============================================================
+ui.confirm:
+  executor_domain: core
+  description: "阻塞式人工确认卡（复用 HITL：前端渲染确认按钮，超时默认 cancel）"
+  params:
+    type: object
+    required: [message]
+    properties:
+      title: { type: string }
+      message: { type: string }
+      timeout_s: { type: number, minimum: 5, maximum: 3600 }
+      assignee_role: { type: string, default: rpa_operator }
+      context_ref: { type: string }
+  idempotency: none
+  risk: L1
+  timeout_ms: 3700000
+  retries: 0
+
+code.python:
+  executor_domain: data
+  description: "独立 subprocess 执行 Python 片段；timeout 强杀；risk=L3 默认策略强制人工审批"
+  params:
+    type: object
+    required: [code]
+    properties:
+      code: { type: string, description: "完整 Python 脚本文本" }
+      timeout_s: { type: number, minimum: 1, maximum: 600, default: 30 }
+  idempotency: none
+  risk: L3
+  timeout_ms: 620000
+  retries: 0
+  audit_fields: [code]

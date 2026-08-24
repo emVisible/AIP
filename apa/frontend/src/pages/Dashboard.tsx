@@ -49,7 +49,7 @@ export function Dashboard() {
     <div className="space-y-5 max-w-6xl">
       <h1 className="text-xl font-bold">监控总览</h1>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <StatCard icon={Activity} label="会话总数"
           value={String(a?.sessions.total ?? "—")} />
         <StatCard icon={CircleCheck} label="动作成功率"
@@ -61,20 +61,27 @@ export function Dashboard() {
           value={String(a?.human_tasks.open ?? 0)} />
       </div>
 
-      <div className="grid grid-cols-[1fr_320px] gap-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 items-start">
         <div>
           <h2 className="text-sm font-semibold mb-2 text-slate-500">会话</h2>
           <div className="space-y-2">
             {list.map((s) => (
               <div key={s.id}
                 className="flex items-center justify-between rounded-lg border
-                           border-slate-200 bg-surface px-4 py-2.5 text-sm">
-                <span className="font-mono text-xs">{s.id}</span>
-                <Badge tone={stateTone(s.state)}>{s.state}</Badge>
-                <span className="text-xs text-slate-400">
-                  游标 {Object.entries(s.cursors).map(([k, v]) => `${k}:${v}`).join(" ") || "—"}
+                           border-slate-200 bg-surface px-4 py-2.5">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Badge tone={stateTone(s.state)}>{s.state}</Badge>
+                  <span className="font-mono text-xs truncate">{s.id}</span>
+                  {s.outcome && (
+                    <span className={`text-xs ${s.outcome === "success"
+                      ? "text-emerald-600" : "text-red-500"}`}>
+                      → {s.outcome}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] text-slate-300 shrink-0 ml-3">
+                  {new Date(s.last_ts).toLocaleTimeString()}
                 </span>
-                <span className="text-xs text-slate-400">{s.journal}</span>
               </div>
             ))}
             {!list.length && (

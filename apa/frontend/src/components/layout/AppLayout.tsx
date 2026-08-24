@@ -2,16 +2,17 @@ import { NavLink, Outlet } from "react-router";
 import {
   Activity,
   Bot,
-  CircleCheck,
-  Cpu,
   Hand,
+  ListTodo,
+  MessageSquareText,
   Settings,
 } from "lucide-react";
 
 const NAV = [
   { to: "/", label: "监控", icon: Activity, end: true },
+  { to: "/ai", label: "工作台", icon: MessageSquareText },
   { to: "/designer", label: "设计器", icon: Bot },
-  { to: "/runs", label: "运行", icon: CircleCheck },
+  { to: "/runs", label: "运行中心", icon: ListTodo },
   { to: "/hitl", label: "审批", icon: Hand },
   { to: "/settings", label: "设置", icon: Settings },
 ];
@@ -47,7 +48,7 @@ export function AppLayout() {
           ))}
         </nav>
         <div className="px-5 py-3 text-[11px] text-slate-600 border-t border-sidebar-accent">
-          v0.5 · poc
+          Agentic Process Automation
         </div>
       </aside>
 
@@ -58,7 +59,7 @@ export function AppLayout() {
         <footer className="border-t border-slate-200 px-4 py-1.5 text-xs
                            text-slate-400 bg-white flex justify-between">
           <span>APA Studio</span>
-          <Cpu size={12} />
+          <span>v0.13 · poc</span>
         </footer>
       </div>
     </div>

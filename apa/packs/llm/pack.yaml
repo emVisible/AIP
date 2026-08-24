@@ -1,0 +1,15 @@
+name: llm
+version: 1.0.0
+api_version: "1"
+description: "LLM 文本任务域：classify / extract / summarize（DeepSeek 底座）"
+source: builtin
+provides_domains:
+  - llm
+registries:
+  - actions/llm.yaml
+executors:
+  - module: apa_core.llm_actions
+    class: LlmTextExecutor
+    domains: [llm]
+py_deps: []
+overrides: []

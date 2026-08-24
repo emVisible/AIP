@@ -132,6 +132,7 @@ class ServeApp:
                 self.llm_client = LLMClient(timeout_s=20.0)
         self.llm_max_decisions = int(
             os.environ.get("APA_LLM_MAX_DECISIONS", "20"))
+        self._pack_executor_specs: List[Dict[str, Any]] = []
 
         # 内置沙盒 ERP（默认开启，让示例流程开箱即跑）
         from .mock_erp import MockERP
@@ -383,13 +384,16 @@ class ServeApp:
         data_mod = DataExecutor(f"bot_{suffix}", session)
         mods.append(("data", data_mod))
 
-        # M-A3: llm.text 文本任务（无 Key 时 dependency_missing 优雅降级）
-        try:
-            from apa_core.llm_actions import LlmTextExecutor
+        # Pack 装配（v0.13）：packs.py 发现的 executor 清单自动挂载
+        for spec in self._pack_executor_specs:
+            try:
+                from .packs import instantiate_executor
 
-            mods.append(("llm", LlmTextExecutor(f"bot_{suffix}", session)))
-        except Exception:  # noqa: BLE001
-            pass
+                inst = instantiate_executor(
+                    spec, f"bot_{suffix}", session)
+                mods.append((tuple(spec["domains"]), inst))
+            except Exception:  # noqa: BLE001
+                continue  # pack 缺依赖 → 静默跳过该域
 
         # M1：macOS 元素识别执行器（非 darwin / 缺框架时静默跳过）
         if sys.platform == "darwin":

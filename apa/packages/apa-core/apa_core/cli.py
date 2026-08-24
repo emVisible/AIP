@@ -69,6 +69,31 @@ def _cmd_serve(args) -> int:
     reg_paths = args.registries or [str(p) for p in default_registries()]
     reg = load_registries(*reg_paths)
 
+    # Pack 架构（v0.13）：发现+加载能力包，registry 合并 + executor 清单
+    from .packs import discover_packs as _discover_packs
+    from .packs import load_packs as _load_packs
+
+    pack_info: dict = {"registry_paths": [], "executor_specs": [],
+                        "packs": []}
+    _builtin_packs = (Path(__file__).resolve().parents[3] / "packs")
+    if _builtin_packs.is_dir():
+        try:
+            manifests = _discover_packs(builtin_dir=_builtin_packs,
+                                         include_entry_points=False)
+            loaded_packs = _load_packs(
+                manifests,
+                reserved_actions=["ui.confirm", "human.task.create"])
+            for lp in loaded_packs:
+                pack_info["packs"].append(lp.manifest.name)
+                pack_info["registry_paths"].extend(
+                    str(rp) for rp in lp.registry_paths)
+                pack_info["executor_specs"].extend(lp.executor_specs)
+            if pack_info["registry_paths"]:
+                reg = load_registries(
+                    *(reg_paths + pack_info["registry_paths"]))
+        except Exception as e:  # noqa: BLE001
+            print(f"[serve] packs disabled: {e}")
+
     ws_port = None if getattr(args, "no_ws", False)         else int(getattr(args, "ws_port", 8765))
     serve_app = ServeApp(
         journals=args.journals,
@@ -83,6 +108,8 @@ def _cmd_serve(args) -> int:
         frontend_dist=args.frontend_dist or None,
         ws_port=ws_port,
     )
+    serve_app._pack_executor_specs = pack_info["executor_specs"]
+
     if args.jobs:
         n = serve_app.load_jobs(args.jobs)
         print(f"==> 已加载调度任务 {n} 个")
@@ -114,10 +141,18 @@ def _cmd_serve(args) -> int:
         except Exception as e:  # noqa: BLE001
             print(f"[serve] failure diagnostic disabled: {e}")
 
+    extra_reg_paths = pack_info.get("registry_paths") or []
+    # registry 合并：内置 + pack 提供的片段（后者覆盖同名）
+    from .registry import load_registries as _load_reg
+
+    builtin_paths = [str(p) for p in default_registries()]
+    extra_reg_paths = list(pack_info.get("registry_paths") or [])
+    reg = _load_reg(*(builtin_paths + extra_reg_paths))
+
     fast_app = create_app(
         journals=args.journals,
         processes_dir=args.processes_dir or None,
-        registry=reg,
+        registry=merged_reg,
         frontend_dist=args.frontend_dist or None,
         token=args.token or None,
         ai_status=_ai_status(),
@@ -203,6 +238,25 @@ def _cmd_doctor(args) -> int:
             check("chromium launch", True, ver)
         except Exception as e:  # noqa: BLE001
             check("chromium launch", False, str(e)[:80])
+
+    # Capability Packs（v0.13）
+    packs_dir = root / "packs"
+    if packs_dir.is_dir():
+        try:
+            from .packs import discover_packs as _dp
+            from .packs import load_packs as _lp
+
+            manifests = _dp(builtin_dir=packs_dir,
+                             include_entry_points=False)
+            loaded = _lp(manifests)
+            names = [lp.manifest.name + "@" + lp.manifest.version
+                     for lp in loaded]
+            check("capability packs", True,
+                  ", ".join(names) if names else "(none)")
+        except Exception as e:  # noqa: BLE001
+            check("capability packs", False, str(e)[:80])
+    else:
+        check("capability packs", False, f"dir missing: {packs_dir}")
 
     # Registry 加载
     reg_dir = root / "registries"

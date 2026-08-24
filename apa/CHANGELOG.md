@@ -2,6 +2,34 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.7.0-poc] — 2026-08-24
+
+影刀级交互底座 + 决策引擎完整接入。**304 pytest · 14 域 123 动作 ·
+doctor 15 项 · CI 暂停（重构期）。**
+
+### P17 设计器重构（R1）
+- `components/ui/` 零依赖设计系统：Button/Dialog(ESC+点外关)/Drawer/
+  Badge/Input 等统一 token（zinc 主色、focus ring、11px/xs/sm 层级）
+- **影刀式 StepEditDialog**：单击步骤 → 弹窗编辑（风险 Badge 头部 +
+  SchemaForm + 「高级选项」折叠），替代右侧逐字段面板
+- 右栏移除改双栏；试运行入底部抽屉；拾取/抓取向导收为左栏 Tab；
+  画布节点白底卡片+类型色条+序号徽标；全部 emoji 清零，图标 lucide 化
+
+### P17 dsh 完整接入（R2/R3）
+- **SDK 竞态修复**：WsClientTransport.onOpen setter 语义——回环连接
+  先于赋值 OPEN 导致 hello 静默丢失
+- WsGatewayServer 动态会话池：register_session 运行期调度建泵；
+  跨线程 enqueue 经 call_soon_threadsafe 投递（嵌入式模式根治）
+- tenant §12.1 透传（config→hello 帧）
+- serve 内嵌 WS 网关（--ws-port 8765 / --no-ws）+ 会话动态注册 +
+  外部 agent 身份白名单
+- plugins/dsh/run-agent.mjs 正式宿主（零 cordis 依赖）：
+  DeepSeek HTTP adapter / --mock 确定性决策
+- ai_status 真实化（env 探测 cascade_llm|rules_only）+
+  Settings「决策引擎」区块 + 设计器顶栏三态 chip
+
+[0.7.0-poc]: https://github.com/emVisible/AIP/tree/poc
+
 ## [0.6.0-poc] — 2026-08-24
 
 RPA 指令集大扩充 + 影刀级交互底座。**302 pytest · 14 域 123 动作 ·

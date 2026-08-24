@@ -9,8 +9,25 @@
 APA：       语义事件 → AI决策（最小上下文）→ 可靠动作 → 协议级恢复 → 自愈
 ```
 
-**当前状态**：`poc` 分支，192 pytest 通过 · conformance 20/20 · 11 个动作域
-45 个注册动作 · React 设计器 + 浏览器录制器 · Electron 桌面打包 · `apa doctor` 全绿。
+**当前状态**：`poc` 分支，304 pytest 通过 · APA-Profile conformance 20/20 ·
+14 域 123 注册动作 · 影刀级设计器（录制/拾取/抓取向导）· 浏览器操作录制器 ·
+内置 WS 网关 + dsh 决策引擎宿主 · Electron dmg 分发 · `apa doctor` 全绿。
+
+## 离线能力（封闭系统原则）
+
+APA 的核心功能在**无外网、无任何 API Key** 时完整可用：
+
+| 能力 | 离线状态 |
+|---|---|
+| 设计器全交互（目录/画布/弹窗编辑/拖拽） | ✅ 本地 registry 驱动 |
+| 浏览器操作录制器 / AX 拾取器 / 抓取向导 | ✅ 本地 Playwright / Accessibility |
+| 123 个动作全部本地执行（含 while/foreach/sub_process 引擎） | ✅ |
+| 调度器（cron/event）+ MockERP 沙盒 + HITL 审批 | ✅ |
+| `ai_decision` 决策节点 | 自动降级：转人工审批任务，流程不中断 |
+
+外部增强（可选，用户显式启用）：设置 `DEEPSEEK_API_KEY` 后 `ai_decision`
+走 LLM 级联决策；`node plugins/dsh/run-agent.mjs` 接入外部 DSH 宿主。
+二者缺席时系统零降级、零报错。
 
 ## 核心不变量
 
@@ -180,7 +197,9 @@ GET  /api/sessions               GET  /api/analytics
 POST /api/events                 # ← webhook 触发入口
 POST /api/recorder/start         GET  /api/recorder/status/{sid}
 POST /api/recorder/stop/{sid}    # → 返回生成的 process YAML
-GET  /api/journal/stream         # SSE 实时事件流
+POST /api/spy/start              GET  /api/spy/stream             # 桌面拾取 NDJSON
+POST /api/scrape/{sid}/assign    POST /api/scrape/{sid}/preview   # 抓取向导
+GET  /api/ai/status              GET  /api/journal/stream         # SSE
 ```
 
 ## 性能基准（M 系列）

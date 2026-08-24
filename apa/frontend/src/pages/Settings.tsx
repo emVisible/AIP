@@ -65,7 +65,7 @@ export function Settings() {
                 <td className="px-4 py-1.5">{meta.executor_domain}</td>
                 <td className="px-4 py-1.5">{meta.idempotency}</td>
                 <td className="px-4 py-1.5 text-slate-400">
-                  {meta.description.slice(0, 40)}</td>
+                  {(meta.description || "").slice(0, 40)}</td>
               </tr>
             ))}
           </tbody>

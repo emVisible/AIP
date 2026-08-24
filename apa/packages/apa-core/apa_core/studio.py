@@ -574,6 +574,7 @@ class StudioServer:
         for name in sorted(self.registry.names()):
             e = self.registry.get(name)
             out[name] = {
+                "label_cn": getattr(e, "label_cn", ""),
                 "description": getattr(e, "description", ""),
                 "risk": getattr(e, "risk", ""),
                 "executor_domain": getattr(e, "executor_domain", ""),

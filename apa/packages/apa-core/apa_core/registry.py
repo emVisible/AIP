@@ -27,6 +27,7 @@ class RegistryError(Exception):
 class RegistryEntry:
     name: str
     description: str = ""
+    label_cn: str = ""
     domain: str = ""
     params: Optional[dict] = None
     idempotency: str = "none"
@@ -99,6 +100,7 @@ class ActionRegistry:
         entry = RegistryEntry(
             name=name,
             description=raw.get("description", ""),
+            label_cn=raw.get("label_cn", ""),
             domain=raw.get("domain", name.split(".", 1)[0]),
             params=raw.get("params"),
             idempotency=idempotency,

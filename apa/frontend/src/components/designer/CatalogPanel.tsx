@@ -116,7 +116,9 @@ export function CatalogPanel({ onInsert, filter, onFilterChange }: {
         title={(meta.description ?? "") +
                ` [${meta.risk} · ${meta.executor_domain}]`}
       >
-        <span className="font-mono truncate">{name}</span>
+        <span className="truncate">{meta.label_cn || name}</span>
+                <span className="font-mono text-[9px] text-slate-300
+                                 truncate max-w-[80px] ml-1">{name}</span>
         <span
           className={`text-[10px] rounded px-1 shrink-0 ml-1 ${
             tone === "violet"

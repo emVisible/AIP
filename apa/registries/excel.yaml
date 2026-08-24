@@ -1,34 +1,43 @@
-# ============================================================
-# Excel Action Registry — excel.*（openpyxl 后端）
-# C3：写操作 retries=0（非幂等）；只读操作可重试
-# ============================================================
 excel.read_range:
   executor_domain: excel
-  description: "读取工作表区域 → 列名+行数据"
-  when_to_use: "读取 Excel 区域数据 → 管道源"
+  label_cn: 读取 Excel 区域
+  description: 读取工作表区域 → 列名+行数据
+  when_to_use: 读取 Excel 区域数据 → 管道源
   params:
     type: object
-    required: [file]
+    required:
+    - file
     properties:
-      file: { type: string }
-      sheet: { type: string, description: "默认活动表" }
-      range: { type: string, pattern: "^[A-Z]+[0-9]+:[A-Z]+[0-9]+$" }
-      header: { type: boolean, default: true }
+      file:
+        type: string
+      sheet:
+        type: string
+        description: 默认活动表
+      range:
+        type: string
+        pattern: ^[A-Z]+[0-9]+:[A-Z]+[0-9]+$
+      header:
+        type: boolean
+        default: true
   idempotency: required
   risk: L0
   timeout_ms: 30000
   retries: 2
-
 excel.append_row:
   executor_domain: excel
-  description: "追加一行数据到工作表末尾"
-  when_to_use: "Excel 追加一行（逐条写入）"
+  label_cn: Excel 追加行
+  description: 追加一行数据到工作表末尾
+  when_to_use: Excel 追加一行（逐条写入）
   params:
     type: object
-    required: [file, values]
+    required:
+    - file
+    - values
     properties:
-      file: { type: string }
-      sheet: { type: string }
+      file:
+        type: string
+      sheet:
+        type: string
       values:
         type: array
         items: {}
@@ -36,93 +45,127 @@ excel.append_row:
   risk: L1
   timeout_ms: 30000
   retries: 0
-
 excel.write_cell:
   executor_domain: excel
-  description: "写单元格值（同值重写幂等）"
-  when_to_use: "写单元格值"
+  label_cn: 写单元格
+  description: 写单元格值（同值重写幂等）
+  when_to_use: 写单元格值
   params:
     type: object
-    required: [file, cell, value]
+    required:
+    - file
+    - cell
+    - value
     properties:
-      file: { type: string }
-      sheet: { type: string }
-      cell: { type: string, pattern: "^[A-Z]+[0-9]+$" }
+      file:
+        type: string
+      sheet:
+        type: string
+      cell:
+        type: string
+        pattern: ^[A-Z]+[0-9]+$
       value: {}
   idempotency: required
   risk: L1
   timeout_ms: 30000
   retries: 1
-
 excel.get_formula:
   executor_domain: excel
-  description: "读取单元格公式文本"
+  label_cn: 读公式
+  description: 读取单元格公式文本
   params:
     type: object
-    required: [file, cell]
+    required:
+    - file
+    - cell
     properties:
-      file: { type: string }
-      sheet: { type: string }
-      cell: { type: string, pattern: "^[A-Z]+[0-9]+$" }
+      file:
+        type: string
+      sheet:
+        type: string
+      cell:
+        type: string
+        pattern: ^[A-Z]+[0-9]+$
   idempotency: required
   risk: L0
   timeout_ms: 30000
   retries: 2
-
 excel.set_formula:
   executor_domain: excel
-  description: "写单元格公式（自动补 = 前缀；同式重写幂等）"
-  when_to_use: "写公式（SUM/VLOOKUP 等）"
+  label_cn: 写公式
+  description: 写单元格公式（自动补 = 前缀；同式重写幂等）
+  when_to_use: 写公式（SUM/VLOOKUP 等）
   params:
     type: object
-    required: [file, cell, formula]
+    required:
+    - file
+    - cell
+    - formula
     properties:
-      file: { type: string }
-      sheet: { type: string }
-      cell: { type: string, pattern: "^[A-Z]+[0-9]+$" }
-      formula: { type: string }
+      file:
+        type: string
+      sheet:
+        type: string
+      cell:
+        type: string
+        pattern: ^[A-Z]+[0-9]+$
+      formula:
+        type: string
   idempotency: required
   risk: L1
   timeout_ms: 30000
   retries: 1
-
 excel.list_sheets:
   executor_domain: excel
-  description: "列出工作簿全部工作表"
+  label_cn: 列出工作表
+  description: 列出工作簿全部工作表
   params:
     type: object
-    required: [file]
+    required:
+    - file
     properties:
-      file: { type: string }
+      file:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 15000
   retries: 2
-
 excel.add_sheet:
   executor_domain: excel
-  description: "新建工作表（重复名报错，非幂等）"
+  label_cn: 新建工作表
+  description: 新建工作表（重复名报错，非幂等）
   params:
     type: object
-    required: [file, sheet]
+    required:
+    - file
+    - sheet
     properties:
-      file: { type: string }
-      sheet: { type: string }
-      index: { type: integer, minimum: 0 }
+      file:
+        type: string
+      sheet:
+        type: string
+      index:
+        type: integer
+        minimum: 0
   idempotency: none
   risk: L1
   timeout_ms: 30000
   retries: 0
 excel.append_rows:
   executor_domain: excel
-  description: "批量追加多行（单次落盘；rows=[[...],[...]]）"
-  when_to_use: "把表格数据批量写入 Excel（日报/台账落盘）"
+  label_cn: Excel 批量追加
+  description: 批量追加多行（单次落盘；rows=[[...],[...]]）
+  when_to_use: 把表格数据批量写入 Excel（日报/台账落盘）
   params:
     type: object
-    required: [file, rows]
+    required:
+    - file
+    - rows
     properties:
-      file: { type: string }
-      sheet: { type: string }
+      file:
+        type: string
+      sheet:
+        type: string
       rows:
         type: array
         items:
@@ -131,167 +174,241 @@ excel.append_rows:
   risk: L1
   timeout_ms: 120000
   retries: 0
-
-# ============================================================
-# M4 Excel 高级
-# ============================================================
 excel.set_cell_style:
   executor_domain: excel
-  description: "单元格样式（同参重放幂等）：bold/font_size/font_color/bg_color"
+  label_cn: 设置单元格样式
+  description: 单元格样式（同参重放幂等）：bold/font_size/font_color/bg_color
   params:
     type: object
-    required: [file, cell]
+    required:
+    - file
+    - cell
     properties:
-      file: { type: string }
-      sheet: { type: string }
-      cell: { type: string, pattern: "^[A-Z]+[0-9]+$" }
-      bold: { type: boolean }
-      font_size: { type: number }
-      font_color: { type: string, pattern: "^[0-9A-Fa-f]{6}$" }
-      bg_color: { type: string, pattern: "^[0-9A-Fa-f]{6}$" }
+      file:
+        type: string
+      sheet:
+        type: string
+      cell:
+        type: string
+        pattern: ^[A-Z]+[0-9]+$
+      bold:
+        type: boolean
+      font_size:
+        type: number
+      font_color:
+        type: string
+        pattern: ^[0-9A-Fa-f]{6}$
+      bg_color:
+        type: string
+        pattern: ^[0-9A-Fa-f]{6}$
   idempotency: required
   risk: L1
   timeout_ms: 30000
   retries: 1
-
 excel.merge_cells:
   executor_domain: excel
-  description: "合并区域（已合并则重放为 no-op）"
+  label_cn: 合并单元格
+  description: 合并区域（已合并则重放为 no-op）
   params:
     type: object
-    required: [file, range]
+    required:
+    - file
+    - range
     properties:
-      file: { type: string }
-      sheet: { type: string }
-      range: { type: string, pattern: "^[A-Z]+[0-9]+:[A-Z]+[0-9]+$" }
+      file:
+        type: string
+      sheet:
+        type: string
+      range:
+        type: string
+        pattern: ^[A-Z]+[0-9]+:[A-Z]+[0-9]+$
   idempotency: required
   risk: L1
   timeout_ms: 30000
   retries: 1
-
 excel.set_column_width:
   executor_domain: excel
-  description: "设置列宽（column 接受 A/B 或 1 基序号）"
+  label_cn: 设置列宽
+  description: 设置列宽（column 接受 A/B 或 1 基序号）
   params:
     type: object
-    required: [file, column, width]
+    required:
+    - file
+    - column
+    - width
     properties:
-      file: { type: string }
-      sheet: { type: string }
-      column: { type: string }
-      width: { type: number, minimum: 1 }
+      file:
+        type: string
+      sheet:
+        type: string
+      column:
+        type: string
+      width:
+        type: number
+        minimum: 1
   idempotency: required
   risk: L1
   timeout_ms: 30000
   retries: 1
-
 excel.add_chart:
   executor_domain: excel
-  description: "插入柱状/折线图（重复执行会叠加图表，非幂等）"
-  when_to_use: "插入图表（柱状/折线）"
+  label_cn: 插入图表
+  description: 插入柱状/折线图（重复执行会叠加图表，非幂等）
+  when_to_use: 插入图表（柱状/折线）
   params:
     type: object
-    required: [file, data_range]
+    required:
+    - file
+    - data_range
     properties:
-      file: { type: string }
-      sheet: { type: string }
-      type: { enum: [bar, line], default: bar }
-      data_range: { type: string, description: "B2:C5 或 Sheet!B2:C5" }
-      title: { type: string }
-      anchor: { type: string, default: E2 }
-      titles_from_data: { type: boolean, default: false }
+      file:
+        type: string
+      sheet:
+        type: string
+      type:
+        enum:
+        - bar
+        - line
+        default: bar
+      data_range:
+        type: string
+        description: B2:C5 或 Sheet!B2:C5
+      title:
+        type: string
+      anchor:
+        type: string
+        default: E2
+      titles_from_data:
+        type: boolean
+        default: false
   idempotency: none
   risk: L1
   timeout_ms: 30000
   retries: 0
-
 excel.rename_sheet:
   executor_domain: excel
-  description: "重命名工作表（状态迁移，不重试）"
-  when_to_use: "重命名工作表"
+  label_cn: 重命名工作表
+  description: 重命名工作表（状态迁移，不重试）
+  when_to_use: 重命名工作表
   params:
     type: object
-    required: [file, old, new]
+    required:
+    - file
+    - old
+    - new
     properties:
-      file: { type: string }
-      old: { type: string }
-      new: { type: string }
+      file:
+        type: string
+      old:
+        type: string
+      new:
+        type: string
   idempotency: none
   risk: L1
   timeout_ms: 15000
   retries: 0
-
 excel.delete_sheet:
   executor_domain: excel
-  description: "删除工作表（保留最后一张）"
+  label_cn: 删除工作表
+  description: 删除工作表（保留最后一张）
   params:
     type: object
-    required: [file, sheet]
+    required:
+    - file
+    - sheet
     properties:
-      file: { type: string }
-      sheet: { type: string }
+      file:
+        type: string
+      sheet:
+        type: string
   idempotency: none
   risk: L2
   timeout_ms: 15000
   retries: 0
-
 excel.copy_sheet:
   executor_domain: excel
-  description: "复制工作表内容到新表"
+  label_cn: 复制工作表
+  description: 复制工作表内容到新表
   params:
     type: object
-    required: [file, source, target]
+    required:
+    - file
+    - source
+    - target
     properties:
-      file: { type: string }
-      source: { type: string }
-      target: { type: string }
+      file:
+        type: string
+      source:
+        type: string
+      target:
+        type: string
   idempotency: none
   risk: L1
   timeout_ms: 30000
   retries: 0
-
 excel.find_replace:
   executor_domain: excel
-  description: "全表查找替换（替换后重放 no-op，幂等）"
+  label_cn: 查找替换
+  description: 全表查找替换（替换后重放 no-op，幂等）
   params:
     type: object
-    required: [file, find]
+    required:
+    - file
+    - find
     properties:
-      file: { type: string }
-      sheet: { type: string }
-      find: { type: string }
-      replace: { type: string, default: "" }
+      file:
+        type: string
+      sheet:
+        type: string
+      find:
+        type: string
+      replace:
+        type: string
+        default: ''
   idempotency: required
   risk: L2
   timeout_ms: 60000
   retries: 1
-
 excel.insert_row:
   executor_domain: excel
-  description: "在指定行号前插入空行并可填值"
+  label_cn: 插入行
+  description: 在指定行号前插入空行并可填值
   params:
     type: object
-    required: [file, at]
+    required:
+    - file
+    - at
     properties:
-      file: { type: string }
-      sheet: { type: string }
-      at: { type: integer, minimum: 1 }
-      values: { type: array }
+      file:
+        type: string
+      sheet:
+        type: string
+      at:
+        type: integer
+        minimum: 1
+      values:
+        type: array
   idempotency: none
   risk: L1
   timeout_ms: 30000
   retries: 0
-
 excel.delete_row:
   executor_domain: excel
-  description: "删除指定行（位置语义随内容移动，不重试）"
+  label_cn: 删除行
+  description: 删除指定行（位置语义随内容移动，不重试）
   params:
     type: object
-    required: [file, at]
+    required:
+    - file
+    - at
     properties:
-      file: { type: string }
-      sheet: { type: string }
-      at: { type: integer, minimum: 1 }
+      file:
+        type: string
+      sheet:
+        type: string
+      at:
+        type: integer
+        minimum: 1
   idempotency: none
   risk: L2
   timeout_ms: 30000

@@ -7,6 +7,7 @@ import { Handle, Position } from "@xyflow/react";
 
 export type StepNodeData = {
   label: string;
+  label_cn?: string;
   sub?: string;
   tone: string;
   index?: number;
@@ -41,7 +42,7 @@ export function StepNodeView({ data }: { data: StepNodeData }) {
           </span>
         )}
         <p className="text-xs font-semibold text-slate-800 truncate">
-          {data.label}
+          {data.label_cn || data.label}
         </p>
       </div>
       {data.sub && (

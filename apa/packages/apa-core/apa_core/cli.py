@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 
 def _cmd_studio(args) -> int:
@@ -152,7 +153,7 @@ def _cmd_serve(args) -> int:
     fast_app = create_app(
         journals=args.journals,
         processes_dir=args.processes_dir or None,
-        registry=merged_reg,
+        registry=reg,
         frontend_dist=args.frontend_dist or None,
         token=args.token or None,
         ai_status=_ai_status(),

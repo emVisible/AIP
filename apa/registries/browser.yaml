@@ -1,520 +1,656 @@
-# ============================================================
-# Browser Action Registry — browser.*（§9.3 子集）
-# ============================================================
 browser.navigate:
   executor_domain: browser
-  description: "导航到 URL"
-  when_to_use: "打开指定页面；流程起点或跳转"
+  label_cn: 打开网页
+  description: 导航到 URL
+  when_to_use: 打开指定页面；流程起点或跳转
   params:
     type: object
-    required: [url]
+    required:
+    - url
     properties:
-      url: { type: string, format: uri }
-      wait_for: { enum: [load, domcontentloaded, networkidle] }
+      url:
+        type: string
+        format: uri
+      wait_for:
+        enum:
+        - load
+        - domcontentloaded
+        - networkidle
   idempotency: required
   risk: L0
   timeout_ms: 30000
   retries: 3
-  audit_fields: [url]
-  expect: "browser.page.loaded"
-
+  audit_fields:
+  - url
+  expect: browser.page.loaded
 browser.click:
   executor_domain: browser
-  description: "点击目标元素"
-  when_to_use: "点击页面元素——按钮/链接/标签页切换"
+  label_cn: 点击元素
+  description: 点击目标元素
+  when_to_use: 点击页面元素——按钮/链接/标签页切换
   params:
     type: object
-    required: [target]
+    required:
+    - target
     properties:
-      target: { type: string }
-      force: { type: boolean }
+      target:
+        type: string
+      force:
+        type: boolean
   idempotency: none
   risk: L1
   timeout_ms: 10000
   retries: 0
-  audit_fields: [target]
-
+  audit_fields:
+  - target
 browser.input:
   executor_domain: browser
-  description: "向输入框填充值（clear+fill 幂等）"
-  when_to_use: "向输入框填写文本（搜索框/表单）"
+  label_cn: 填写输入框
+  description: 向输入框填充值（clear+fill 幂等）
+  when_to_use: 向输入框填写文本（搜索框/表单）
   params:
     type: object
-    required: [target, value]
+    required:
+    - target
+    - value
     properties:
-      target: { type: string }
-      value: { type: string }
-      clear_first: { type: boolean }
+      target:
+        type: string
+      value:
+        type: string
+      clear_first:
+        type: boolean
   idempotency: required
   risk: L1
   timeout_ms: 5000
   retries: 2
-  audit_fields: [target]
-  audit_mask_fields: [value]
-
+  audit_fields:
+  - target
+  audit_mask_fields:
+  - value
 browser.select_option:
   executor_domain: browser
-  description: "选择下拉选项"
-  when_to_use: "下拉框选择选项"
+  label_cn: 下拉选择
+  description: 选择下拉选项
+  when_to_use: 下拉框选择选项
   params:
     type: object
-    required: [target, value]
+    required:
+    - target
+    - value
     properties:
-      target: { type: string }
-      value: { type: string }
+      target:
+        type: string
+      value:
+        type: string
   idempotency: required
   risk: L1
   timeout_ms: 5000
   retries: 2
-  audit_fields: [target, value]
-
+  audit_fields:
+  - target
+  - value
 browser.extract:
   executor_domain: browser
-  description: "按选择器提取文本到 ContextStore"
-  when_to_use: "提取页面元素文本（单值）"
+  label_cn: 提取文本
+  description: 按选择器提取文本到 ContextStore
+  when_to_use: 提取页面元素文本（单值）
   params:
     type: object
-    required: [selectors]
+    required:
+    - selectors
     properties:
       selectors:
         type: object
-        additionalProperties: { type: string }
-      output_context: { type: string, pattern: "^ctx_[A-Za-z0-9_]+$" }
+        additionalProperties:
+          type: string
+      output_context:
+        type: string
+        pattern: ^ctx_[A-Za-z0-9_]+$
   idempotency: required
   risk: L0
   timeout_ms: 15000
   retries: 2
-  audit_fields: [selectors]
-
+  audit_fields:
+  - selectors
 browser.wait_element:
   executor_domain: browser
-  description: "等待元素出现"
+  description: 等待元素出现
   params:
     type: object
-    required: [target]
+    required:
+    - target
     properties:
-      target: { type: string }
-      timeout_ms: { type: number }
+      target:
+        type: string
+      timeout_ms:
+        type: number
   idempotency: required
   risk: L0
   timeout_ms: 30000
   retries: 1
-  audit_fields: [target]
-
+  audit_fields:
+  - target
 browser.scroll:
   executor_domain: browser
-  description: "滚动页面"
+  description: 滚动页面
   params:
     type: object
-    required: [direction]
+    required:
+    - direction
     properties:
-      direction: { enum: [up, down, to_top, to_bottom] }
+      direction:
+        enum:
+        - up
+        - down
+        - to_top
+        - to_bottom
   idempotency: optional
   risk: L0
   timeout_ms: 3000
   retries: 0
-  audit_fields: [direction]
-
+  audit_fields:
+  - direction
 browser.upload_file:
   executor_domain: browser
-  description: "上传文件"
+  description: 上传文件
   params:
     type: object
-    required: [target, filename]
+    required:
+    - target
+    - filename
     properties:
-      target: { type: string }
-      filename: { type: string }
+      target:
+        type: string
+      filename:
+        type: string
   idempotency: none
   risk: L2
   timeout_ms: 120000
   retries: 0
-  audit_fields: [target, filename]
-
+  audit_fields:
+  - target
+  - filename
 browser.download_file:
   executor_domain: browser
-  description: "触发并等待文件下载"
+  description: 触发并等待文件下载
   params:
     type: object
-    required: [target]
+    required:
+    - target
     properties:
-      target: { type: string }
-      save_dir: { type: string }
+      target:
+        type: string
+      save_dir:
+        type: string
   idempotency: required
   risk: L1
   timeout_ms: 180000
   retries: 1
-  audit_fields: [target]
-
+  audit_fields:
+  - target
 browser.run_script:
   executor_domain: browser
-  description: "在页面执行 JS（高风险，禁止自动执行）"
+  description: 在页面执行 JS（高风险，禁止自动执行）
   params:
     type: object
-    required: [script]
+    required:
+    - script
     properties:
-      script: { type: string }
+      script:
+        type: string
   idempotency: none
   risk: L3
   timeout_ms: 10000
   retries: 0
   requires_approval_at: L3
-  audit_fields: [script_hash]
-
+  audit_fields:
+  - script_hash
 browser.take_screenshot:
   executor_domain: browser
-  description: "截图存入 ContextStore，ref 写入 result（C6，不传输原始字节）"
+  description: 截图存入 ContextStore，ref 写入 result（C6，不传输原始字节）
   params:
     type: object
-    required: [output_context]
+    required:
+    - output_context
     properties:
-      output_context: { type: string, pattern: "^ctx_[A-Za-z0-9_]+$" }
-      full_page: { type: boolean }
+      output_context:
+        type: string
+        pattern: ^ctx_[A-Za-z0-9_]+$
+      full_page:
+        type: boolean
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-  audit_fields: [output_context]
+  audit_fields:
+  - output_context
 browser.extract_table:
   executor_domain: browser
-  description: "结构化表格抓取：按行选择器+列选择器提取多行数据（只读）"
-  when_to_use: "抓取整张结构化表格为数据，配合 data.filter/foreach 使用"
+  label_cn: 抓取表格
+  description: 结构化表格抓取：按行选择器+列选择器提取多行数据（只读）
+  when_to_use: 抓取整张结构化表格为数据，配合 data.filter/foreach 使用
   params:
     type: object
-    required: [row_selector, columns]
+    required:
+    - row_selector
+    - columns
     properties:
-      row_selector: { type: string, description: "行级 CSS 选择器" }
+      row_selector:
+        type: string
+        description: 行级 CSS 选择器
       columns:
         type: object
-        description: "字段名→列内子选择器映射"
-        additionalProperties: { type: string }
-      max_rows: { type: integer, minimum: 1, maximum: 1000 }
+        description: 字段名→列内子选择器映射
+        additionalProperties:
+          type: string
+      max_rows:
+        type: integer
+        minimum: 1
+        maximum: 1000
   idempotency: required
   risk: L0
   timeout_ms: 60000
   retries: 1
-  audit_fields: [row_selector]
-
-# ============================================================
-# M3 浏览器高级（tab/传输/脚本/状态/交互）
-# ============================================================
+  audit_fields:
+  - row_selector
 browser.tab_new:
   executor_domain: browser
-  description: "新开标签页并可导航，激活为新活动页"
-  when_to_use: "多标签操作：新开标签页"
+  label_cn: 新建标签页
+  description: 新开标签页并可导航，激活为新活动页
+  when_to_use: 多标签操作：新开标签页
   params:
     type: object
     properties:
-      url: { type: string, format: uri }
-      ref: { type: string, description: "标签引用名，缺省自动编号" }
-      wait_for: { enum: [load, domcontentloaded, networkidle] }
+      url:
+        type: string
+        format: uri
+      ref:
+        type: string
+        description: 标签引用名，缺省自动编号
+      wait_for:
+        enum:
+        - load
+        - domcontentloaded
+        - networkidle
   idempotency: none
   risk: L1
   timeout_ms: 60000
   retries: 0
-
 browser.tab_list:
   executor_domain: browser
-  description: "列出全部标签页（ref/url/title/active）"
-  when_to_use: "列出全部标签页供切换参考"
-  params: { type: object, properties: {} }
+  label_cn: 列出标签页
+  description: 列出全部标签页（ref/url/title/active）
+  when_to_use: 列出全部标签页供切换参考
+  params:
+    type: object
+    properties: {}
   idempotency: required
   risk: L0
   timeout_ms: 10000
   retries: 2
-
 browser.tab_switch:
   executor_domain: browser
-  description: "切换活动标签页"
-  when_to_use: "切换活动标签页"
+  label_cn: 切换标签页
+  description: 切换活动标签页
+  when_to_use: 切换活动标签页
   params:
     type: object
-    required: [ref]
-    properties: { ref: { type: string } }
+    required:
+    - ref
+    properties:
+      ref:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 10000
   retries: 2
-
 browser.tab_close:
   executor_domain: browser
-  description: "关闭标签页（缺省当前页；关最后一张自动补空白页）"
-  when_to_use: "关闭标签页"
+  label_cn: 关闭标签页
+  description: 关闭标签页（缺省当前页；关最后一张自动补空白页）
+  when_to_use: 关闭标签页
   params:
     type: object
-    properties: { ref: { type: string } }
+    properties:
+      ref:
+        type: string
   idempotency: none
   risk: L1
   timeout_ms: 15000
   retries: 0
-
 browser.execute_js:
   executor_domain: browser
-  description: "在活动页执行 JS（可能有副作用，不重试）"
-  when_to_use: "执行自定义 JS 脚本操作 DOM 或获取数据"
+  label_cn: 执行 JS
+  description: 在活动页执行 JS（可能有副作用，不重试）
+  when_to_use: 执行自定义 JS 脚本操作 DOM 或获取数据
   params:
     type: object
-    required: [script]
+    required:
+    - script
     properties:
-      script: { type: string }
+      script:
+        type: string
       arg: {}
   idempotency: none
   risk: L2
   timeout_ms: 30000
   retries: 0
-
 browser.upload:
   executor_domain: browser
-  description: "向 file input 上传本地文件（同参重传幂等）"
-  when_to_use: "向文件上传控件提交本地文件"
+  label_cn: 上传文件
+  description: 向 file input 上传本地文件（同参重传幂等）
+  when_to_use: 向文件上传控件提交本地文件
   params:
     type: object
-    required: [target, files]
+    required:
+    - target
+    - files
     properties:
-      target: { type: string }
-      files: { type: array, items: { type: string }, minItems: 1 }
+      target:
+        type: string
+      files:
+        type: array
+        items:
+          type: string
+        minItems: 1
   idempotency: required
   risk: L1
   timeout_ms: 30000
   retries: 1
-
 browser.download:
   executor_domain: browser
-  description: "下载文件：url 直链（携带会话 Cookie）或 trigger_target 点击触发；同参重下幂等"
-  when_to_use: "下载文件到本地路径"
+  label_cn: 下载文件
+  description: 下载文件：url 直链（携带会话 Cookie）或 trigger_target 点击触发；同参重下幂等
+  when_to_use: 下载文件到本地路径
   params:
     type: object
-    required: [path]
+    required:
+    - path
     properties:
-      path: { type: string }
-      url: { type: string, format: uri }
-      trigger_target: { type: string }
+      path:
+        type: string
+      url:
+        type: string
+        format: uri
+      trigger_target:
+        type: string
   idempotency: required
   risk: L1
   timeout_ms: 120000
   retries: 1
-
 browser.cookies_get:
   executor_domain: browser
-  description: "读取上下文 Cookie（可按 urls 过滤）"
+  description: 读取上下文 Cookie（可按 urls 过滤）
   params:
     type: object
-    properties: { urls: { type: array, items: { type: string } } }
+    properties:
+      urls:
+        type: array
+        items:
+          type: string
   idempotency: required
   risk: L0
   timeout_ms: 10000
   retries: 2
-
 browser.cookies_set:
   executor_domain: browser
-  description: "写入 Cookie（同 name+domain 覆盖，重放幂等）"
+  description: 写入 Cookie（同 name+domain 覆盖，重放幂等）
   params:
     type: object
-    required: [cookies]
+    required:
+    - cookies
     properties:
-      cookies: { type: array, items: { type: object } }
+      cookies:
+        type: array
+        items:
+          type: object
   idempotency: required
   risk: L2
   timeout_ms: 10000
   retries: 1
-
 browser.cookies_clear:
   executor_domain: browser
-  description: "清空全部 Cookie"
-  params: { type: object, properties: {} }
+  description: 清空全部 Cookie
+  params:
+    type: object
+    properties: {}
   idempotency: none
   risk: L2
   timeout_ms: 10000
   retries: 0
-
 browser.hover:
   executor_domain: browser
-  description: "悬停目标元素"
-  when_to_use: "悬停触发 hover 菜单/提示"
+  label_cn: 悬停
+  description: 悬停目标元素
+  when_to_use: 悬停触发 hover 菜单/提示
   params:
     type: object
-    required: [target]
-    properties: { target: { type: string } }
+    required:
+    - target
+    properties:
+      target:
+        type: string
   idempotency: none
   risk: L1
   timeout_ms: 15000
   retries: 0
-
 browser.double_click:
   executor_domain: browser
-  description: "双击目标元素"
-  when_to_use: "双击元素（编辑进入/选中行）"
+  label_cn: 双击
+  description: 双击目标元素
+  when_to_use: 双击元素（编辑进入/选中行）
   params:
     type: object
-    required: [target]
-    properties: { target: { type: string } }
+    required:
+    - target
+    properties:
+      target:
+        type: string
   idempotency: none
   risk: L1
   timeout_ms: 15000
   retries: 0
-
 browser.right_click:
   executor_domain: browser
-  description: "右键点击目标元素"
-  when_to_use: "右键打开上下文菜单"
+  label_cn: 右键点击
+  description: 右键点击目标元素
+  when_to_use: 右键打开上下文菜单
   params:
     type: object
-    required: [target]
-    properties: { target: { type: string } }
+    required:
+    - target
+    properties:
+      target:
+        type: string
   idempotency: none
   risk: L1
   timeout_ms: 15000
   retries: 0
-
 browser.get_page_info:
   executor_domain: browser
-  description: "读取活动页 url 与标题"
-  when_to_use: "读取当前 URL 与标题（条件判断/日志）"
-  params: { type: object, properties: {} }
+  label_cn: 读取页面信息
+  description: 读取活动页 url 与标题
+  when_to_use: 读取当前 URL 与标题（条件判断/日志）
+  params:
+    type: object
+    properties: {}
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 browser.element_attr:
   executor_domain: browser
-  description: "读取目标元素属性值"
-  when_to_use: "读取元素属性值（href/class/data-*）"
+  label_cn: 读取元素属性
+  description: 读取目标元素属性值
+  when_to_use: 读取元素属性值（href/class/data-*）
   params:
     type: object
-    required: [target, attr]
+    required:
+    - target
+    - attr
     properties:
-      target: { type: string }
-      attr: { type: string }
-      timeout_ms: { type: integer, default: 5000 }
+      target:
+        type: string
+      attr:
+        type: string
+      timeout_ms:
+        type: integer
+        default: 5000
   idempotency: required
   risk: L0
   timeout_ms: 15000
   retries: 2
-
-# ============================================================
-# A: 地基补缺 —— frame / 登录态
-# ============================================================
 browser.iframe_switch:
   executor_domain: browser
-  description: "进入子 frame（后续定位在其内解析；可嵌套）"
-  when_to_use: "进入 iframe 子文档定位元素"
+  label_cn: 进入 iframe
+  description: 进入子 frame（后续定位在其内解析；可嵌套）
+  when_to_use: 进入 iframe 子文档定位元素
   params:
     type: object
     properties:
       selector:
         type: string
-        description: "iframe CSS 选择器（优先）"
-      index: { type: integer, minimum: 0, description: "按序号切换" }
+        description: iframe CSS 选择器（优先）
+      index:
+        type: integer
+        minimum: 0
+        description: 按序号切换
   idempotency: required
   risk: L0
   timeout_ms: 10000
   retries: 1
-
 browser.frame_reset:
   executor_domain: browser
-  description: "返回主文档 frame"
-  when_to_use: "返回主文档 frame"
-  params: { type: object, properties: {} }
+  label_cn: 返回主文档
+  description: 返回主文档 frame
+  when_to_use: 返回主文档 frame
+  params:
+    type: object
+    properties: {}
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 browser.storage_state_save:
   executor_domain: browser
-  description: "保存登录态（cookies+storage → JSON），跨次运行免登录"
-  when_to_use: "保存登录态跨次运行免登录"
+  label_cn: 保存登录态
+  description: 保存登录态（cookies+storage → JSON），跨次运行免登录
+  when_to_use: 保存登录态跨次运行免登录
   params:
     type: object
-    required: [path]
-    properties: { path: { type: string } }
+    required:
+    - path
+    properties:
+      path:
+        type: string
   idempotency: required
   risk: L2
   timeout_ms: 15000
   retries: 1
-
 browser.storage_state_load:
   executor_domain: browser
-  description: "加载已保存登录态（同源重放幂等）"
-  when_to_use: "加载已保存登录态"
+  label_cn: 加载登录态
+  description: 加载已保存登录态（同源重放幂等）
+  when_to_use: 加载已保存登录态
   params:
     type: object
-    required: [path]
-    properties: { path: { type: string } }
+    required:
+    - path
+    properties:
+      path:
+        type: string
   idempotency: required
   risk: L2
   timeout_ms: 15000
   retries: 1
-
-
 if.element_visible:
   executor_domain: browser
-  description: "谓词：目标元素当前可见 → matched（供 condition 组合）"
+  label_cn: 元素是否可见
+  description: 谓词：目标元素当前可见 → matched（供 condition 组合）
   params:
     type: object
-    required: [target]
+    required:
+    - target
     properties:
-      target: { type: string }
+      target:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 8000
   retries: 2
-
 if.url_contains:
   executor_domain: browser
-  description: "谓词：当前 URL 含指定片段 → matched"
+  label_cn: URL 包含判断
+  description: 谓词：当前 URL 含指定片段 → matched
   params:
     type: object
-    required: [fragment]
-    properties: { fragment: { type: string } }
+    required:
+    - fragment
+    properties:
+      fragment:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
-
-
 browser.get_similar_elements:
   executor_domain: browser
-  description: "获取相似元素列表（循环相似元素的 foreach source）"
+  label_cn: 获取相似元素列表
+  description: 获取相似元素列表（循环相似元素的 foreach source）
   params:
     type: object
-    required: [selector]
+    required:
+    - selector
     properties:
-      selector: { type: string }
-      limit: { type: integer, minimum: 1, maximum: 500, default: 100 }
-      output_context: { type: string }
+      selector:
+        type: string
+      limit:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 100
+      output_context:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 30000
   retries: 2
-
 browser.dialog_handle:
   executor_domain: browser
-  description: "武装一次性对话框处理器（accept/dismiss/prompt 填文）"
-  when_to_use: "处理浏览器弹窗 alert/confirm/prompt"
+  label_cn: 处理浏览器弹窗
+  description: 武装一次性对话框处理器（accept/dismiss/prompt 填文）
+  when_to_use: 处理浏览器弹窗 alert/confirm/prompt
   params:
     type: object
     properties:
-      action: { enum: [accept, dismiss], default: accept }
-      prompt_text: { type: string }
+      action:
+        enum:
+        - accept
+        - dismiss
+        default: accept
+      prompt_text:
+        type: string
   idempotency: none
   risk: L1
   timeout_ms: 15000
   retries: 0
-
 browser.drag_drop:
   executor_domain: browser
-  description: "从源元素拖拽到目标元素"
-  when_to_use: "拖拽元素到目标位置"
+  label_cn: 拖拽元素
+  description: 从源元素拖拽到目标元素
+  when_to_use: 拖拽元素到目标位置
   params:
     type: object
-    required: [from, to]
+    required:
+    - from
+    - to
     properties:
-      from: { type: string }
-      to: { type: string }
+      from:
+        type: string
+      to:
+        type: string
   idempotency: none
   risk: L1
   timeout_ms: 30000
   retries: 0
-

@@ -53,7 +53,8 @@ export interface ProcessInfo {
 
 // ---- 动作目录（registry）----
 export interface ActionMeta {
-  description: string;
+  label_cn?: string;
+  description?: string;
   risk: string;
   executor_domain: string;
   idempotency: string;

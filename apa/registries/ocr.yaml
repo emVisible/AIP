@@ -1,92 +1,128 @@
-# ============================================================
-# OCR Action Registry — ocr.*（可插拔后端接入点）
-# C4：凭据经 params.auth 引用（vault/env），机密不进协议
-# ============================================================
 ocr.extract:
   executor_domain: ocr
-  description: "OCR 文字识别：mock 离线测试 / http_ocr 通用云 API"
-  when_to_use: "识别图片中的文字（截图信息提取）"
+  label_cn: OCR 识别
+  description: OCR 文字识别：mock 离线测试 / http_ocr 通用云 API
+  when_to_use: 识别图片中的文字（截图信息提取）
   params:
     type: object
-    required: [backend]
+    required:
+    - backend
     properties:
       backend:
-        enum: [mock, http_ocr]
-        description: "后端策略"
+        enum:
+        - mock
+        - http_ocr
+        description: 后端策略
       endpoint:
         type: string
         format: uri
-        description: "http_ocr 必填：OCR API 地址"
-      image_path: { type: string, description: "本地图片路径" }
-      image_b64: { type: string, description: "内联 base64 图片" }
-      language: { type: string, default: chs }
+        description: http_ocr 必填：OCR API 地址
+      image_path:
+        type: string
+        description: 本地图片路径
+      image_b64:
+        type: string
+        description: 内联 base64 图片
+      language:
+        type: string
+        default: chs
       auth:
         type: object
-        description: "凭据引用 {vault: name} / {env: VAR}（C4）"
+        description: '凭据引用 {vault: name} / {env: VAR}（C4）'
         additionalProperties: true
       headers:
         type: object
-        additionalProperties: { type: string }
-      output_context: { type: string, description: "ContextStore 引用键" }
+        additionalProperties:
+          type: string
+      output_context:
+        type: string
+        description: ContextStore 引用键
   idempotency: required
   risk: L1
   timeout_ms: 60000
   retries: 2
-  audit_fields: [backend, endpoint]
-
+  audit_fields:
+  - backend
+  - endpoint
 ocr.screen_text:
   executor_domain: ocr
-  description: "屏幕区域文字识别（Apple Vision，需屏幕录制权限）"
-  when_to_use: "屏幕区域文字识别（非网页内容的 OCR 读取）"
+  label_cn: 屏幕文字识别
+  description: 屏幕区域文字识别（Apple Vision，需屏幕录制权限）
+  when_to_use: 屏幕区域文字识别（非网页内容的 OCR 读取）
   params:
     type: object
     properties:
       region:
         type: object
-        description: "{x,y,w,h} 全局点坐标；缺省全屏"
-      language: { type: string, default: zh-Hans }
-      accurate: { type: boolean, default: true }
-      output_context: { type: string }
+        description: '{x,y,w,h} 全局点坐标；缺省全屏'
+      language:
+        type: string
+        default: zh-Hans
+      accurate:
+        type: boolean
+        default: true
+      output_context:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 60000
   retries: 2
-
-
 ocr.wait_text:
   executor_domain: ocr
-  description: "轮询等待屏幕文字出现（超时返回 text_timeout）"
-  when_to_use: "等待屏幕出现目标文字再继续"
+  label_cn: 等待屏幕文字
+  description: 轮询等待屏幕文字出现（超时返回 text_timeout）
+  when_to_use: 等待屏幕出现目标文字再继续
   params:
     type: object
-    required: [text]
+    required:
+    - text
     properties:
-      text: { type: string }
-      contains: { type: boolean, default: true }
+      text:
+        type: string
+      contains:
+        type: boolean
+        default: true
       region:
         type: object
-        description: "{x,y,w,h} 搜索区域"
-      timeout_s: { type: number, minimum: 0.5, maximum: 120, default: 10 }
-      interval_s: { type: number, minimum: 0.1, maximum: 5, default: 0.5 }
-      min_confidence: { type: number, minimum: 0, maximum: 1, default: 0.3 }
-      output_context: { type: string }
+        description: '{x,y,w,h} 搜索区域'
+      timeout_s:
+        type: number
+        minimum: 0.5
+        maximum: 120
+        default: 10
+      interval_s:
+        type: number
+        minimum: 0.1
+        maximum: 5
+        default: 0.5
+      min_confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        default: 0.3
+      output_context:
+        type: string
   idempotency: optional
   risk: L0
   timeout_ms: 130000
   retries: 0
-
-
 if.text_on_screen:
   executor_domain: ocr
-  description: "谓词：屏幕上存在目标文字(OCR) → matched + bounds"
-  when_to_use: "谓词：屏幕上是否存在目标文字"
+  label_cn: 屏幕存在文字
+  description: 谓词：屏幕上存在目标文字(OCR) → matched + bounds
+  when_to_use: 谓词：屏幕上是否存在目标文字
   params:
     type: object
-    required: [text]
+    required:
+    - text
     properties:
-      text: { type: string }
-      contains: { type: boolean, default: true }
-      region: { type: object }
+      text:
+        type: string
+      contains:
+        type: boolean
+        default: true
+      region:
+        type: object
   idempotency: required
   risk: L0
   timeout_ms: 30000

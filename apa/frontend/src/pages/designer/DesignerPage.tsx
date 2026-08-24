@@ -176,6 +176,8 @@ function DesignerInner() {
             dropPosRef.current.get(id) ?? { x: 200, y: i * 100 },
           data: {
             label: s2.id || `step_${i + 1}`,
+            label_cn: (s2.action &&
+              catalog[s2.action]?.label_cn) || "",
             sub: s2.action || s2.type || "\u2014",
             index: i,
             kind: (s2.type || "") as StepNodeData["kind"],
@@ -672,10 +674,19 @@ function DesignerInner() {
                     : dragOverIdx === i
                       ? "border-dashed border-blue-400 bg-blue-50/60"
                       : "border-slate-200 bg-white"}`}>
-                <span className="font-semibold mr-2">{i + 1}. {s.id}</span>
-                <span className="text-slate-400 font-mono">
-                  {s.action || (s.type ? `[${s.type}]` : "(未设置)")}
+                <span className="font-semibold mr-2">{i + 1}.</span>
+                <span className="font-medium text-slate-700 mr-1.5">
+                  {s.action
+                    ? catalog[s.action]?.label_cn ||
+                      catalog[s.action]?.description ||
+                      s.action
+                    : s.type ? `[${s.type}]` : "(未设置)"}
                 </span>
+                {!catalog[s.action] && !s.type && (
+                  <span className="font-mono text-[10px] text-slate-300">
+                    {s.id}
+                  </span>
+                )}
               </div>
             ))}
           </div>

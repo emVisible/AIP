@@ -1,950 +1,1294 @@
-# ============================================================
-# DataOps Action Registry — data.* / file.* / string.* / email.*
-# C3：读操作 required+retries>0；写/发操作 none+retries=0
-# ============================================================
 data.create:
   executor_domain: data
-  description: "创建内存表格（columns + rows；同键覆盖幂等）"
+  label_cn: 创建表格
+  description: 创建内存表格（columns + rows；同键覆盖幂等）
   params:
     type: object
-    required: [columns]
+    required:
+    - columns
     properties:
-      columns: { type: array, items: { type: string } }
+      columns:
+        type: array
+        items:
+          type: string
       rows:
         type: array
-        items: { type: array }
-      key: { type: string, default: default, description: "表格存储键" }
+        items:
+          type: array
+      key:
+        type: string
+        default: default
+        description: 表格存储键
   idempotency: required
   risk: L0
   timeout_ms: 30000
   retries: 1
-
 data.filter:
   executor_domain: data
-  description: "按列条件过滤表格行"
-  when_to_use: "按条件过滤表格行（金额>阈值/状态=待审）"
+  label_cn: 过滤表格
+  description: 按列条件过滤表格行
+  when_to_use: 按条件过滤表格行（金额>阈值/状态=待审）
   params:
     type: object
-    required: [source, column, op, value]
+    required:
+    - source
+    - column
+    - op
+    - value
     properties:
-      source: { type: string }
-      column: { type: string }
-      op: { enum: ["==", "!=", ">", ">=", "<", "<=", contains, startswith] }
+      source:
+        type: string
+      column:
+        type: string
+      op:
+        enum:
+        - ==
+        - '!='
+        - '>'
+        - '>='
+        - <
+        - <=
+        - contains
+        - startswith
       value: {}
-      output_key: { type: string, default: filtered }
+      output_key:
+        type: string
+        default: filtered
   idempotency: required
   risk: L0
   timeout_ms: 30000
   retries: 2
-
 data.sort:
   executor_domain: data
-  description: "按列排序表格"
-  when_to_use: "按列排序"
+  label_cn: 排序表格
+  description: 按列排序表格
+  when_to_use: 按列排序
   params:
     type: object
-    required: [source, column]
+    required:
+    - source
+    - column
     properties:
-      source: { type: string }
-      column: { type: string }
-      reverse: { type: boolean, default: false }
-      output_key: { type: string, default: sorted }
+      source:
+        type: string
+      column:
+        type: string
+      reverse:
+        type: boolean
+        default: false
+      output_key:
+        type: string
+        default: sorted
   idempotency: required
   risk: L0
   timeout_ms: 30000
   retries: 2
-
 data.to_csv:
   executor_domain: data
-  description: "表格序列化为 CSV 文本"
+  label_cn: 表格转 CSV
+  description: 表格序列化为 CSV 文本
   params:
     type: object
-    required: [source]
+    required:
+    - source
     properties:
-      source: { type: string }
+      source:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 30000
   retries: 2
-
 file.read_text:
   executor_domain: data
-  description: "读取文本文件（UTF-8）"
+  label_cn: 读取文件
+  description: 读取文本文件（UTF-8）
   params:
     type: object
-    required: [path]
+    required:
+    - path
     properties:
-      path: { type: string }
+      path:
+        type: string
   idempotency: required
   risk: L1
   timeout_ms: 15000
   retries: 2
-
 file.write_text:
   executor_domain: data
-  description: "写文本文件（同内容重写幂等）"
+  label_cn: 写入文件
+  description: 写文本文件（同内容重写幂等）
   params:
     type: object
-    required: [path, content]
+    required:
+    - path
+    - content
     properties:
-      path: { type: string }
-      content: { type: string }
+      path:
+        type: string
+      content:
+        type: string
   idempotency: required
   risk: L2
   timeout_ms: 15000
   retries: 1
-
 string.replace:
   executor_domain: data
-  description: "字符串替换"
+  label_cn: 字符串替换
+  description: 字符串替换
   params:
     type: object
-    required: [text, old, new]
+    required:
+    - text
+    - old
+    - new
     properties:
-      text: { type: string }
-      old: { type: string }
-      new: { type: string }
+      text:
+        type: string
+      old:
+        type: string
+      new:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 string.split:
   executor_domain: data
-  description: "字符串分隔 → parts 数组"
+  label_cn: 字符串分隔
+  description: 字符串分隔 → parts 数组
   params:
     type: object
-    required: [text]
+    required:
+    - text
     properties:
-      text: { type: string }
-      delimiter: { type: string, default: "," }
+      text:
+        type: string
+      delimiter:
+        type: string
+        default: ','
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 email.send:
   executor_domain: email
-  description: "SMTP 发送邮件（TLS，支持附件/CC）；C4：password 走凭据注入"
-  when_to_use: "发送通知/报表邮件，支持附件与抄送"
+  label_cn: 发送邮件
+  description: SMTP 发送邮件（TLS，支持附件/CC）；C4：password 走凭据注入
+  when_to_use: 发送通知/报表邮件，支持附件与抄送
   params:
     type: object
-    required: [to, subject]
+    required:
+    - to
+    - subject
     properties:
-      smtp_host: { type: string }
-      smtp_port: { type: integer, minimum: 1, maximum: 65535 }
-      username: { type: string }
-      password: { type: string, writeOnly: true }
-      use_tls: { type: boolean, default: true }
-      from: { type: string }
-      to: { type: string }
-      cc: { type: string }
-      subject: { type: string }
-      body: { type: string }
-      body_type: { enum: [plain, html], default: plain }
-      attachments: { type: array, items: { type: string } }
+      smtp_host:
+        type: string
+      smtp_port:
+        type: integer
+        minimum: 1
+        maximum: 65535
+      username:
+        type: string
+      password:
+        type: string
+        writeOnly: true
+      use_tls:
+        type: boolean
+        default: true
+      from:
+        type: string
+      to:
+        type: string
+      cc:
+        type: string
+      subject:
+        type: string
+      body:
+        type: string
+      body_type:
+        enum:
+        - plain
+        - html
+        default: plain
+      attachments:
+        type: array
+        items:
+          type: string
   idempotency: none
   risk: L2
   timeout_ms: 60000
   retries: 0
-  audit_fields: [to, subject]
-# ============================================================
-# M1 数据工具包（string/encode/json/dt/hash/uuid/data 增强）
-# 全部纯函数：idempotency=required + retries
-# ============================================================
+  audit_fields:
+  - to
+  - subject
 string.regex_extract:
   executor_domain: data
-  description: "正则提取所有匹配（可指定分组）"
-  when_to_use: "正则提取匹配（工单号/金额/日期）"
+  label_cn: 正则提取
+  description: 正则提取所有匹配（可指定分组）
+  when_to_use: 正则提取匹配（工单号/金额/日期）
   params:
     type: object
-    required: [text, pattern]
+    required:
+    - text
+    - pattern
     properties:
-      text: { type: string }
-      pattern: { type: string }
-      group: { type: integer, minimum: 0, default: 0 }
-      ignore_case: { type: boolean, default: false }
+      text:
+        type: string
+      pattern:
+        type: string
+      group:
+        type: integer
+        minimum: 0
+        default: 0
+      ignore_case:
+        type: boolean
+        default: false
   idempotency: required
   risk: L0
   timeout_ms: 10000
   retries: 2
-
 string.regex_replace:
   executor_domain: data
-  description: "正则替换"
+  label_cn: 正则替换
+  description: 正则替换
   params:
     type: object
-    required: [text, pattern]
+    required:
+    - text
+    - pattern
     properties:
-      text: { type: string }
-      pattern: { type: string }
-      repl: { type: string, default: "" }
+      text:
+        type: string
+      pattern:
+        type: string
+      repl:
+        type: string
+        default: ''
   idempotency: required
   risk: L0
   timeout_ms: 10000
   retries: 2
-
 string.regex_test:
   executor_domain: data
-  description: "正则匹配测试"
+  label_cn: 正则匹配测试
+  description: 正则匹配测试
   params:
     type: object
-    required: [text, pattern]
+    required:
+    - text
+    - pattern
     properties:
-      text: { type: string }
-      pattern: { type: string }
+      text:
+        type: string
+      pattern:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 10000
   retries: 2
-
 string.trim:
   executor_domain: data
-  description: "去除首尾空白"
+  label_cn: 去除空白
+  description: 去除首尾空白
   params:
     type: object
-    required: [text]
-    properties: { text: { type: string } }
+    required:
+    - text
+    properties:
+      text:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 string.upper:
   executor_domain: data
-  description: "转大写"
+  label_cn: 转大写
+  description: 转大写
   params:
     type: object
-    required: [text]
-    properties: { text: { type: string } }
+    required:
+    - text
+    properties:
+      text:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 string.lower:
   executor_domain: data
-  description: "转小写"
+  label_cn: 转小写
+  description: 转小写
   params:
     type: object
-    required: [text]
-    properties: { text: { type: string } }
+    required:
+    - text
+    properties:
+      text:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 string.format_template:
   executor_domain: data
-  description: "{name} 占位模板填充（缺变量保留原样）"
-  when_to_use: "{name} 占位模板填充（邮件正文/通知）"
+  label_cn: 模板填充
+  description: '{name} 占位模板填充（缺变量保留原样）'
+  when_to_use: '{name} 占位模板填充（邮件正文/通知）'
   params:
     type: object
-    required: [template]
+    required:
+    - template
     properties:
-      template: { type: string }
-      vars: { type: object, additionalProperties: true }
+      template:
+        type: string
+      vars:
+        type: object
+        additionalProperties: true
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 string.pad:
   executor_domain: data
-  description: "定宽填充；align 指填充侧（left=左补齐）"
+  label_cn: 定宽填充
+  description: 定宽填充；align 指填充侧（left=左补齐）
   params:
     type: object
-    required: [text, width]
+    required:
+    - text
+    - width
     properties:
-      text: { type: string }
-      width: { type: integer, minimum: 1 }
-      fillchar: { type: string, default: " " }
-      align: { enum: [left, right, center], default: left }
+      text:
+        type: string
+      width:
+        type: integer
+        minimum: 1
+      fillchar:
+        type: string
+        default: ' '
+      align:
+        enum:
+        - left
+        - right
+        - center
+        default: left
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 string.starts_with:
   executor_domain: data
-  description: "前缀判断"
+  label_cn: 前缀判断
+  description: 前缀判断
   params:
     type: object
-    required: [text, prefix]
+    required:
+    - text
+    - prefix
     properties:
-      text: { type: string }
-      prefix: { type: string }
+      text:
+        type: string
+      prefix:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 string.contains:
   executor_domain: data
-  description: "包含判断（可选忽略大小写）"
-  when_to_use: "包含判断（分类路由/质检规则）"
+  label_cn: 包含判断
+  description: 包含判断（可选忽略大小写）
+  when_to_use: 包含判断（分类路由/质检规则）
   params:
     type: object
-    required: [text, needle]
+    required:
+    - text
+    - needle
     properties:
-      text: { type: string }
-      needle: { type: string }
-      ignore_case: { type: boolean, default: false }
+      text:
+        type: string
+      needle:
+        type: string
+      ignore_case:
+        type: boolean
+        default: false
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 encode.base64_encode:
   executor_domain: data
-  description: "Base64 编码"
+  label_cn: Base64 编码
+  description: Base64 编码
   params:
     type: object
-    required: [text]
-    properties: { text: { type: string } }
+    required:
+    - text
+    properties:
+      text:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 10000
   retries: 2
-
 encode.base64_decode:
   executor_domain: data
-  description: "Base64 解码（非 UTF-8 时回传 result_b64）"
+  label_cn: Base64 解码
+  description: Base64 解码（非 UTF-8 时回传 result_b64）
   params:
     type: object
-    required: [b64]
-    properties: { b64: { type: string } }
+    required:
+    - b64
+    properties:
+      b64:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 10000
   retries: 2
-
 encode.url_encode:
   executor_domain: data
-  description: "URL 百分号编码（safe 为空串，全字符转义）"
+  label_cn: URL 编码
+  description: URL 百分号编码（safe 为空串，全字符转义）
   params:
     type: object
-    required: [text]
-    properties: { text: { type: string } }
+    required:
+    - text
+    properties:
+      text:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 encode.url_decode:
   executor_domain: data
-  description: "URL 解码"
+  label_cn: URL 解码
+  description: URL 解码
   params:
     type: object
-    required: [text]
-    properties: { text: { type: string } }
+    required:
+    - text
+    properties:
+      text:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 json.parse:
   executor_domain: data
-  description: "JSON 文本 → 值"
+  label_cn: JSON 解析
+  description: JSON 文本 → 值
   params:
     type: object
-    required: [text]
-    properties: { text: { type: string } }
+    required:
+    - text
+    properties:
+      text:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 10000
   retries: 2
-
 json.stringify:
   executor_domain: data
-  description: "值 → JSON 文本"
+  label_cn: JSON 序列化
+  description: 值 → JSON 文本
   params:
     type: object
-    required: [value]
+    required:
+    - value
     properties:
       value: {}
-      indent: { type: integer, minimum: 0, maximum: 8 }
+      indent:
+        type: integer
+        minimum: 0
+        maximum: 8
   idempotency: required
   risk: L0
   timeout_ms: 10000
   retries: 2
-
 dt.now:
   executor_domain: data
-  description: "当前时间（iso/formatted/epoch 三态输出；非幂等不重试）"
+  label_cn: 当前时间
+  description: 当前时间（iso/formatted/epoch 三态输出；非幂等不重试）
   params:
     type: object
-    properties: { fmt: { type: string } }
+    properties:
+      fmt:
+        type: string
   idempotency: none
   risk: L0
   timeout_ms: 5000
   retries: 0
-
 dt.parse:
   executor_domain: data
-  description: "文本 → ISO 时间（无 fmt 则 ISO 解析）"
+  label_cn: 时间解析
+  description: 文本 → ISO 时间（无 fmt 则 ISO 解析）
   params:
     type: object
-    required: [text]
+    required:
+    - text
     properties:
-      text: { type: string }
-      fmt: { type: string }
+      text:
+        type: string
+      fmt:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 dt.add:
   executor_domain: data
-  description: "时间加减（days/hours/minutes/seconds）"
+  label_cn: 时间加减
+  description: 时间加减（days/hours/minutes/seconds）
   params:
     type: object
-    required: [iso]
+    required:
+    - iso
     properties:
-      iso: { type: string }
-      days: { type: number }
-      hours: { type: number }
-      minutes: { type: number }
-      seconds: { type: number }
-      fmt: { type: string }
+      iso:
+        type: string
+      days:
+        type: number
+      hours:
+        type: number
+      minutes:
+        type: number
+      seconds:
+        type: number
+      fmt:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 dt.diff:
   executor_domain: data
-  description: "两时间差值（b-a，单位 seconds/minutes/hours/days）"
+  label_cn: 时间差值
+  description: 两时间差值（b-a，单位 seconds/minutes/hours/days）
   params:
     type: object
-    required: [a, b]
+    required:
+    - a
+    - b
     properties:
-      a: { type: string }
-      b: { type: string }
-      unit: { enum: [seconds, minutes, hours, days], default: seconds }
+      a:
+        type: string
+      b:
+        type: string
+      unit:
+        enum:
+        - seconds
+        - minutes
+        - hours
+        - days
+        default: seconds
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 dt.timestamp:
   executor_domain: data
-  description: "ISO → Unix 时间戳"
+  label_cn: 时间戳转换
+  description: ISO → Unix 时间戳
   params:
     type: object
-    required: [iso]
+    required:
+    - iso
     properties:
-      iso: { type: string }
-      fmt: { type: string }
+      iso:
+        type: string
+      fmt:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 hash.md5:
   executor_domain: data
-  description: "MD5 摘要"
+  label_cn: MD5 摘要
+  description: MD5 摘要
   params:
     type: object
-    required: [text]
-    properties: { text: { type: string } }
+    required:
+    - text
+    properties:
+      text:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 hash.sha256:
   executor_domain: data
-  description: "SHA-256 摘要"
+  label_cn: SHA-256 摘要
+  description: SHA-256 摘要
   params:
     type: object
-    required: [text]
-    properties: { text: { type: string } }
+    required:
+    - text
+    properties:
+      text:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 uuid.gen:
   executor_domain: data
-  description: "UUID v4 生成（非幂等不重试）"
-  params: { type: object, properties: {} }
+  label_cn: 生成 UUID
+  description: UUID v4 生成（非幂等不重试）
+  params:
+    type: object
+    properties: {}
   idempotency: none
   risk: L0
   timeout_ms: 5000
   retries: 0
-
 data.aggregate:
   executor_domain: data
-  description: "列聚合 sum/avg/min/max/count"
-  when_to_use: "列聚合 sum/avg/min/max/count"
+  label_cn: 列聚合
+  description: 列聚合 sum/avg/min/max/count
+  when_to_use: 列聚合 sum/avg/min/max/count
   params:
     type: object
-    required: [source, column]
+    required:
+    - source
+    - column
     properties:
-      source: { type: string }
-      column: { type: string }
-      func: { enum: [sum, avg, min, max, count], default: sum }
+      source:
+        type: string
+      column:
+        type: string
+      func:
+        enum:
+        - sum
+        - avg
+        - min
+        - max
+        - count
+        default: sum
   idempotency: required
   risk: L0
   timeout_ms: 30000
   retries: 2
-
 data.distinct:
   executor_domain: data
-  description: "按列去重保留首现行"
-  when_to_use: "按列去重"
+  label_cn: 去重
+  description: 按列去重保留首现行
+  when_to_use: 按列去重
   params:
     type: object
-    required: [source, column]
+    required:
+    - source
+    - column
     properties:
-      source: { type: string }
-      column: { type: string }
-      output_key: { type: string, default: distinct }
+      source:
+        type: string
+      column:
+        type: string
+      output_key:
+        type: string
+        default: distinct
   idempotency: required
   risk: L0
   timeout_ms: 30000
   retries: 2
-
 data.slice:
   executor_domain: data
-  description: "行切片 [start, stop)"
+  label_cn: 行切片
+  description: 行切片 [start, stop)
   params:
     type: object
-    required: [source]
+    required:
+    - source
     properties:
-      source: { type: string }
-      start: { type: integer, minimum: 0, default: 0 }
-      stop: { type: integer, minimum: 0 }
-      output_key: { type: string, default: sliced }
+      source:
+        type: string
+      start:
+        type: integer
+        minimum: 0
+        default: 0
+      stop:
+        type: integer
+        minimum: 0
+      output_key:
+        type: string
+        default: sliced
   idempotency: required
   risk: L0
   timeout_ms: 30000
   retries: 2
-
 data.json_to_table:
   executor_domain: data
-  description: "dict 列表 → 内存表格（列取键并集保序）"
-  when_to_use: "JSON 数组转内存表格"
+  label_cn: JSON 转表格
+  description: dict 列表 → 内存表格（列取键并集保序）
+  when_to_use: JSON 数组转内存表格
   params:
     type: object
-    required: [items]
+    required:
+    - items
     properties:
-      items: { type: array, items: { type: object } }
-      key: { type: string, default: from_json }
+      items:
+        type: array
+        items:
+          type: object
+      key:
+        type: string
+        default: from_json
   idempotency: required
   risk: L0
   timeout_ms: 30000
   retries: 2
-
-# ============================================================
-# M2 流程控制配套
-# ============================================================
 core.delay:
   executor_domain: data
-  description: "等待 N 秒（上限 300s；非幂等不重试）"
+  description: 等待 N 秒（上限 300s；非幂等不重试）
   params:
     type: object
-    required: [seconds]
+    required:
+    - seconds
     properties:
-      seconds: { type: number, minimum: 0, maximum: 300 }
+      seconds:
+        type: number
+        minimum: 0
+        maximum: 300
   idempotency: none
   risk: L0
   timeout_ms: 310000
   retries: 0
-
 data.count:
   executor_domain: data
-  description: "读取内存表格行数（while 条件配套）"
+  label_cn: 表格行数
+  description: 读取内存表格行数（while 条件配套）
   params:
     type: object
-    required: [source]
+    required:
+    - source
     properties:
-      source: { type: string }
+      source:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 10000
   retries: 2
-
-# ============================================================
-# M4 系统 / 文件
-# ============================================================
 shell.execute:
   executor_domain: data
-  description: "执行 shell 命令（超时强杀；审计 cmd；可能有任意副作用）"
+  label_cn: 执行命令
+  description: 执行 shell 命令（超时强杀；审计 cmd；可能有任意副作用）
   params:
     type: object
-    required: [cmd]
+    required:
+    - cmd
     properties:
-      cmd: { type: string }
-      timeout_s: { type: number, minimum: 1, maximum: 600, default: 30 }
+      cmd:
+        type: string
+      timeout_s:
+        type: number
+        minimum: 1
+        maximum: 600
+        default: 30
   idempotency: none
   risk: L2
   timeout_ms: 620000
   retries: 0
-  audit_fields: [cmd]
-
+  audit_fields:
+  - cmd
 sys.notify:
   executor_domain: data
-  description: "桌面通知（macOS 通知中心，其他平台 stdout 降级）"
+  label_cn: 系统通知
+  description: 桌面通知（macOS 通知中心，其他平台 stdout 降级）
   params:
     type: object
-    required: [message]
+    required:
+    - message
     properties:
-      title: { type: string, default: APA }
-      message: { type: string }
+      title:
+        type: string
+        default: APA
+      message:
+        type: string
   idempotency: none
   risk: L1
   timeout_ms: 15000
   retries: 0
-
 clipboard.set:
   executor_domain: data
-  description: "写系统剪贴板（同值重放幂等；darwin）"
+  label_cn: 写剪贴板
+  description: 写系统剪贴板（同值重放幂等；darwin）
   params:
     type: object
-    required: [text]
-    properties: { text: { type: string } }
+    required:
+    - text
+    properties:
+      text:
+        type: string
   idempotency: required
   risk: L1
   timeout_ms: 5000
   retries: 1
-
 clipboard.get:
   executor_domain: data
-  description: "读系统剪贴板文本（读操作可重试）"
-  params: { type: object, properties: {} }
+  label_cn: 读剪贴板
+  description: 读系统剪贴板文本（读操作可重试）
+  params:
+    type: object
+    properties: {}
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 file.list_dir:
   executor_domain: data
-  description: "目录列举（glob pattern，含 is_dir/size）"
+  label_cn: 列目录
+  description: 目录列举（glob pattern，含 is_dir/size）
   params:
     type: object
-    required: [path]
+    required:
+    - path
     properties:
-      path: { type: string }
-      pattern: { type: string, default: "*" }
+      path:
+        type: string
+      pattern:
+        type: string
+        default: '*'
   idempotency: required
   risk: L0
   timeout_ms: 30000
   retries: 2
-
 file.mkdir:
   executor_domain: data
-  description: "创建目录（已存在为 no-op，幂等）"
+  label_cn: 创建目录
+  description: 创建目录（已存在为 no-op，幂等）
   params:
     type: object
-    required: [path]
+    required:
+    - path
     properties:
-      path: { type: string }
-      parents: { type: boolean, default: true }
+      path:
+        type: string
+      parents:
+        type: boolean
+        default: true
   idempotency: required
   risk: L1
   timeout_ms: 10000
   retries: 1
-
 file.exists:
   executor_domain: data
-  description: "路径存在性检查"
+  label_cn: 文件存在检查
+  description: 路径存在性检查
   params:
     type: object
-    required: [path]
-    properties: { path: { type: string } }
+    required:
+    - path
+    properties:
+      path:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 file.stat:
   executor_domain: data
-  description: "文件元信息（size/mtime_iso/is_dir）"
+  label_cn: 文件元信息
+  description: 文件元信息（size/mtime_iso/is_dir）
   params:
     type: object
-    required: [path]
-    properties: { path: { type: string } }
+    required:
+    - path
+    properties:
+      path:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 email.receive:
   executor_domain: email
-  description: "IMAP 拉取邮件（默认 BODY.PEEK 不标已读，只读可重试）"
-  when_to_use: "拉取邮箱邮件（客服质检/订单通知场景入口）"
+  label_cn: 收邮件
+  description: IMAP 拉取邮件（默认 BODY.PEEK 不标已读，只读可重试）
+  when_to_use: 拉取邮箱邮件（客服质检/订单通知场景入口）
   params:
     type: object
-    required: [host, username]
+    required:
+    - host
+    - username
     properties:
-      host: { type: string }
-      port: { type: integer, default: 993 }
-      username: { type: string }
-      password: { type: string, writeOnly: true }
-      folder: { type: string, default: INBOX }
-      criteria: { type: string, default: UNSEEN }
-      limit: { type: integer, minimum: 1, maximum: 100, default: 10 }
-      mark_seen: { type: boolean, default: false }
+      host:
+        type: string
+      port:
+        type: integer
+        default: 993
+      username:
+        type: string
+      password:
+        type: string
+        writeOnly: true
+      folder:
+        type: string
+        default: INBOX
+      criteria:
+        type: string
+        default: UNSEEN
+      limit:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+      mark_seen:
+        type: boolean
+        default: false
   idempotency: required
   risk: L1
   timeout_ms: 60000
   retries: 2
-
-
 data.merge:
   executor_domain: data
-  description: "两表合并：concat 纵向拼接 / inner|left 按 key 连接"
-  when_to_use: "两表拼接或按键连接"
+  label_cn: 合并表格
+  description: 两表合并：concat 纵向拼接 / inner|left 按 key 连接
+  when_to_use: 两表拼接或按键连接
   params:
     type: object
-    required: [a, b]
+    required:
+    - a
+    - b
     properties:
-      a: { type: string }
-      b: { type: string }
-      how: { enum: [concat, inner, left], default: concat }
-      on: { type: string, description: "连接键（join 模式必填）" }
-      output_key: { type: string, default: merged }
+      a:
+        type: string
+      b:
+        type: string
+      how:
+        enum:
+        - concat
+        - inner
+        - left
+        default: concat
+      true:
+        type: string
+        description: 连接键（join 模式必填）
+      output_key:
+        type: string
+        default: merged
   idempotency: required
   risk: L0
   timeout_ms: 30000
   retries: 2
-
-
 if.file_exists:
   executor_domain: data
-  description: "谓词：文件是否存在 → matched"
+  label_cn: 文件是否存在
+  description: 谓词：文件是否存在 → matched
   params:
     type: object
-    required: [path]
-    properties: { path: { type: string } }
+    required:
+    - path
+    properties:
+      path:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 if.dir_exists:
   executor_domain: data
-  description: "谓词：目录是否存在 → matched"
+  label_cn: 目录是否存在
+  description: 谓词：目录是否存在 → matched
   params:
     type: object
-    required: [path]
-    properties: { path: { type: string } }
+    required:
+    - path
+    properties:
+      path:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 wait.file:
   executor_domain: data
-  description: "轮询等待 glob 首个命中文件（返回 path）"
+  label_cn: 等待文件
+  description: 轮询等待 glob 首个命中文件（返回 path）
   params:
     type: object
-    required: [glob]
+    required:
+    - glob
     properties:
-      glob: { type: string }
-      timeout_s: { type: number, minimum: 0.5, maximum: 600, default: 30 }
-      interval_s: { type: number, minimum: 0.05, maximum: 5, default: 0.5 }
+      glob:
+        type: string
+      timeout_s:
+        type: number
+        minimum: 0.5
+        maximum: 600
+        default: 30
+      interval_s:
+        type: number
+        minimum: 0.05
+        maximum: 5
+        default: 0.5
   idempotency: optional
   risk: L0
   timeout_ms: 620000
   retries: 0
-
-
 data.delete_row:
   executor_domain: data
-  description: "删除指定下标行（0 基）"
+  label_cn: 删表格行
+  description: 删除指定下标行（0 基）
   params:
     type: object
-    required: [source, at]
+    required:
+    - source
+    - at
     properties:
-      source: { type: string }
-      at: { type: integer, minimum: 0 }
+      source:
+        type: string
+      at:
+        type: integer
+        minimum: 0
   idempotency: none
   risk: L1
   timeout_ms: 10000
   retries: 0
-
 data.delete_column:
   executor_domain: data
-  description: "删除列"
+  label_cn: 删表格列
+  description: 删除列
   params:
     type: object
-    required: [source, column]
+    required:
+    - source
+    - column
     properties:
-      source: { type: string }
-      column: { type: string }
+      source:
+        type: string
+      column:
+        type: string
   idempotency: none
   risk: L1
   timeout_ms: 10000
   retries: 0
-
 data.clear:
   executor_domain: data
-  description: "清空表格行（重放为 no-op，幂等）"
+  label_cn: 清空表格
+  description: 清空表格行（重放为 no-op，幂等）
   params:
     type: object
-    required: [source]
+    required:
+    - source
     properties:
-      source: { type: string }
-      keep_columns: { type: boolean, default: true }
+      source:
+        type: string
+      keep_columns:
+        type: boolean
+        default: true
   idempotency: required
   risk: L1
   timeout_ms: 10000
   retries: 1
-
 data.column_info:
   executor_domain: data
-  description: "列元信息：名称/类型推断/非空计数"
+  label_cn: 列信息
+  description: 列元信息：名称/类型推断/非空计数
   params:
     type: object
-    required: [source]
-    properties: { source: { type: string } }
+    required:
+    - source
+    properties:
+      source:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 10000
   retries: 2
-
 data.set_column_info:
   executor_domain: data
-  description: "设置列显示名与类型标注（元信息）"
+  label_cn: 设置列信息
+  description: 设置列显示名与类型标注（元信息）
   params:
     type: object
-    required: [source, column]
+    required:
+    - source
+    - column
     properties:
-      source: { type: string }
-      column: { type: string }
-      new_name: { type: string }
-      type_tag: { type: string }
+      source:
+        type: string
+      column:
+        type: string
+      new_name:
+        type: string
+      type_tag:
+        type: string
   idempotency: required
   risk: L1
   timeout_ms: 10000
   retries: 1
-
 file.zip:
   executor_domain: data
-  description: "打包文件/目录到 zip（目录递归，原子落盘）"
+  label_cn: 压缩文件
+  description: 打包文件/目录到 zip（目录递归，原子落盘）
   params:
     type: object
-    required: [paths, dest]
+    required:
+    - paths
+    - dest
     properties:
       paths:
         type: array
-        items: { type: string }
+        items:
+          type: string
         minItems: 1
-      dest: { type: string }
+      dest:
+        type: string
   idempotency: required
   risk: L1
   timeout_ms: 120000
   retries: 1
-
 file.unzip:
   executor_domain: data
-  description: "解压 zip 到目录（防路径穿越；同源重放覆盖幂等）"
+  label_cn: 解压文件
+  description: 解压 zip 到目录（防路径穿越；同源重放覆盖幂等）
   params:
     type: object
-    required: [src]
+    required:
+    - src
     properties:
-      src: { type: string }
-      dest_dir: { type: string }
+      src:
+        type: string
+      dest_dir:
+        type: string
   idempotency: required
   risk: L1
   timeout_ms: 120000
   retries: 1
-
 process.kill:
   executor_domain: data
-  description: "终止进程（pid SIGTERM / name pkill 模糊匹配）"
+  label_cn: 终止进程
+  description: 终止进程（pid SIGTERM / name pkill 模糊匹配）
   params:
     type: object
     properties:
-      pid: { type: integer, minimum: 1 }
-      name: { type: string }
+      pid:
+        type: integer
+        minimum: 1
+      name:
+        type: string
   idempotency: none
   risk: L3
   timeout_ms: 15000
   retries: 0
-
-
-# ============================================================
-# P22-M2 数据库 + 通知
-# ============================================================
 db.sqlite.query:
   executor_domain: data
-  description: "SQLite 查询（返回 columns+rows）"
+  label_cn: SQLite 查询
+  description: SQLite 查询（返回 columns+rows）
   params:
     type: object
-    required: [db_path, sql]
+    required:
+    - db_path
+    - sql
     properties:
-      db_path: { type: string }
-      sql: { type: string }
-      params: { type: array }
+      db_path:
+        type: string
+      sql:
+        type: string
+      params:
+        type: array
   idempotency: required
   risk: L1
   timeout_ms: 30000
   retries: 2
-
 db.sqlite.execute:
   executor_domain: data
-  description: "SQLite 写操作（INSERT/UPDATE/DELETE，返回受影响行数）"
+  label_cn: SQLite 写入
+  description: SQLite 写操作（INSERT/UPDATE/DELETE，返回受影响行数）
   params:
     type: object
-    required: [db_path, sql]
+    required:
+    - db_path
+    - sql
     properties:
-      db_path: { type: string }
-      sql: { type: string }
-      params: { type: array }
+      db_path:
+        type: string
+      sql:
+        type: string
+      params:
+        type: array
   idempotency: none
   risk: L2
   timeout_ms: 30000
   retries: 0
-
 notify.dingtalk:
   executor_domain: data
-  description: "钉钉群机器人通知（text/markdown，可 @ 手机号）"
-  when_to_use: "钉钉群机器人预警/日报推送"
+  label_cn: 钉钉通知
+  description: 钉钉群机器人通知（text/markdown，可 @ 手机号）
+  when_to_use: 钉钉群机器人预警/日报推送
   params:
     type: object
-    required: [webhook_url, message]
+    required:
+    - webhook_url
+    - message
     properties:
-      webhook_url: { type: string, format: uri }
-      msgtype: { enum: [text, markdown], default: text }
-      title: { type: string }
-      message: { type: string }
-      at_mobiles: { type: array, items: { type: string } }
+      webhook_url:
+        type: string
+        format: uri
+      msgtype:
+        enum:
+        - text
+        - markdown
+        default: text
+      title:
+        type: string
+      message:
+        type: string
+      at_mobiles:
+        type: array
+        items:
+          type: string
   idempotency: none
   risk: L1
   timeout_ms: 15000
   retries: 0
-
 notify.wecom_webhook:
   executor_domain: data
-  description: "企业微信群机器人 markdown 通知"
-  when_to_use: "企微群 markdown 通知"
+  label_cn: 企微通知
+  description: 企业微信群机器人 markdown 通知
+  when_to_use: 企微群 markdown 通知
   params:
     type: object
-    required: [webhook_url, message]
+    required:
+    - webhook_url
+    - message
     properties:
-      webhook_url: { type: string, format: uri }
-      title: { type: string }
-      message: { type: string }
+      webhook_url:
+        type: string
+        format: uri
+      title:
+        type: string
+      message:
+        type: string
   idempotency: none
   risk: L1
   timeout_ms: 15000
   retries: 0
-
 notify.feishu_webhook:
   executor_domain: data
-  description: "飞书群机器人文本通知"
-  when_to_use: "飞书群文本通知"
+  label_cn: 飞书通知
+  description: 飞书群机器人文本通知
+  when_to_use: 飞书群文本通知
   params:
     type: object
-    required: [webhook_url, message]
+    required:
+    - webhook_url
+    - message
     properties:
-      webhook_url: { type: string, format: uri }
-      title: { type: string }
-      message: { type: string }
+      webhook_url:
+        type: string
+        format: uri
+      title:
+        type: string
+      message:
+        type: string
   idempotency: none
   risk: L1
   timeout_ms: 15000

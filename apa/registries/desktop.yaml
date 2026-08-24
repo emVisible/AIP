@@ -1,220 +1,281 @@
-# ============================================================
-# Desktop Action Registry — desktop.*（§9.3 子集，POC）
-# ============================================================
 desktop.window.activate:
   executor_domain: desktop
-  description: "激活指定窗口"
+  description: 激活指定窗口
   params:
     type: object
-    required: [title]
+    required:
+    - title
     properties:
-      app_name: { type: string }
-      title: { type: string }
+      app_name:
+        type: string
+      title:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 8000
   retries: 2
-  audit_fields: [app_name, title]
-
+  audit_fields:
+  - app_name
+  - title
 desktop.window.close:
   executor_domain: desktop
-  description: "关闭窗口"
+  description: 关闭窗口
   params:
     type: object
-    required: [app_name]
+    required:
+    - app_name
     properties:
-      app_name: { type: string }
-      title: { type: string }
+      app_name:
+        type: string
+      title:
+        type: string
   idempotency: required
   risk: L1
   timeout_ms: 5000
   retries: 0
-  audit_fields: [app_name]
-
+  audit_fields:
+  - app_name
 desktop.keyboard.input:
   executor_domain: desktop
-  description: "键盘输入"
+  description: 键盘输入
   params:
     type: object
-    required: [target, text]
+    required:
+    - target
+    - text
     properties:
-      target: { type: string }
-      text: { type: string }
+      target:
+        type: string
+      text:
+        type: string
   idempotency: required
   risk: L1
   timeout_ms: 5000
   retries: 1
-  audit_fields: [target]
-  audit_mask_fields: [text]
-
+  audit_fields:
+  - target
+  audit_mask_fields:
+  - text
 desktop.file.copy:
   executor_domain: desktop
-  description: "复制文件"
+  description: 复制文件
   params:
     type: object
-    required: [source, dest]
+    required:
+    - source
+    - dest
     properties:
-      source: { type: string }
-      dest: { type: string }
+      source:
+        type: string
+      dest:
+        type: string
   idempotency: required
   risk: L1
   timeout_ms: 60000
   retries: 2
-  audit_fields: [source, dest]
-
+  audit_fields:
+  - source
+  - dest
 desktop.process.launch:
   executor_domain: desktop
-  description: "启动进程"
+  description: 启动进程
   params:
     type: object
-    required: [executable]
+    required:
+    - executable
     properties:
-      executable: { type: string }
-      args_hash: { type: string }
+      executable:
+        type: string
+      args_hash:
+        type: string
   idempotency: none
   risk: L2
   timeout_ms: 30000
   retries: 0
-  audit_fields: [executable, args_hash]
-
+  audit_fields:
+  - executable
+  - args_hash
 desktop.file.move:
   executor_domain: desktop
-  description: "移动文件"
+  description: 移动文件
   params:
     type: object
-    required: [source, dest]
+    required:
+    - source
+    - dest
     properties:
-      source: { type: string }
-      dest: { type: string }
+      source:
+        type: string
+      dest:
+        type: string
   idempotency: required
   risk: L2
   timeout_ms: 30000
   retries: 1
-  audit_fields: [source, dest]
-
+  audit_fields:
+  - source
+  - dest
 desktop.file.delete:
   executor_domain: desktop
-  description: "删除文件（高风险，需人工确认）"
+  description: 删除文件（高风险，需人工确认）
   params:
     type: object
-    required: [path]
+    required:
+    - path
     properties:
-      path: { type: string }
+      path:
+        type: string
   idempotency: required
   risk: L3
   timeout_ms: 10000
   retries: 0
   requires_approval_at: L3
-  audit_fields: [path]
-# ---- M1: AX 元素识别与操作（影刀级 OS 底座）----
+  audit_fields:
+  - path
 desktop.ui.read_element:
   executor_domain: desktop
-  description: "读取元素：屏幕坐标命中测试 或 按描述符 ax_path 重定位"
+  description: 读取元素：屏幕坐标命中测试 或 按描述符 ax_path 重定位
   params:
     type: object
     properties:
-      x: { type: number }
-      y: { type: number }
+      x:
+        type: number
+      y:
+        type: number
       element:
         type: object
-        description: "AX 描述符（ax_path 层级链）"
+        description: AX 描述符（ax_path 层级链）
         additionalProperties: true
-      output_context: { type: string }
+      output_context:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 10000
   retries: 2
-
 desktop.ui.read_tree:
   executor_domain: desktop
-  description: "限深遍历元素树（pid 缺省用全系统根）"
+  description: 限深遍历元素树（pid 缺省用全系统根）
   params:
     type: object
     properties:
-      pid: { type: integer }
-      max_depth: { type: integer, minimum: 1, maximum: 12, default: 4 }
-      max_nodes: { type: integer, minimum: 1, maximum: 1000, default: 200 }
-      output_context: { type: string }
+      pid:
+        type: integer
+      max_depth:
+        type: integer
+        minimum: 1
+        maximum: 12
+        default: 4
+      max_nodes:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        default: 200
+      output_context:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 30000
   retries: 1
-
 desktop.ui.click_element:
   executor_domain: desktop
-  description: "双路径点击：AXPress 优先，坐标单击兜底"
+  description: 双路径点击：AXPress 优先，坐标单击兜底
   params:
     type: object
-    required: [element]
+    required:
+    - element
     properties:
       element:
         type: object
         additionalProperties: true
-      output_context: { type: string }
+      output_context:
+        type: string
   idempotency: none
   risk: L2
   timeout_ms: 15000
   retries: 0
-
 desktop.ui.wait_element:
   executor_domain: desktop
-  description: "轮询等待元素（按描述符重定位）出现"
+  description: 轮询等待元素（按描述符重定位）出现
   params:
     type: object
-    required: [element]
+    required:
+    - element
     properties:
       element:
         type: object
         additionalProperties: true
-      timeout_s: { type: number, minimum: 0.5, maximum: 120, default: 10 }
-      interval_s: { type: number, minimum: 0.1, maximum: 5, default: 0.4 }
-      output_context: { type: string }
+      timeout_s:
+        type: number
+        minimum: 0.5
+        maximum: 120
+        default: 10
+      interval_s:
+        type: number
+        minimum: 0.1
+        maximum: 5
+        default: 0.4
+      output_context:
+        type: string
   idempotency: optional
   risk: L0
   timeout_ms: 120000
   retries: 0
-
 desktop.click_text:
   executor_domain: desktop
-  description: "Vision OCR 定位屏幕文字 → 坐标点击"
+  description: Vision OCR 定位屏幕文字 → 坐标点击
   params:
     type: object
-    required: [text]
+    required:
+    - text
     properties:
-      text: { type: string }
-      contains: { type: boolean, default: true }
+      text:
+        type: string
+      contains:
+        type: boolean
+        default: true
       region:
         type: object
-        description: "局部搜索区域 {x,y,w,h}"
-      min_confidence: { type: number, minimum: 0, maximum: 1, default: 0.3 }
-      output_context: { type: string }
+        description: 局部搜索区域 {x,y,w,h}
+      min_confidence:
+        type: number
+        minimum: 0
+        maximum: 1
+        default: 0.3
+      output_context:
+        type: string
   idempotency: none
   risk: L2
   timeout_ms: 60000
   retries: 0
-
 desktop.humanize:
   executor_domain: desktop
-  description: "模拟真人开关：鼠标贝塞尔轨迹+高斯点击延迟"
+  label_cn: 模拟真人开关
+  description: 模拟真人开关：鼠标贝塞尔轨迹+高斯点击延迟
   params:
     type: object
-    properties: { enabled: { type: boolean, default: true } }
+    properties:
+      enabled:
+        type: boolean
+        default: true
   idempotency: required
   risk: L0
   timeout_ms: 5000
   retries: 2
-
 desktop.screenshot:
   executor_domain: desktop
-  description: "区域/全屏截屏 → PNG 落盘或 ContextStore 引用；同参重拍幂等"
+  label_cn: 屏幕截图
+  description: 区域/全屏截屏 → PNG 落盘或 ContextStore 引用；同参重拍幂等
   params:
     type: object
     properties:
       region:
         type: object
-        description: "{x,y,w,h} 全局点坐标；缺省全屏"
-      path: { type: string, description: "落盘路径；缺省临时文件" }
-      output_context: { type: string }
+        description: '{x,y,w,h} 全局点坐标；缺省全屏'
+      path:
+        type: string
+        description: 落盘路径；缺省临时文件
+      output_context:
+        type: string
   idempotency: required
   risk: L0
   timeout_ms: 30000

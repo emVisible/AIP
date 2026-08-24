@@ -61,3 +61,16 @@ Traceback (most recent call last):
     _builtin_packs = (Path(__file__).resolve().parents[3] / "packs")
                       ^^^^
 NameError: name 'Path' is not defined
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/Users/young/Code/AIP/apa/packages/apa-core/apa_core/cli.py", line 485, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/Users/young/Code/AIP/apa/packages/apa-core/apa_core/cli.py", line 481, in main
+    return int(args.fn(args) or 0)
+               ^^^^^^^^^^^^^
+  File "/Users/young/Code/AIP/apa/packages/apa-core/apa_core/cli.py", line 78, in _cmd_serve
+    _builtin_packs = (Path(__file__).resolve().parents[3] / "packs")
+                      ^^^^
+NameError: name 'Path' is not defined

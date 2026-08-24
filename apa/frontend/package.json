@@ -4,16 +4,15 @@
   "version": "0.5.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "typecheck": "tsc -b --noEmit",
-    "desktop": "electron .",
-    "start": "electron .",
-    "postinstall": "node -e \"const fs=require('fs'),p=require('path');try{const ep=p.dirname(require.resolve('electron/package.json'));if(!fs.existsSync(p.join(ep,'path.txt'))){fs.writeFileSync(p.join(ep,'path.txt'),'Electron.app/Contents/MacOS/Electron')}}catch(e){}\"",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit",
+    "start": "electron-vite preview",
     "setup": "node electron/setup.cjs",
     "dist:prep": "node electron/stage-desktop.cjs",
     "dist:dir": "pnpm build && pnpm dist:prep && electron-builder --dir",
-    "dist": "pnpm build && pnpm dist:prep && electron-builder"
+    "dist": "pnpm build && pnpm dist:prep && electron-builder",
+    "postinstall": ""
   },
   "dependencies": {
     "@tanstack/react-query": "^5.62.0",
@@ -28,16 +27,18 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^26.2.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^37.10.3",
     "electron-builder": "^26.15.3",
+    "electron-vite": "^3.0.0",
     "tailwindcss": "^4.0.0",
     "typescript": "~5.6.3",
     "vite": "^6.0.7"
   },
-  "main": "electron/main.cjs",
+  "main": "out/main/index.js",
   "build": {
     "appId": "com.taptap.apa.desktop",
     "productName": "APA Desktop",

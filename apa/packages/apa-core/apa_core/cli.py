@@ -259,6 +259,26 @@ def _cmd_doctor(args) -> int:
     else:
         check("capability packs", False, f"dir missing: {packs_dir}")
 
+    # 离线能力审计（P24-M3）
+    offline_domains = {"browser","excel","data","string","file","desktop",
+                        "ocr","clipboard","context","db","encode","hash",
+                        "json","dt","uuid","shell","sys","ui","process",
+                        "wait","if"}
+    try:
+        from .registry import load_registries as _lr_off
+        _reg_dir = root / "registries"
+        if not _reg_dir.is_dir():
+            check("offline actions", False, f"dir missing: {_reg_dir}")
+        else:
+            _paths = sorted(_reg_dir.glob("*.yaml"))
+            _r = _lr_off(*[str(p) for p in _paths])
+            offline = sum(1 for n in _r.names()
+                          if n.split(".")[0] in offline_domains)
+            check("offline actions", True,
+                  f"{offline}/{len(_r)} actions work without network")
+    except Exception as e:  # noqa: BLE001
+        check("offline actions", False, str(e)[:60])
+
     # Registry 加载
     reg_dir = root / "registries"
     if reg_dir.is_dir():

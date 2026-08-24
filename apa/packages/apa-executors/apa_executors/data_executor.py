@@ -18,6 +18,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from apa_sdk.executor_base import AIPExecutor
 
 
+def keep_columns_guard(flag) -> bool:
+    return bool(flag)
+
 class DataExecutor(AIPExecutor):
     """数据操作执行器：表格/文件/字符串。"""
 
@@ -102,6 +105,12 @@ class DataExecutor(AIPExecutor):
             "process.kill": self._process_kill,
             # ---- M5 代码段 ----
             "code.python": self._code_python,
+            # ---- P22-M2 db + notify ----
+            "db.sqlite.query": self._db_sqlite_query,
+            "db.sqlite.execute": self._db_sqlite_execute,
+            "notify.dingtalk": self._notify_dingtalk,
+            "notify.wecom_webhook": self._notify_wecom,
+            "notify.feishu_webhook": self._notify_feishu,
         }
         fn = handler_map.get(name)
         if fn is None:
@@ -825,5 +834,86 @@ class DataExecutor(AIPExecutor):
         except Exception as e:  # noqa: BLE001
             return False, {"code": type(e).__name__, "detail": str(e)[:120]}
 
-def keep_columns_guard(flag) -> bool:
-    return bool(flag)
+
+    def _db_sqlite_query(self, p):
+        """SQLite 查询 → {columns, rows, count}。"""
+        import sqlite3
+
+        db_path = str(p["db_path"])
+        sql = str(p["sql"])
+        params = p.get("params") or []
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            cur = conn.execute(sql, params)
+            cols = [d[0] for d in cur.description] if cur.description else []
+            rows = [[v for v in row] for row in cur.fetchall()]
+            return True, {"columns": cols, "rows": rows,
+                           "count": len(rows)}
+        finally:
+            conn.close()
+
+    def _db_sqlite_execute(self, p):
+        import sqlite3
+
+        db_path = str(p["db_path"])
+        sql = str(p["sql"])
+        params = p.get("params") or []
+        conn = sqlite3.connect(db_path)
+        try:
+            cur = conn.execute(sql, params)
+            conn.commit()
+            return True, {"rows_affected": cur.rowcount,
+                           "lastrowid": cur.lastrowid}
+        finally:
+            conn.close()
+
+    def _post_webhook(self, url: str, body: dict) -> Tuple[bool, dict]:
+        import httpx
+
+        resp = httpx.post(url, json=body, timeout=15.0)
+        resp.raise_for_status()
+        return True, {"delivered": True, "status": resp.status_code}
+
+    def _notify_dingtalk(self, p):
+        """钉钉群机器人 webhook。"""
+        url = str(p.get("webhook_url", ""))
+        if not url:
+            return False, {"code": "missing_param", "detail": "webhook_url"}
+        body: Dict[str, Any] = {
+            "msgtype": p.get("msgtype", "text"),
+        }
+        if body["msgtype"] == "markdown":
+            body["markdown"] = {
+                "title": str(p.get("title", "APA")),
+                "text": str(p.get("message", "")),
+            }
+        else:
+            body["text"] = {"content": str(p.get("message", ""))}
+        if p.get("at_mobiles"):
+            body["at"] = {"atMobiles": p["at_mobiles"]}
+        return self._post_webhook(url, body)
+
+    def _notify_wecom(self, p):
+        """企业微信群机器人 webhook。"""
+        url = str(p.get("webhook_url", ""))
+        if not url:
+            return False, {"code": "missing_param", "detail": "webhook_url"}
+        md = str(p.get("message", ""))
+        content = f"## {p.get('title', 'APA')}\n{md}" \
+            if p.get("title") else md
+        return self._post_webhook(url, {
+            "msgtype": "markdown",
+            "markdown": {"content": content[:4000]},
+        })
+
+    def _notify_feishu(self, p):
+        """飞书群机器人 webhook。"""
+        url = str(p.get("webhook_url", ""))
+        if not url:
+            return False, {"code": "missing_param", "detail": "webhook_url"}
+        return self._post_webhook(url, {
+            "msg_type": "text",
+            "content": {"text":
+                f"{p.get('title', 'APA')}: {p.get('message', '')}"},
+        })

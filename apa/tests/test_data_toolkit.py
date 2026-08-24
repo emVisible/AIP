@@ -413,3 +413,94 @@ class TestUiConfirmRegistry:
         assert entry is not None
         # ui.confirm 由 Gateway 拦截处理（同 human.task.create）
         assert entry.executor_domain == "core"
+
+class TestDbSqlite:
+    @pytest.fixture()
+    def dex(self):
+        ex = DataExecutor.__new__(DataExecutor)
+        ex._tables = {}
+        return ex
+
+    """db.sqlite.query / execute。"""
+
+    @pytest.fixture()
+    def db(self, tmp_path):
+        import sqlite3
+
+        p = str(tmp_path / "test.db")
+        conn = sqlite3.connect(p)
+        conn.execute("CREATE TABLE orders (id TEXT, amount REAL)")
+        conn.execute("INSERT INTO orders VALUES ('A', 100)")
+        conn.execute("INSERT INTO orders VALUES ('B', 200)")
+        conn.commit()
+        conn.close()
+        return p
+
+    def test_query(self, dex, db):
+        ok, out = dex._execute_action(
+            "db.sqlite.query",
+            {"db_path": db, "sql": "SELECT * FROM orders ORDER BY id"})
+        assert ok and out["count"] == 2
+        assert out["columns"] == ["id", "amount"]
+        assert out["rows"][0] == ["A", 100]
+
+    def test_query_with_params(self, dex, db):
+        ok, out = dex._execute_action(
+            "db.sqlite.query",
+            {"db_path": db,
+             "sql": "SELECT * FROM orders WHERE amount > ?",
+             "params": [150]})
+        assert ok and out["count"] == 1
+        assert out["rows"][0][0] == "B"
+
+    def test_execute(self, dex, db):
+        ok, out = dex._execute_action(
+            "db.sqlite.execute",
+            {"db_path": db,
+             "sql": "INSERT INTO orders VALUES (?, ?)",
+             "params": ["C", 300]})
+        assert ok and out["rows_affected"] == 1
+        assert out["lastrowid"] > 0
+
+
+class TestNotify:
+    @pytest.fixture()
+    def dex(self):
+        ex = DataExecutor.__new__(DataExecutor)
+        ex._tables = {}
+        return ex
+
+    def test_dingtalk_text(self, dex, monkeypatch):
+        posted = {}
+
+        class FakeResp:
+            status_code = 200
+            def raise_for_status(self): pass
+
+        monkeypatch.setattr(
+            "httpx.Client" if False else "httpx.post",
+            lambda url, **kw: (posted.update(url=url, json=kw.get("json")),
+                               FakeResp())[1])
+
+        ok, out = dex._execute_action("notify.dingtalk", {
+            "webhook_url": "https://oapi.dingtalk.com/robot/send?x=1",
+            "message": "库存预警", "at_mobiles": ["13800138000"]})
+        assert ok and out["delivered"]
+        body = posted["json"]
+        assert body["msgtype"] == "text"
+        assert body["text"]["content"] == "库存预警"
+        assert body["at"]["atMobiles"] == ["13800138000"]
+
+    def test_wecom_markdown(self, dex, monkeypatch):
+        posted = {}
+        class R:
+            status_code = 200
+            def raise_for_status(self): pass
+        monkeypatch.setattr("httpx.post", lambda u, **kw:
+                            (posted.update(json=kw.get("json")), R())[1])
+        ok, _ = dex._execute_action("notify.wecom_webhook", {
+            "webhook_url": "https://qyapi.weixin.qq.com/x",
+            "title": "日报", "message": "今日 GMV 100 万"})
+        body = posted["json"]
+        assert body["msgtype"] == "markdown"
+        assert "GMV" in body["markdown"]["content"]

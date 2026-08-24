@@ -856,3 +856,84 @@ process.kill:
   risk: L3
   timeout_ms: 15000
   retries: 0
+
+
+# ============================================================
+# P22-M2 数据库 + 通知
+# ============================================================
+db.sqlite.query:
+  executor_domain: data
+  description: "SQLite 查询（返回 columns+rows）"
+  params:
+    type: object
+    required: [db_path, sql]
+    properties:
+      db_path: { type: string }
+      sql: { type: string }
+      params: { type: array }
+  idempotency: required
+  risk: L1
+  timeout_ms: 30000
+  retries: 2
+
+db.sqlite.execute:
+  executor_domain: data
+  description: "SQLite 写操作（INSERT/UPDATE/DELETE，返回受影响行数）"
+  params:
+    type: object
+    required: [db_path, sql]
+    properties:
+      db_path: { type: string }
+      sql: { type: string }
+      params: { type: array }
+  idempotency: none
+  risk: L2
+  timeout_ms: 30000
+  retries: 0
+
+notify.dingtalk:
+  executor_domain: data
+  description: "钉钉群机器人通知（text/markdown，可 @ 手机号）"
+  params:
+    type: object
+    required: [webhook_url, message]
+    properties:
+      webhook_url: { type: string, format: uri }
+      msgtype: { enum: [text, markdown], default: text }
+      title: { type: string }
+      message: { type: string }
+      at_mobiles: { type: array, items: { type: string } }
+  idempotency: none
+  risk: L1
+  timeout_ms: 15000
+  retries: 0
+
+notify.wecom_webhook:
+  executor_domain: data
+  description: "企业微信群机器人 markdown 通知"
+  params:
+    type: object
+    required: [webhook_url, message]
+    properties:
+      webhook_url: { type: string, format: uri }
+      title: { type: string }
+      message: { type: string }
+  idempotency: none
+  risk: L1
+  timeout_ms: 15000
+  retries: 0
+
+notify.feishu_webhook:
+  executor_domain: data
+  description: "飞书群机器人文本通知"
+  params:
+    type: object
+    required: [webhook_url, message]
+    properties:
+      webhook_url: { type: string, format: uri }
+      title: { type: string }
+      message: { type: string }
+  idempotency: none
+  risk: L1
+  timeout_ms: 15000
+  retries: 0

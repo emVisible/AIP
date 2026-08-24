@@ -16,16 +16,21 @@ interface Msg {
   draftId?: string;
 }
 
+/** 模块级持久化（跨路由导航不丢；页面刷新重置）。 */
+let _msgCache: Msg[] | null = null;
+let _pendingCache: { yaml: string; tid: string } | null = null;
+
 export function Workbench() {
-  const [msgs, setMsgs] = useState<Msg[]>([{
-    role: "apa",
-    text: "描述你想自动化的任务，例如：" +
-          "「每天9点抓竞品价格对比昨日，涨5%就通知我」",
-  }]);
+  const [msgs, setMsgs] = useState<Msg[]>(() => {
+    if (_msgCache) return _msgCache;
+    return [{ role: "apa",
+      text: "描述你想自动化的任务，例如：" +
+            "「每天9点抓竞品价格对比昨日，涨5%就通知我」" }];
+  });
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<{ yaml: string; tid: string }
-                                       | null>(null);
+                                       | null>(_pendingCache);
   const nav = useNavigate();
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -33,7 +38,12 @@ export function Workbench() {
     listRef.current?.scrollTo({ top: 999999 });
   }, [msgs]);
 
-  function push(m: Msg) { setMsgs(prev => [...prev, m]); }
+  function push(m: Msg) {
+    setMsgs(prev => {
+      _msgCache = [...prev, m];
+      return _msgCache;
+    });
+  }
 
   async function send() {
     const text = input.trim();
@@ -60,7 +70,8 @@ export function Workbench() {
       if (d.ok && d.process_yaml) {
         const draftId = `draft_${Date.now().toString(36)}`;
         sessionStorage.setItem(`apa_draft_${draftId}`, d.process_yaml);
-        setPending({ yaml: d.process_yaml, tid: d.template_id ?? "" });
+        _pendingCache = { yaml: d.process_yaml, tid: d.template_id ?? "" };
+        setPending(_pendingCache);
         push({ role: "apa", draftId,
                text: `已按「${d.template_id}」模板起草流程。` +
                      "请在右侧/下方检查后确认，或继续补充信息修改。" });
@@ -131,7 +142,7 @@ export function Workbench() {
                            text-xs font-medium hover:bg-zinc-700">
                 导入设计器
               </button>
-              <button onClick={() => setPending(null)}
+              <button onClick={() => { _pendingCache = null; setPending(null); }}
                 className="px-3 py-1 rounded-md border border-slate-200
                            text-xs hover:bg-white">
                 丢弃

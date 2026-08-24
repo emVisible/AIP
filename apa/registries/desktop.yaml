@@ -280,3 +280,17 @@ desktop.screenshot:
   risk: L0
   timeout_ms: 30000
   retries: 1
+
+
+desktop.process.list:
+  executor_domain: desktop
+  description: "列出系统进程（可按名称过滤，按 CPU 降序）"
+  params:
+    type: object
+    properties:
+      name_contains: { type: string, description: "模糊过滤" }
+      limit: { type: integer, minimum: 1, maximum: 100, default: 30 }
+  idempotency: required
+  risk: L0
+  timeout_ms: 15000
+  retries: 2

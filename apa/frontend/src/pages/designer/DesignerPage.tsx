@@ -139,6 +139,8 @@ function DesignerInner() {
   const [runOpen, setRunOpen] = useState(false);
   /** 左栏工具面板 Tab。 */
   const [toolTab, setToolTab] = useState<"" | "spy" | "scrape">("");
+  /** 中央视图 Tab：步骤列表(主编辑面) / 流程图(概览)。 */
+  const [viewTab, setViewTab] = useState<"list" | "graph">("list");
   /** U6: 目录搜索词（跨 Tab 保留）。 */
   const [catalogFilter, setCatalogFilter] = useState("");
   /** U8: 左栏折叠（窄屏可用性）。 */
@@ -602,8 +604,23 @@ function DesignerInner() {
           )}
 </aside>
 
-        {/* 中：画布 + 步骤编辑 */}
+        {/* 中：Tab 双视图 */}
         <div className="overflow-y-auto p-3">
+          {/* 视图切换 */}
+          <nav className="flex items-center gap-1 mb-3">
+            {([["list", "步骤列表"], ["graph", "流程图"]] as const).map(
+              ([vk, vlabel]) => (
+                <button key={vk} onClick={() => setViewTab(vk)}
+                  className={`h-6 px-2.5 rounded text-[11px] font-medium
+                              transition-colors ${viewTab === vk
+                    ? "bg-zinc-900 text-white"
+                    : "text-slate-500 hover:bg-slate-100"}`}>
+                  {vlabel} ({steps.length})
+                </button>
+              ))}
+          </nav>
+
+          {viewTab === "graph" && (
           <div style={{ height: canvasHeight }}
                className="border rounded-xl min-h-[250px] overflow-hidden"
                onDragOver={handleCanvasDragOver}
@@ -618,7 +635,9 @@ function DesignerInner() {
               <Controls showInteractive={false} />
             </ReactFlow>
           </div>
+          )}
 
+          {viewTab === "list" && (
           <div className="mt-3 space-y-2">
             {steps.map((s, i) => (
               <div key={s.id || i}
@@ -660,6 +679,7 @@ function DesignerInner() {
               </div>
             ))}
           </div>
+          )}
 
           <button onClick={() =>
             setSteps(prev => [...prev, blankStep(prev.length)])}

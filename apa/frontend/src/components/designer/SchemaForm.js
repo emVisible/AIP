@@ -29,7 +29,7 @@ function FieldControl({ prop, value, onChange }) {
             return (_jsx("button", { type: "button", onClick: () => onChange(!value), className: `w-full py-1.5 text-xs font-medium rounded-md border
                       transition-colors ${value
                     ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : "bg-slate-50 text-slate-500 border-slate-200"}`, children: value ? "✓ 是" : "✗ 否" }));
+                    : "bg-slate-50 text-slate-500 border-slate-200"}`, children: value ? "是" : "否" }));
         default:
             return (_jsx("input", { type: "text", className: "w-full px-2 py-1.5 text-xs border border-slate-200 rounded-md\n                     focus:ring-1 focus:ring-blue-400 outline-none", placeholder: prop.description, value: value != null ? String(value) : "", onChange: e => onChange(e.target.value) }));
     }

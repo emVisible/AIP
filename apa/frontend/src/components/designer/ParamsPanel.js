@@ -75,7 +75,7 @@ function SchemaField({ prop, value, onChange }) {
             return (_jsx("input", { type: "number", className: "w-full px-2 py-1.5 text-xs border rounded-md outline-none", value: value != null ? String(value) : "", onChange: e => onChange(Number(e.target.value)) }));
         case "boolean":
             return (_jsx("button", { type: "button", onClick: () => onChange(!value), className: `w-full py-1 text-xs rounded border transition-colors ${value ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : "bg-slate-50 text-slate-400 border-slate-200"}`, children: value ? "✓ 是" : "✗ 否" }));
+                    : "bg-slate-50 text-slate-400 border-slate-200"}`, children: value ? "是" : "否" }));
         default:
             return (_jsx("input", { type: "text", className: "w-full px-2 py-1.5 text-xs border rounded-md outline-none", placeholder: prop.description, value: value != null ? String(value) : "", onChange: e => onChange(e.target.value) }));
     }

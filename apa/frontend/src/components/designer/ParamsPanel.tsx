@@ -220,7 +220,7 @@ function SchemaField({ prop, value, onChange }: {
           className={`w-full py-1 text-xs rounded border transition-colors ${
             value ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                   : "bg-slate-50 text-slate-400 border-slate-200"}`}
-        >{value ? "✓ 是" : "✗ 否"}</button>);
+        >{value ? "是" : "否"}</button>);
     default:
       return (
         <input type="text"

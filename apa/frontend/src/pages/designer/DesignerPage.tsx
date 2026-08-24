@@ -19,10 +19,18 @@ import { readDnDAction, readDnDStepIndex } from "./designerDnd";
 import { api } from "../../api/client";
 import type { ActionMeta, ProcessInfo } from "../../api/types";
 import { CatalogPanel } from "../../components/designer/CatalogPanel";
-import { ParamsPanel } from "../../components/designer/ParamsPanel";
+import { StepEditDialog } from "../../components/designer/StepEditDialog";
 import { TestRunPanel } from "../../components/designer/TestRunPanel";
 import { SpyPanel } from "../../components/designer/SpyPanel";
 import { ScrapePanel } from "../../components/designer/ScrapePanel";
+import { Badge, Button, Drawer } from "../../components/ui";
+import { availableVariables } from "../../hooks/useVariableRegistry";
+import {
+  FolderOpen,
+  Save,
+  SquareDot,
+  Terminal,
+} from "lucide-react";
 import "../../types/desktop";
 
 /** 模板信息（/api/templates 返回结构）。 */
@@ -80,14 +88,49 @@ function stepFromAction(action: string, i: number): DStep {
   return { ...base, action };
 }
 
-type StepNodeData = { label: string; sub?: string; tone: string };
+type StepNodeData = {
+  label: string;
+  sub?: string;
+  tone: string;
+  index?: number;
+  kind?: "" | "foreach" | "sub_process" | "ai_decision" | "while" | "log";
+};
 
+const KIND_ACCENT: Record<string, string> = {
+  "": "bg-slate-300",
+  foreach: "bg-violet-400",
+  while: "bg-violet-400",
+  sub_process: "bg-sky-400",
+  ai_decision: "bg-fuchsia-400",
+  log: "bg-emerald-300",
+};
+
+/** 画布步骤节点：白底卡片 + 左侧类型色条 + 序号徽标。 */
 function StepNodeView({ data }: { data: StepNodeData }) {
+  const accent = KIND_ACCENT[data.kind ?? ""] ?? KIND_ACCENT[""]!;
   return (
-    <div className={`rounded-lg border-2 px-3 py-2 min-w-[150px] shadow-sm bg-white ${data.tone}`}>
-      <p className="text-xs font-semibold text-slate-700 truncate">{data.label}</p>
+    <div className={`relative rounded-lg border bg-white pl-3 pr-3 py-2
+                     min-w-[160px] shadow-[0_1px_3px_rgba(0,0,0,0.08)]
+                     transition-shadow hover:shadow-[0_2px_8px_rgba(0,0,0,0.10)]
+                     ${data.tone}`}>
+      <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-full
+                        ${accent}`} />
+      <div className="flex items-center gap-1.5">
+        {data.index != null && (
+          <span className="inline-flex items-center justify-center w-4 h-4
+                           rounded-full bg-zinc-900 text-white text-[9px]
+                           font-semibold leading-none">
+            {data.index + 1}
+          </span>
+        )}
+        <p className="text-xs font-semibold text-slate-800 truncate">
+          {data.label}
+        </p>
+      </div>
       {data.sub && (
-        <p className="text-[10px] text-slate-400 mt-0.5 truncate">{data.sub}</p>
+        <p className="mt-0.5 text-[10px] text-slate-400 truncate font-mono">
+          {data.sub}
+        </p>
       )}
     </div>
   );
@@ -125,6 +168,12 @@ function DesignerInner() {
   /** 步骤卡右键菜单状态。 */
   const [menu, setMenu] = useState<{ idx: number; x: number; y: number }
                                  | null>(null);
+  /** 影刀式步骤编辑弹窗：当前编辑的步骤下标。 */
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+  /** 试运行底部抽屉。 */
+  const [runOpen, setRunOpen] = useState(false);
+  /** 左栏工具面板 Tab。 */
+  const [toolTab, setToolTab] = useState<"" | "spy" | "scrape">("");
 
   // steps → RF graph sync（保留用户拖动过的节点位置）
   useEffect(() => {
@@ -150,11 +199,11 @@ function DesignerInner() {
           data: {
             label: s2.id || `step_${i + 1}`,
             sub: s2.action || s2.type || "\u2014",
+            index: i,
+            kind: (s2.type || "") as StepNodeData["kind"],
             tone: selectedIdx === i
-              ? "border-blue-500 ring-2 ring-blue-200"
-              : s2.condition
-                ? "border-amber-300"
-                : "border-slate-300",
+              ? "border-blue-500 ring-2 ring-blue-100"
+              : "border-slate-200",
           } satisfies StepNodeData,
         };
       });
@@ -450,38 +499,94 @@ function DesignerInner() {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* 工具栏 */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b bg-white shadow-sm z-10">
-        <input className="w-48 px-2 py-1 text-sm border rounded-md outline-none"
-          placeholder="流程 ID…" value={metaId}
+      <header className="flex items-center gap-2 px-3 py-2 border-b
+                         border-slate-200 bg-white z-10">
+        <span className="text-sm font-semibold tracking-tight text-zinc-900
+                         px-1">APA</span>
+        <div className="h-4 w-px bg-slate-200" />
+        <input className="w-44 h-8 px-2 text-xs font-medium bg-transparent
+                          border border-transparent rounded-md
+                          hover:border-slate-200 focus:border-slate-300
+                          focus:bg-white outline-none"
+          placeholder="流程 ID" value={metaId}
           onChange={e => setMetaId(e.target.value)} />
-        <input className="w-72 px-2 py-1 text-sm border rounded-md"
-          placeholder="触发事件…"
+        <input className="w-56 h-8 px-2 text-xs bg-transparent
+                          border border-transparent rounded-md
+                          hover:border-slate-200 focus:border-slate-300
+                          focus:bg-white outline-none"
+          placeholder="触发事件（可选）"
           value={triggerName} onChange={e => setTriggerName(e.target.value)} />
-        <input className="w-20 px-2 py-1 text-sm border rounded" type="number"
-          value={maxActions}
-          onChange={e => setMaxActions(+e.target.value || 50)} />
-        <button
-          className="ml-auto px-4 py-1.5 text-xs font-semibold text-white bg-violet-600 rounded-md hover:bg-violet-700 transition-colors"
-          onClick={() => setRecording({ sid: "", url: "https://",
-                                        events: 0, phase: "enter" })}>
-          🎙 录制
-        </button>
-        <button
-          className="px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
-          onClick={() => void save()}>
-          💾 保存
-        </button>
-      </div>
+
+        <div className="ml-auto flex items-center gap-1.5">
+          <Button size="sm" variant="ghost"
+            onClick={() => void openFile(currentFile)}
+            disabled={!currentFile} title="重新加载已保存版本">
+            <FolderOpen size={13} /> 重载
+          </Button>
+          <Button size="sm" variant="secondary"
+            onClick={() => { setRunOpen(o => !o); }}>
+            <Terminal size={13} /> 试运行
+          </Button>
+          <Button size="sm" variant="secondary"
+            onClick={() => setRecording({ sid: "", url: "https://",
+                                          events: 0, phase: "enter" })}>
+            <SquareDot size={13} className="text-red-500" /> 录制
+          </Button>
+          <Button size="sm" variant="primary" onClick={() => void save()}>
+            <Save size={13} /> 保存
+          </Button>
+        </div>
+      </header>
 
       {/* 三面板 */}
-      <div className="flex-1 grid grid-cols-[220px_1fr_260px] overflow-hidden">
+      <div className="flex-1 grid grid-cols-[240px_1fr] overflow-hidden relative">
 
-        {/* 左：动作目录 */}
-        <div className="border-r p-3 overflow-y-auto bg-white">
-          <CatalogPanel onInsert={(action: string) => {
-            setSteps(prev => [...prev, stepFromAction(action, prev.length)]);
-          }} />
-        </div>
+        {/* 左：目录 / 工具 / 资产 */}
+        <aside className="border-r border-slate-200 bg-white flex flex-col
+                          overflow-hidden">
+          <nav className="flex items-center gap-1 px-2 pt-2">
+            {([["", "动作"], ["spy", "拾取"],
+               ["scrape", "抓取"]] as const).map(([k, label]) => (
+              <button key={k} onClick={() => setToolTab(k)}
+                className={`h-6 px-2 rounded text-[11px] font-medium
+                            transition-colors ${toolTab === k
+                  ? "bg-zinc-900 text-white"
+                  : "text-slate-500 hover:bg-slate-100"}`}>
+                {label}
+              </button>
+            ))}
+          </nav>
+          <div className="flex-1 overflow-y-auto p-2">
+            {toolTab === "" && (
+              <CatalogPanel onInsert={(action: string) => {
+                setSteps(prev => [...prev, stepFromAction(action, prev.length)]);
+              }} />
+            )}
+            {toolTab === "spy" && <SpyPanel onCapture={captureSpyElement} />}
+            {toolTab === "scrape" && <ScrapePanel onGenerate={addGeneratedSteps} />}
+          </div>
+          <div className="border-t border-slate-100 max-h-[30%] overflow-y-auto">
+            <TemplateLibrary onPick={importTemplate} />
+            <details className="mt-1 px-2 pb-2">
+              <summary className="text-xs text-slate-400 cursor-pointer py-0.5">
+                已保存流程 ({processList.filter(pl => pl.valid).length})
+              </summary>
+              <div className="mt-1 space-y-0.5">
+                {processList.map(pl => (
+                  <div key={pl.id}
+                       onClick={() => void openFile(pl.id)}
+                       className="flex items-center justify-between px-1.5 py-1
+                                  text-xs hover:bg-slate-50 rounded cursor-pointer">
+                    <span className="font-mono truncate">{pl.id}</span>
+                    <Badge tone={pl.valid ? "green" : "red"}>
+                      {pl.valid ? `${pl.steps}` : "invalid"}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </details>
+          </div>
+        </aside>
 
         {/* 中：画布 + 步骤编辑 */}
         <div className="overflow-y-auto p-3">
@@ -560,78 +665,30 @@ function DesignerInner() {
           </details>
         </div>
 
-        {/* 右：属性面板 + 试运行 */}
-        <div className="border-l p-3 space-y-3 overflow-y-auto bg-white">
-          <p className="text-xs font-semibold">属性面板</p>
-          <ParamsPanel
-            steps={steps} selectedIdx={selectedIdx}
-            onUpdate={updateStep} catalog={catalog}
-          />
-          {selectedIdx != null && steps[selectedIdx] && (
-            <div className="space-y-2 text-xs">
-              <div>
-                <label className="text-slate-400">ID</label>
-                <input className="w-full px-2 py-1 border rounded mt-0.5"
-                  value={steps[selectedIdx]?.id ?? ""}
-                  onChange={e => setSteps(prev =>
-                    prev.map((s, j) => j === selectedIdx
-                      ? { ...s, id: e.target.value } : s))} />
-              </div>
-              <div>
-                <label className="text-slate-400">动作名</label>
-                <input className="w-full px-2 py-1 border rounded mt-0.5"
-                  value={steps[selectedIdx]?.action ?? ""}
-                  onChange={e => setSteps(prev =>
-                    prev.map((s, j) => j === selectedIdx
-                      ? { ...s, action: e.target.value } : s))} />
-              </div>
-              <div>
-                <label className="text-slate-400">参数 (JSON)</label>
-                <textarea className="w-full px-2 py-1 border rounded mt-0.5 font-mono"
-                  rows={4} value={steps[selectedIdx]?.params_json ?? "{}"}
-                  onChange={e => setSteps(prev =>
-                    prev.map((s, j) => j === selectedIdx
-                      ? { ...s, params_json: e.target.value } : s))} />
-              </div>
-            </div>
-          )}
-          {selectedIdx == null && (
-            <p className="text-xs text-slate-400 pt-2">点击画布中的节点以编辑属性</p>
-          )}
-
-          <TestRunPanel yaml={yamlText} />
-
-          <SpyPanel onCapture={captureSpyElement} />
-
-          <ScrapePanel onGenerate={addGeneratedSteps} />
-
-          {/* 模板库 */}
-          <TemplateLibrary onPick={importTemplate} />
-
-          {/* 已保存流程列表 */}
-          <details className="mt-3">
-            <summary className="text-xs text-slate-400 cursor-pointer">
-              已保存流程 ({processList.filter(p => p.valid).length})
-            </summary>
-            <div className="mt-1 space-y-0.5">
-              {processList.map(p => (
-                <div key={p.id}
-                     onClick={() => void openFile(p.id)}
-                     className="flex items-center justify-between px-2 py-1 text-xs
-                                hover:bg-slate-50 rounded cursor-pointer">
-                  <span className="font-mono">{p.id}</span>
-                  <span className={p.valid ? "text-emerald-500" : "text-red-400"}>
-                    {p.valid ? `${p.steps} 步骤` : "\u26a0"}
-                  </span>
-                </div>
-              ))}
-              {!processList.length && (
-                <p className="text-xs text-slate-300">（暂无）</p>
-              )}
-            </div>
-          </details>
-        </div>
       </div>
+
+      {/* 试运行抽屉 */}
+      <Drawer open={runOpen} onClose={() => setRunOpen(false)}
+              height={280} title="试运行">
+        <div className="p-3">
+          <TestRunPanel yaml={yamlText} />
+        </div>
+      </Drawer>
+
+      {/* 步骤编辑弹窗（影刀式） */}
+      {editIdx != null && steps[editIdx] && (
+        <StepEditDialog
+          open={editIdx !== null}
+          step={steps[editIdx]!}
+          meta={steps[editIdx]!.action
+            ? catalog[steps[editIdx]!.action]
+            : undefined}
+          availableVars={availableVariables(steps, editIdx)}
+          onClose={() => setEditIdx(null)}
+          onSave={(next) => updateStep(editIdx, next)}
+          onDelete={() => { deleteStep(editIdx); setSelectedIdx(null); }}
+        />
+      )}
 
       {/* 状态栏 */}
       <div className="px-4 py-1 bg-slate-900 text-slate-300 text-xs flex justify-between">
@@ -674,7 +731,7 @@ function DesignerInner() {
                         justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl p-5 w-[380px]">
             <p className="text-sm font-semibold mb-3">
-              🎙 浏览器操作录制
+              浏览器操作录制
             </p>
             {recording.phase === "enter" ? (
               <>
@@ -763,7 +820,7 @@ function TemplateLibrary({ onPick }: { onPick: (t: TemplateInfo) => void }) {
                onClick={() => void onPick(t)}
                className="px-2 py-1 text-xs hover:bg-violet-50 rounded
                           cursor-pointer text-violet-700">
-            📋 {t.name}
+            {t.name}
           </div>
         ))}
         {!items.length && (

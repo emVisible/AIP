@@ -98,7 +98,7 @@ function FieldControl({ prop, value, onChange }: {
                       transition-colors ${value
             ? "bg-emerald-50 text-emerald-700 border-emerald-200"
             : "bg-slate-50 text-slate-500 border-slate-200"}`}
-        >{value ? "✓ 是" : "✗ 否"}</button>
+        >{value ? "是" : "否"}</button>
       );
     default:
       return (

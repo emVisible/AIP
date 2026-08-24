@@ -106,7 +106,7 @@ export function SpyPanel({ onCapture }: {
   return (
     <div className="mt-3 border rounded-lg p-2 bg-violet-50/40">
       <div className="flex items-center gap-2">
-        <p className="text-xs font-semibold text-violet-700">🎯 桌面拾取</p>
+        <p className="text-xs font-semibold text-violet-700">桌面拾取</p>
         <div className="ml-auto flex gap-1">
           {!spying ? (
             <button onClick={() => void start()}

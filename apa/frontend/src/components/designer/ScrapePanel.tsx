@@ -112,7 +112,7 @@ export function ScrapePanel({ onGenerate }: {
 
   return (
     <div className="mt-3 border rounded-lg p-2 bg-sky-50/40">
-      <p className="text-xs font-semibold text-sky-700">📊 数据抓取向导</p>
+      <p className="text-xs font-semibold text-sky-700">数据抓取向导</p>
 
       {!sid ? (
         <div className="mt-1 flex gap-1">

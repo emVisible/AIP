@@ -38,6 +38,7 @@ Registry）。
 """
 from __future__ import annotations
 
+import dataclasses
 import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
@@ -351,6 +352,50 @@ class ProcessEngine:
             if step.type == "loop.break":
                 raise _LoopBreak()
             raise _LoopContinue()
+
+        # ---- for_times 次数循环（Phase A 糖：编译为 range foreach）----
+        if step.type == "for_times":
+            import json as _j
+
+            count_raw = render(step.params.get("count"), run.scopes)
+            try:
+                count = int(count_raw)
+            except (TypeError, ValueError):
+                raise ProcessDefinitionError(
+                    f"{step.id}: for_times.count 必须为整数，"
+                    f"got {count_raw!r}")
+            if count < 0:
+                raise ProcessDefinitionError(
+                    f"{step.id}: for_times.count 不能为负")
+            try:
+                start = int(render(step.params.get("start"),
+                                    run.scopes) or 0)
+            except (TypeError, ValueError):
+                start = 0
+            items = list(range(start, start + count))
+            foreach_eq = dataclasses.replace(
+                step, type="foreach",
+                params={**step.params,
+                        "source": _j.dumps(items),
+                        **({"item_var": step.params["item_var"]}
+                           if step.params.get("item_var") else {})})
+            return self._exec_foreach(foreach_eq)
+
+        # ---- loop.infinite 无限循环糖（预算兜底）----
+        if step.type == "loop.infinite":
+            max_iter_raw = render(step.params.get("max_iterations"),
+                                   run.scopes)
+            try:
+                max_iter = int(max_iter_raw)
+            except (TypeError, ValueError):
+                max_iter = self.proc.max_actions
+            max_iter = min(max(1, max_iter), self.proc.max_actions)
+            while_eq = dataclasses.replace(
+                step, type="while",
+                params={**step.params,
+                        "condition": "True",
+                        "max_iterations": max_iter})
+            return self._exec_while(while_eq)
 
         # ---- foreach 循环（对标 RF FOR / 影刀循环指令）----
         if step.type == "foreach":

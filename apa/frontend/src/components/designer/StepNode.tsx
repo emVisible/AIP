@@ -1,36 +1,58 @@
+/**
+ * 画布步骤节点视觉（M3 自 DesignerPage 抽出）。
+ * 白底卡片 + 左侧类型色条 + 序号徽标；交互由画布层处理。
+ */
+
 import { Handle, Position } from "@xyflow/react";
-import type { NodeProps } from "@xyflow/react";
 
-import type { DesignerStep } from "../../pages/designer/designerTypes";
+export type StepNodeData = {
+  label: string;
+  sub?: string;
+  tone: string;
+  index?: number;
+  kind?: "" | "foreach" | "sub_process" | "ai_decision" | "while" | "log";
+};
 
-export type StepNodeData = { step: DesignerStep; selected: boolean };
+const KIND_ACCENT: Record<string, string> = {
+  "": "bg-slate-300",
+  foreach: "bg-violet-400",
+  while: "bg-violet-400",
+  sub_process: "bg-sky-400",
+  ai_decision: "bg-fuchsia-400",
+  log: "bg-emerald-300",
+};
 
-/** 自定义步骤节点 —— 职责单一：仅渲染，交互由画布层处理。 */
-export function StepNode({ data }: NodeProps) {
-  const { step, selected } = (data as unknown) as StepNodeData;
-  const isAI = step.type === "ai_decision";
-
-  const tone = selected
-    ? "border-brand ring-2 ring-blue-200"
-    : isAI
-      ? "border-purple-300 bg-purple-50"
-      : "border-slate-300 bg-white";
-
+/** 画布步骤节点：白底卡片 + 左侧类型色条 + 序号徽标。 */
+export function StepNodeView({ data }: { data: StepNodeData }) {
+  const accent = KIND_ACCENT[data.kind ?? ""] ?? KIND_ACCENT[""]!;
   return (
-    <div className={`rounded-lg border px-3 py-2 min-w-[140px] shadow-sm ${tone}`}>
-      <Handle type="target" position={Position.Top} className="!w-1.5 !h-1.5" />
-      <p className={`text-xs font-semibold ${isAI ? "text-purple-700" : "text-slate-700"}`}>
-        {isAI ? "⚡ " : ""}{step.id}
-      </p>
-      {step.action && (
-        <p className="text-[11px] text-slate-500 mt-0.5 truncate">{step.action}</p>
-      )}
-      {step.condition && (
-        <p className="text-[10px] text-amber-600 mt-0.5 truncate">
-          ? {step.condition}
+    <div className={`relative rounded-lg border bg-white pl-3 pr-3 py-2
+                     min-w-[160px] shadow-[0_1px_3px_rgba(0,0,0,0.08)]
+                     transition-shadow hover:shadow-[0_2px_8px_rgba(0,0,0,0.10)]
+                     ${data.tone}`}>
+      <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-full
+                        ${accent}`} />
+      <div className="flex items-center gap-1.5">
+        {data.index != null && (
+          <span className="inline-flex items-center justify-center w-4 h-4
+                           rounded-full bg-zinc-900 text-white text-[9px]
+                           font-semibold leading-none">
+            {data.index + 1}
+          </span>
+        )}
+        <p className="text-xs font-semibold text-slate-800 truncate">
+          {data.label}
+        </p>
+      </div>
+      {data.sub && (
+        <p className="mt-0.5 text-[10px] text-slate-400 truncate font-mono">
+          {data.sub}
         </p>
       )}
+      <Handle type="target" position={Position.Top} className="!w-1.5 !h-1.5" />
       <Handle type="source" position={Position.Bottom} className="!w-1.5 !h-1.5" />
     </div>
   );
 }
+
+export const nodeTypes = { step: StepNodeView };

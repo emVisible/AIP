@@ -2,6 +2,35 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.8.0-poc] — 2026-08-24
+
+决策贯通 + 调度管理。**324 pytest · 123 动作 · cascade_llm 从标签变事实。**
+
+### P18-M1 内置 LLM 决策贯通
+- ProcessRunner `decision_fn` 插槽 → ProcessEngine（C1 契约）
+- serve `make_llm_decision_fn`：LLMClient 适配 + 每 Session 决策预算
+  （默认 20，超出折叠 uncertain(budget_exhausted)）+ 异常兜底 +
+  耗时审计入 journal meta
+- ai_decision context 改用 render()——修复 lookup() 无法解析 {{}}
+  模板的存量缺陷（decision_fn 首次真实接线即暴露）
+- 占位 Key 防御：`KEY=# 必填…` 不再进入 environ 固化
+  （根治 phase9 环境测试跨文件 flake 与真实 UX 污染）
+- FakeLLMClient 三层注入测试（引擎/工厂/ServeApp E2E 分支命中）
+
+### P18-M2 定时任务管理
+- cron.next_after：分钟精度下次触发（月/小时跳跃优化；2月30日类
+  不可能表达式抛 CronError）
+- ServeApp 任务规格 CRUD：热替换调度器条目 + scheduler.yaml 原子写；
+  run_job_now 立即触发
+- API ×4：GET /api/jobs、POST save、DELETE、POST run（serve 注入，
+  非 serve 模式 501）
+- Runs 页 → 运行中心双 Tab：定时任务卡片列表（kind Badge/expr/
+  next_run/流程缺失标记）+ 新建编辑 Dialog + 立即运行
+
+### P18-M3 设计器拆分
+- StepNode / EngineChip 抽为独立组件；删除双类型系统死代码
+  （designerStore/designerTypes 旧桩）
+
 ## [0.7.0-poc] — 2026-08-24
 
 影刀级交互底座 + 决策引擎完整接入。**304 pytest · 14 域 123 动作 ·

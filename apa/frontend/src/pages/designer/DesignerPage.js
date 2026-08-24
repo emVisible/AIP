@@ -5,6 +5,8 @@ import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-run
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Background, BackgroundVariant, Controls, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow, } from "@xyflow/react";
 import { readDnDAction, readDnDStepIndex } from "./designerDnd";
+import { nodeTypes } from "../../components/designer/StepNode";
+import { EngineChip } from "../../components/designer/EngineChip";
 import { api } from "../../api/client";
 import { CatalogPanel } from "../../components/designer/CatalogPanel";
 import { StepEditDialog } from "../../components/designer/StepEditDialog";
@@ -45,40 +47,6 @@ function stepFromAction(action, i) {
             }, null, 2) };
     }
     return { ...base, action };
-}
-const KIND_ACCENT = {
-    "": "bg-slate-300",
-    foreach: "bg-violet-400",
-    while: "bg-violet-400",
-    sub_process: "bg-sky-400",
-    ai_decision: "bg-fuchsia-400",
-    log: "bg-emerald-300",
-};
-/** 画布步骤节点：白底卡片 + 左侧类型色条 + 序号徽标。 */
-function StepNodeView({ data }) {
-    const accent = KIND_ACCENT[data.kind ?? ""] ?? KIND_ACCENT[""];
-    return (_jsxs("div", { className: `relative rounded-lg border bg-white pl-3 pr-3 py-2
-                     min-w-[160px] shadow-[0_1px_3px_rgba(0,0,0,0.08)]
-                     transition-shadow hover:shadow-[0_2px_8px_rgba(0,0,0,0.10)]
-                     ${data.tone}`, children: [_jsx("span", { className: `absolute left-0 top-2 bottom-2 w-[3px] rounded-full
-                        ${accent}` }), _jsxs("div", { className: "flex items-center gap-1.5", children: [data.index != null && (_jsx("span", { className: "inline-flex items-center justify-center w-4 h-4\n                           rounded-full bg-zinc-900 text-white text-[9px]\n                           font-semibold leading-none", children: data.index + 1 })), _jsx("p", { className: "text-xs font-semibold text-slate-800 truncate", children: data.label })] }), data.sub && (_jsx("p", { className: "mt-0.5 text-[10px] text-slate-400 truncate font-mono", children: data.sub }))] }));
-}
-const nodeTypes = { step: StepNodeView };
-/** 决策引擎状态 chip（顶栏）。rules_only 灰 / cascade 蓝 / dsh 绿。 */
-function EngineChip() {
-    const [mode, setMode] = useState("...");
-    useEffect(() => {
-        api("/api/ai/status")
-            .then(d => setMode(d.mode))
-            .catch(() => setMode("offline"));
-    }, []);
-    const tone = mode === "dsh" ? "bg-emerald-50 text-emerald-600"
-        : mode === "cascade_llm" ? "bg-blue-50 text-blue-600"
-            : "bg-slate-100 text-slate-500";
-    const label = mode === "dsh" ? "DSH"
-        : mode === "cascade_llm" ? "L0+LLM" : "规则";
-    return (_jsx("span", { title: `决策引擎: ${mode}`, "data-mode": mode, className: `inline-flex items-center h-6 px-2 rounded-md
-                      text-[10px] font-medium ${tone}`, children: label }));
 }
 export function DesignerPage() {
     return (_jsx(ReactFlowProvider, { children: _jsx(DesignerInner, {}) }));

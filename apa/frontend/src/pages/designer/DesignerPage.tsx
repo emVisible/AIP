@@ -15,6 +15,8 @@ import {
   useReactFlow,
 } from "@xyflow/react";
 import { readDnDAction, readDnDStepIndex } from "./designerDnd";
+import { nodeTypes, type StepNodeData } from "../../components/designer/StepNode";
+import { EngineChip } from "../../components/designer/EngineChip";
 
 import { api } from "../../api/client";
 import type { ActionMeta, ProcessInfo } from "../../api/types";
@@ -88,78 +90,8 @@ function stepFromAction(action: string, i: number): DStep {
   return { ...base, action };
 }
 
-type StepNodeData = {
-  label: string;
-  sub?: string;
-  tone: string;
-  index?: number;
-  kind?: "" | "foreach" | "sub_process" | "ai_decision" | "while" | "log";
-};
-
-const KIND_ACCENT: Record<string, string> = {
-  "": "bg-slate-300",
-  foreach: "bg-violet-400",
-  while: "bg-violet-400",
-  sub_process: "bg-sky-400",
-  ai_decision: "bg-fuchsia-400",
-  log: "bg-emerald-300",
-};
-
-/** 画布步骤节点：白底卡片 + 左侧类型色条 + 序号徽标。 */
-function StepNodeView({ data }: { data: StepNodeData }) {
-  const accent = KIND_ACCENT[data.kind ?? ""] ?? KIND_ACCENT[""]!;
-  return (
-    <div className={`relative rounded-lg border bg-white pl-3 pr-3 py-2
-                     min-w-[160px] shadow-[0_1px_3px_rgba(0,0,0,0.08)]
-                     transition-shadow hover:shadow-[0_2px_8px_rgba(0,0,0,0.10)]
-                     ${data.tone}`}>
-      <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-full
-                        ${accent}`} />
-      <div className="flex items-center gap-1.5">
-        {data.index != null && (
-          <span className="inline-flex items-center justify-center w-4 h-4
-                           rounded-full bg-zinc-900 text-white text-[9px]
-                           font-semibold leading-none">
-            {data.index + 1}
-          </span>
-        )}
-        <p className="text-xs font-semibold text-slate-800 truncate">
-          {data.label}
-        </p>
-      </div>
-      {data.sub && (
-        <p className="mt-0.5 text-[10px] text-slate-400 truncate font-mono">
-          {data.sub}
-        </p>
-      )}
-    </div>
-  );
-}
-
-const nodeTypes = { step: StepNodeView };
 
 
-/** 决策引擎状态 chip（顶栏）。rules_only 灰 / cascade 蓝 / dsh 绿。 */
-function EngineChip() {
-  const [mode, setMode] = useState("...");
-  useEffect(() => {
-    api<{ mode: string }>("/api/ai/status")
-      .then(d => setMode(d.mode))
-      .catch(() => setMode("offline"));
-  }, []);
-  const tone = mode === "dsh" ? "bg-emerald-50 text-emerald-600"
-    : mode === "cascade_llm" ? "bg-blue-50 text-blue-600"
-    : "bg-slate-100 text-slate-500";
-  const label = mode === "dsh" ? "DSH"
-    : mode === "cascade_llm" ? "L0+LLM" : "规则";
-  return (
-    <span title={`决策引擎: ${mode}`} data-mode={mode}
-          className={`inline-flex items-center h-6 px-2 rounded-md
-                      text-[10px] font-medium ${tone}`}>
-      {label}
-    </span>
-  );
-}
 
 export function DesignerPage() {
   return (

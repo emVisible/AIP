@@ -4,6 +4,7 @@ import json
 import time
 from pathlib import Path
 
+import os as _os
 import pytest
 
 from aip import make_action
@@ -69,8 +70,14 @@ class TestEnvConfig:
         monkeypatch.setattr("apa_core.config.find_dotenv",
                             lambda **kw: f)
         monkeypatch.delenv("APA_LLM_API_KEY", raising=False)
+        from apa_core import config as _cfg
         from apa_core.llm import LLMClient
+        print("DBG _LOADED_FROM:", _cfg._LOADED_FROM,
+              "| finder:", _cfg.find_dotenv,
+              "| env:", _os.environ.get("DEEPSEEK_API_KEY"))
         client = LLMClient()
+        print("DBG after:", client.api_key, "| env:",
+              _os.environ.get("DEEPSEEK_API_KEY"))
         assert client.api_key == "sk-from-deepseek-env"
 
     def test_repo_env_example_matches_deepseek(self):

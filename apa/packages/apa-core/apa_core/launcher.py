@@ -41,7 +41,14 @@ class ProcessRunner:
         executor_source: str = "bot_01",
         journal=None,
         tenant_id: Optional[str] = None,
+        decision_fn=None,
     ) -> None:
+        """decision_fn：ai_decision 节点的决策插槽（C1）。
+
+        签名 (ctx_list, available_actions) -> {"outcome": str, **_meta}。
+        serve 模式由 LLM 适配层注入（见 serve.make_llm_decision_fn）；
+        缺省 None → ai_decision 恒 uncertain 转 HITL。
+        """
         from aip import AIPPeer
 
         from .embedded import EmbeddedGateway
@@ -86,7 +93,8 @@ class ProcessRunner:
                 return True, payload.get("data") or {}
             return False, {"code": payload.get("code")}
 
-        self.engine = ProcessEngine(proc, send_and_wait)
+        self.engine = ProcessEngine(proc, send_and_wait,
+                                    decision_fn=decision_fn)
 
         def _complete(outcome: str) -> None:
             # escalated：已挂起等人工，不在此收尾（§4.3）

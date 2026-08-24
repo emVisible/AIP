@@ -29,8 +29,13 @@ def parse_env_file(path: Path) -> Dict[str, str]:
         key, _, value = line.partition("=")
         key = key.strip()
         value = value.strip().strip('"').strip("'")
-        if key:
-            out[key] = value
+        # 占位值防御（axiom 1.4）：模板 .env 常见 `KEY=# 必填…`。
+        # 该值是注释残片并非密钥 —— 入 environ 会固化并遮蔽一切
+        # 后续配置源（真实 Key / 测试注入）。仅丢弃 # 开头占位；
+        # 显式空串保留原语义（env_first 视为未设置）。
+        if value.startswith("#"):
+            continue
+        out[key] = value
     return out
 
 

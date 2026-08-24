@@ -343,20 +343,33 @@ class ProcessEngine:
 
         # ---- AI 决策节点 ----
         if step.type == "ai_decision":
+            # render：整值 {{path}} 保留原生类型；混合串做子串插值
             ctx_list = [
-                lookup(t, run.scopes)
+                render(t, run.scopes)
                 for t in step.params.get("context", [])
             ]
             available = step.params.get("available_actions", [])
+            meta: Dict[str, Any] = {}
             if self.decision_fn is None:
                 outcome = "uncertain"
+                meta["_reason"] = "no_decision_fn"
             else:
-                outcome = self.decision_fn(ctx_list, available).get(
-                    "outcome", "uncertain")
+                res = self.decision_fn(ctx_list, available) or {}
+                outcome = res.get("outcome", "uncertain")
+                meta = {k: v for k, v in res.items() if k.startswith("_")}
+                if outcome == "uncertain" and "_reason" not in meta:
+                    meta["_reason"] = str(
+                        res.get("_reason") or res.get("uncertain") or "?")
             key = step.output_as or step.id
-            run.scopes.setdefault("steps", {})[key] = {"outcome": outcome}
-            run.steps.append({"step": step.id, "type": "ai_decision",
-                              "outcome": outcome})
+            run.scopes.setdefault("steps", {})[key] = {
+                "outcome": outcome,
+                **({"_reason": meta["_reason"]} if "_reason" in meta else {}),
+            }
+            entry = {"step": step.id, "type": "ai_decision",
+                     "outcome": outcome}
+            if meta:
+                entry["meta"] = meta
+            run.steps.append(entry)
             if outcome == "uncertain":
                 return self._goto_handler(step, reason="ai_uncertain",
                                           default_goto="escalate")

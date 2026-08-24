@@ -51,7 +51,8 @@ def _ai_status() -> dict:
     """
     from .config import env_first
 
-    has_key = bool(env_first("APA_LLM_API_KEY", "DEEPSEEK_API_KEY"))
+    raw = env_first("APA_LLM_API_KEY", "DEEPSEEK_API_KEY")
+    has_key = bool(raw) and not raw.strip().startswith("#")
     model = env_first("APA_LLM_MODEL", "DEEPSEEK_MODEL") or "deepseek-chat"
     return {"mode": "cascade_llm" if has_key else "rules_only",
             "model": model}

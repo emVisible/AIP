@@ -17,6 +17,7 @@
 """
 from __future__ import annotations
 
+import os
 import sys
 import threading
 import time
@@ -31,6 +32,52 @@ from .studio import StudioServer
 class ServeError(RuntimeError):
     pass
 
+
+
+
+def make_llm_decision_fn(client, *, session: str = "",
+                         max_decisions: int = 20):
+    """把 LLMClient 适配为 ProcessEngine.decision_fn 契约。
+
+    - 引擎契约：(ctx_list, available_actions) -> {"outcome": str, **_meta}
+    - 预算：每会话 max_decisions 次，超出折叠为 uncertain(budget_exhausted)
+    - 异常/超时：LLMClient 内部已降级 uncertain；此处再兜底一层
+    """
+    import time as _t
+
+    counter = {"n": 0}
+
+    def decide(ctx_list, available_actions):
+        if counter["n"] >= max_decisions:
+            return {"outcome": "uncertain",
+                    "_reason": "budget_exhausted",
+                    "_level": "L2",
+                    "_budget_used": counter["n"]}
+        counter["n"] += 1
+        t0 = _t.perf_counter()
+        try:
+            raw = client.decide(
+                event_name="ai_decision",
+                event_data={"context": ctx_list},
+                allowed_actions=list(available_actions),
+            )
+        except Exception as e:  # noqa: BLE001
+            raw = {"uncertain": f"llm_error:{type(e).__name__}"}
+        ms = round((_t.perf_counter() - t0) * 1000, 1)
+        if "action" in raw:
+            return {"outcome": str(raw["action"]),
+                    "params": raw.get("params") or {},
+                    **({"target": raw["target"]}
+                       if raw.get("target") else {}),
+                    "_level": "L2", "_ms": ms,
+                    "_budget_used": counter["n"]}
+        reason = raw.get("uncertain", "?")
+        return {"outcome": "uncertain", "_reason": str(reason)[:120],
+                "_level": "L2", "_ms": ms,
+                "_budget_used": counter["n"]}
+
+    decide.session = session
+    return decide
 
 class ServeApp:
     """单进程常驻：HTTP 面板 + 调度器 + 本地流程执行。"""
@@ -52,6 +99,7 @@ class ServeApp:
         session_timeout_s: float = 30.0,
         ws_port: Optional[int] = None,
         ws_agent_sources: Optional[List[str]] = None,
+        llm_client=None,
     ) -> None:
         """ws_port 非 None 时启动内嵌 WS 网关（外部决策引擎接入点）。
 
@@ -67,6 +115,23 @@ class ServeApp:
         self.ws_agent_sources = list(ws_agent_sources or ["dsh_agent_001"])
         self.ws_server = None            # WsGatewayServer（WS 线程内）
         self._ws_thread: Optional[threading.Thread] = None
+
+        # M1：内置 LLM 决策（env 有 Key 才启用；可注入 Fake 用于测试）
+        from .config import env_first
+
+        def _usable_key() -> bool:
+            v = env_first("APA_LLM_API_KEY", "DEEPSEEK_API_KEY")
+            # 占位/注释值（模板 .env 的 "# 必填…"）不视为已配置
+            return bool(v) and not v.strip().startswith("#")
+
+        self.llm_client = llm_client
+        if self.llm_client is None:
+            if _usable_key():
+                from .llm import LLMClient
+
+                self.llm_client = LLMClient(timeout_s=20.0)
+        self.llm_max_decisions = int(
+            os.environ.get("APA_LLM_MAX_DECISIONS", "20"))
 
         # 内置沙盒 ERP（默认开启，让示例流程开箱即跑）
         from .mock_erp import MockERP
@@ -224,6 +289,12 @@ class ServeApp:
 
         journal = SessionJournal(self.runs_dir / f"{session}.jsonl")
 
+        decision_fn = None
+        if self.llm_client is not None:
+            decision_fn = make_llm_decision_fn(
+                self.llm_client, session=session,
+                max_decisions=self.llm_max_decisions)
+
         runner = ProcessRunner(
             proc,
             registry=self.registry,
@@ -233,6 +304,7 @@ class ServeApp:
             executor_source=f"bot_{session[-6:]}",
             journal=journal,
             tenant_id="serve",
+            decision_fn=decision_fn,
         )
         runner.router.start_observation()
         self.register_local_gateway(runner.gateway)   # HITL 按钮可解析其任务

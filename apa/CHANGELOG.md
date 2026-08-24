@@ -2,6 +2,22 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.13.0-poc] — 2026-08-24
+
+Capability Pack 架构落地。**413 pytest · 15 域 152 动作 · AIP 协议零改动。**
+
+### v0.13 Pack 体系（三层能力架构 L-Pack 层）
+- apa_core/packs.py：PackManifest 契约 + 发现三通道
+  （builtin→entry_points→~/.apa/packs 用户覆盖）+
+  冲突治理（同名 action 默认拒绝，overrides[] 显式接管+审计）+
+  instantiate_executor 延迟装配
+- 存量 llm 迁移为首个标准包 packs/llm/（pack.yaml+actions/+executor）
+  ——吃自己狗粮验证全链路
+- serve/cli 装配：发现先于构造，registry 片段合并进 ServeApp 与
+  create_app 双侧，executor specs 桥接 _build_executors 自动挂载
+- doctor --packs 能力包清单 · 协议层零改动
+  （pack 只是 registry 组织方式与 executor 装配方式）
+
 ## [0.12.0-poc] — 2026-08-24
 
 RPA 基础功能收尾对标。**410 pytest · 15 域 152 动作。**

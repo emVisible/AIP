@@ -2,6 +2,32 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.11.0-poc] — 2026-08-24
+
+范式跃迁启动：双环架构落地。**359 pytest · 138 动作 / 15 域。**
+
+### Phase A 引擎控制流完备（编译目标语言）
+- `loop.break` / `loop.continue`：LoopContext 深度追踪，嵌套循环
+  语义正确；无栈使用显式 ProcessDefinitionError
+- foreach 字典源 → {key,value} 迭代；while 支持 body_steps 子步骤
+  （与 foreach 同构，控制流可用）
+- **预算穿透**：循环体子引擎消耗并入全局 max_actions（修复此前
+  子引擎独立预算的绕过漏洞）
+- `if.*` 谓词查询族 ×6：element_visible/url_contains/
+  text_on_screen(Vision)/file_exists/dir_exists/window_exists
+- wait.file(glob) / wait.window(title) · desktop.humanize 模拟真人
+  （贝塞尔轨迹+高斯点击延迟）
+- AST 白名单 += 算术运算（循环条件 n % 2 等）
+- Registry when_to_use 注解 pass（IntentCompiler 词表地基）
+
+### Phase B 意图环 MVP（策略一：模板检索+槽位填充）
+- IntentCompiler：模板检索评分 → LLM 填槽 → 未填占位符强制转
+  澄清问题（兜底）→ LLM 失败优雅降级
+- 场景模板库：price-monitor / cs-quality-check（keywords/slots/yaml）
+- `POST /api/intent/compile`（注入式，未配置 501）
+- 前端工作台（Workbench 替换 Assistant 路由）：对话主轴 +
+  草稿卡片确认门 + sessionStorage 移交设计器画布
+
 ## [0.10.0-poc] — 2026-08-24
 
 审计修复 + 地基补缺 + 循环体可视化。**341 pytest · 14 域 131 动作 ·

@@ -107,6 +107,10 @@ class DataExecutor(AIPExecutor):
             "process.kill": self._process_kill,
             # ---- M5 代码段 ----
             "code.python": self._code_python,
+            "file.read_csv": self._file_read_csv,
+            "file.write_csv": self._file_write_csv,
+            "pdf.extract_text": self._pdf_extract_text,
+            "api.upload_file": self._api_upload_file,
             # ---- P22-M2 db + notify ----
             "db.sqlite.query": self._db_sqlite_query,
             "db.sqlite.execute": self._db_sqlite_execute,
@@ -1074,3 +1078,84 @@ class DataExecutor(AIPExecutor):
             del d[k]
             return True, {"removed": k}
         return False, {"code": "key_not_found"}
+
+    def _file_read_csv(self, p):
+        """CSV → {columns, rows, count}（与 data.create 输出对齐）。"""
+        import csv as _csv
+
+        path = str(p["path"])
+        encoding = str(p.get("encoding", "utf-8-sig"))
+        delimiter = str(p.get("delimiter", ","))
+        has_header = bool(p.get("header", True))
+        with open(path, encoding=encoding, newline="") as f:
+            reader = _csv.reader(f, delimiter=delimiter)
+            raw = [row for row in reader if row]
+        columns = [str(c) for c in raw[0]] if (has_header and raw) else []
+        rows = raw[1:] if (has_header and raw) else raw
+        return True, {"columns": columns, "rows": rows,
+                       "count": len(rows)}
+
+    def _file_write_csv(self, p):
+        import csv as _csv
+
+        path = str(p["path"])
+        columns = p.get("columns") or []
+        rows = p.get("rows") or []
+        encoding = str(p.get("encoding", "utf-8-sig"))
+        d = os.path.dirname(path) or "."
+        os.makedirs(d, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(suffix=".csv", dir=d)
+        try:
+            with os.fdopen(fd, "w", encoding=encoding, newline="") as f:
+                w = _csv.writer(f)
+                if columns:
+                    w.writerow(columns)
+                w.writerows(rows)
+            os.replace(tmp, path)
+            return True, {"path": path, "rows": len(rows)}
+        except Exception:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
+
+    def _pdf_extract_text(self, p):
+        """提取 PDF 文本（PyPDF2，纯 Python 零系统依赖）。"""
+        try:
+            from PyPDF2 import PdfReader
+        except ImportError:
+            return False, {"code": "dependency_missing",
+                           "detail": "uv pip install PyPDF2"}
+        path = str(p["path"])
+        if not Path(path).is_file():
+            return False, {"code": "file_not_found", "path": path}
+        reader = PdfReader(path)
+        max_pages = int(p.get("max_pages", 50))
+        pages = []
+        for i, pg in enumerate(reader.pages[:max_pages]):
+            txt = pg.extract_text() or ""
+            pages.append({"page": i + 1, "text": txt})
+        full = "\n".join(pg["text"] for pg in pages)
+        return True, {
+            "pages": pages, "page_count": len(pages),
+            "total_chars": len(full), "text": full[:50000],
+        }
+
+    def _api_upload_file(self, p):
+        """multipart/form-data 文件上传。"""
+        import httpx
+
+        url = str(p["url"])
+        field_name = str(p.get("field_name", "file"))
+        file_path = str(p["file_path"])
+        extra_fields = p.get("fields") or {}
+        headers = p.get("headers") or {}
+        if not Path(file_path).is_file():
+            return False, {"code": "file_not_found", "path": file_path}
+        with open(file_path, "rb") as f:
+            files = {field_name: (Path(file_path).name, f)}
+            resp = httpx.post(url, files=files, data=extra_fields,
+                              headers=headers, timeout=60.0,
+                              follow_redirects=True)
+        resp.raise_for_status()
+        return True, {"status_code": resp.status_code,
+                       "response": resp.text[:2000]}

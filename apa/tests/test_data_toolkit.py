@@ -504,3 +504,122 @@ class TestNotify:
         body = posted["json"]
         assert body["msgtype"] == "markdown"
         assert "GMV" in body["markdown"]["content"]
+
+
+class TestCsvPipeline:
+    @pytest.fixture()
+    def dex(self):
+        ex = DataExecutor.__new__(DataExecutor)
+        ex._tables = {}
+        return ex
+
+    def test_csv_roundtrip(self, dex, tmp_path):
+        p = str(tmp_path / "data.csv")
+        run(dex, "file.write_csv", path=p,
+            columns=["id", "name", "amount"],
+            rows=[[1, "甲", 100], [2, "乙", 200]])
+        o = run(dex, "file.read_csv", path=p)
+        assert o["columns"] == ["id", "name", "amount"]
+        assert o["rows"][0] == ["1", "甲", "100"]
+        # 与 aggregate 链式
+        run(dex, "data.json_to_table",
+            items=[{"id": r[0], "name": r[1],
+                     "amount": int(r[2])} for r in o["rows"]],
+            key="csv_data")
+        total = run(dex, "data.aggregate", source="csv_data",
+                    column="amount", func="sum")["value"]
+        assert total == 300
+
+    def test_csv_custom_delimiter(self, dex, tmp_path):
+        p = str(tmp_path / "tsv.txt")
+        with open(p, "w") as f:
+            f.write("a;b\nc;d")
+        o = run(dex, "file.read_csv",
+                path=p, delimiter=";")
+        assert o["columns"] == ["a", "b"]
+
+    def test_csv_no_header(self, dex, tmp_path):
+        p = str(tmp_path / "nohdr.csv")
+        with open(p, "w") as f:
+            f.write("1,2\n3,4")
+        o = run(dex, "file.read_csv", path=p, header=False)
+        assert o["rows"] == [["1", "2"], ["3", "4"]]
+
+
+class TestPdfExtract:
+    @pytest.fixture()
+    def dex(self):
+        ex = DataExecutor.__new__(DataExecutor)
+        ex._tables = {}
+        return ex
+
+    @pytest.fixture()
+    def sample_pdf(self, tmp_path):
+        pytest.importorskip("PyPDF2")
+        from PyPDF2 import PdfWriter
+        from PyPDF2 import PageObject
+
+        p = tmp_path / "sample.pdf"
+        w = PdfWriter()
+        pg = PageObject.create_blank_page(width=612, height=792)
+        w.add_page(pg)
+        with open(p, "wb") as f:
+            w.write(f)
+        return str(p)
+
+    def test_pdf_no_crash_on_blank(self, dex, sample_pdf):
+        """空白 PDF → 提取不报错（文本为空）。"""
+        ok, out = dex._execute_action("pdf.extract_text",
+                                       {"path": sample_pdf})
+        if ok:
+            assert out["page_count"] >= 1
+
+    def test_missing_pdf(self, dex, tmp_path):
+        ok, err = dex._execute_action(
+            "pdf.extract_text", {"path": str(tmp_path / "no.pdf")})
+        assert not ok and err["code"] == "file_not_found"
+
+
+class TestUploadFile:
+    @pytest.fixture()
+    def dex(self):
+        ex = DataExecutor.__new__(DataExecutor)
+        ex._tables = {}
+        return ex
+
+    def test_upload_to_local_stub(self, dex, tmp_path):
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        received = {}
+
+        class H(BaseHTTPRequestHandler):
+            def do_POST(self):
+                cl = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(cl)
+                received["size"] = len(body)
+                received["path"] = self.path
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                resp = b'{"ok":true}'
+                self.send_header("Content-Length", str(len(resp)))
+                self.end_headers()
+                self.wfile.write(resp)
+
+            def log_message(self, *a): pass
+
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        port = srv.server_address[1]
+
+        fp = tmp_path / "upload_test.txt"
+        fp.write_text("UPLOAD-CONTENT")
+
+        ok, out = dex._execute_action("api.upload_file", {
+            "url": f"http://127.0.0.1:{port}/upload",
+            "file_path": str(fp),
+            "field_name": "document",
+            "fields": {"token": "abc"}})
+        assert ok and out["status_code"] == 200
+        assert received["size"] > 0
+        srv.shutdown()

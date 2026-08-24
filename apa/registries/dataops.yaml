@@ -1555,3 +1555,66 @@ env.set:
   risk: L1
   timeout_ms: 5000
   retries: 1
+
+file.read_csv:
+  executor_domain: data
+  description: "读取 CSV → {columns, rows, count}（与 data.create 输出对齐）"
+  params:
+    type: object
+    required: [path]
+    properties:
+      path: { type: string }
+      encoding: { type: string, default: utf-8-sig }
+      delimiter: { type: string, default: "," }
+      header: { type: boolean, default: true }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 2
+
+file.write_csv:
+  executor_domain: data
+  description: "写入 CSV（utf-8-sig 编码兼容 Excel，原子落盘）"
+  params:
+    type: object
+    required: [path]
+    properties:
+      path: { type: string }
+      columns: { type: array, items: { type: string } }
+      rows: { type: array, items: { type: array } }
+      encoding: { type: string, default: utf-8-sig }
+  idempotency: required
+  risk: L1
+  timeout_ms: 30000
+  retries: 1
+
+pdf.extract_text:
+  executor_domain: data
+  description: "提取 PDF 文本（PyPDF2 纯 Python，支持分页）"
+  params:
+    type: object
+    required: [path]
+    properties:
+      path: { type: string }
+      max_pages: { type: integer, minimum: 1, maximum: 500, default: 50 }
+  idempotency: required
+  risk: L0
+  timeout_ms: 60000
+  retries: 2
+
+api.upload_file:
+  executor_domain: data
+  description: "multipart/form-data 文件上传到 HTTP 端点"
+  params:
+    type: object
+    required: [url, file_path]
+    properties:
+      url: { type: string, format: uri }
+      file_path: { type: string }
+      field_name: { type: string, default: file }
+      fields: { type: object, additionalProperties: { type: string } }
+      headers: { type: object, additionalProperties: { type: string } }
+  idempotency: none
+  risk: L2
+  timeout_ms: 120000
+  retries: 0

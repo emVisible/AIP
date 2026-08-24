@@ -28,6 +28,14 @@
 - 前端工作台（Workbench 替换 Assistant 路由）：对话主轴 +
   草稿卡片确认门 + sessionStorage 移交设计器画布
 
+### Phase B 补充：策略二自由编译（同版本追加）
+- FreeIntentCompiler：全 Registry 作为 LLM 词表（紧凑目录含
+  risk/必填参数），任意自然语言 → process.yaml
+- 双重校验硬拒绝：幻觉动作名（转澄清+引导描述效果）· 结构非法
+  （空步骤/重复 id/C3）经既有 build_process 解析器兜底
+- AutoIntentCompiler 自动路由：模板命中走策略一，未命中落自由
+  编译；serve 有 Key 时自动装配（共享 LLMClient, timeout 30s）
+
 ## [0.10.0-poc] — 2026-08-24
 
 审计修复 + 地基补缺 + 循环体可视化。**341 pytest · 14 域 131 动作 ·

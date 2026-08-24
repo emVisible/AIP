@@ -2,6 +2,35 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.12.0-poc] — 2026-08-24
+
+RPA 基础功能收尾对标。**410 pytest · 15 域 152 动作。**
+
+### P22-M1 流程控制收尾
+- `for_times` 次数循环（编译为 range foreach，复用全部管线）
+- `loop.infinite` 无限循环糖（max_iterations 默认=流程预算）
+- 多条件/else-if 链文档模式验证
+
+### P22-M2 相似元素 + Web 增强
+- browser.get_similar_elements → foreach source（循环相似元素达成）
+- browser.dialog_handle：一次性 alert/confirm/prompt 处理器
+- browser.drag_drop
+
+### P22-M3 DataTable 收尾
+- delete_row / delete_column / clear / column_info(类型推断) /
+  set_column_info(重命名+标注)
+
+### P22-M4 OS 补全
+- file.zip(递归+原子落盘) / file.unzip(zipfile-slip 防穿越)
+- desktop.screenshot(region→PNG/ImageIO)
+- process.kill(pid SIGTERM / pkill 模糊)
+
+### P22-M5 交互+代码段
+- ui.confirm：HITL 轻量确认卡（Gateway 拦截 + SUSPENDED + resolve 唤醒）
+- **code.python**：subprocess 隔离 + timeout 强杀 +
+  risk=L3 默认策略强制人工审批 + 完整代码审计
+  （与 shell.execute L2 形成风险梯度）
+
 ## [0.11.0-poc] — 2026-08-24
 
 范式跃迁启动：双环架构落地。**359 pytest · 138 动作 / 15 域。**

@@ -82,6 +82,7 @@ def create_app(
     resolve_task: Optional[Callable] = None,
     runs_dir: Optional[str] = None,
     spy_service: Optional[Any] = None,
+    serve_app: Optional[Any] = None,
 ) -> FastAPI:
     """构建 FastAPI 实例。依赖注入：所有外部交互通过参数传入。"""
     _recorder = None  # RecorderService 惰性单例（录制会话注册表）
@@ -376,6 +377,39 @@ def create_app(
             return _scrape.stop(sid)
         except ScrapeError:
             return {"stopped": False}
+
+    # ---- 定时任务 CRUD（M2）----
+    @app.get("/api/jobs")
+    async def jobs_list():
+        if serve_app is None:
+            raise HTTPException(501, "jobs require serve mode")
+        return serve_app.list_job_specs()
+
+    @app.post("/api/jobs/save")
+    async def jobs_save(body: dict):
+        if serve_app is None:
+            raise HTTPException(501, "jobs require serve mode")
+        from .serve import ServeError
+        try:
+            return serve_app.upsert_job_spec(body)
+        except ServeError as e:
+            raise HTTPException(400, str(e))
+
+    @app.delete("/api/jobs/{jid}")
+    async def jobs_delete(jid: str):
+        if serve_app is None:
+            raise HTTPException(501, "jobs require serve mode")
+        return serve_app.remove_job_spec(jid)
+
+    @app.post("/api/jobs/{jid}/run")
+    async def jobs_run(jid: str):
+        if serve_app is None:
+            raise HTTPException(501, "jobs require serve mode")
+        from .serve import ServeError
+        try:
+            return serve_app.run_job_now(jid)
+        except ServeError as e:
+            raise HTTPException(404, str(e))
 
     # ---- SSE journal stream ----
     @app.get("/api/journal/stream")

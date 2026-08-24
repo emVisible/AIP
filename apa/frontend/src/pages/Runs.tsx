@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Badge } from "../components/ui/primitives";
+import { JobsPanel } from "../components/jobs/JobsPanel";
 import { api } from "../api/client";
 import { useSessions } from "../hooks/useSessions";
 import { stateTone } from "../lib/utils";
@@ -11,6 +12,7 @@ interface RunDetail {
 
 export function Runs() {
   const sessions = useSessions();
+  const [tab, setTab] = useState<"runs" | "jobs">("runs");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [details, setDetails] = useState<Record<string, RunDetail>>({});
 
@@ -33,7 +35,26 @@ export function Runs() {
 
   return (
     <div className="space-y-4 max-w-6xl">
-      <h1 className="text-xl font-bold">运行历史</h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-xl font-bold">运行中心</h1>
+        <nav className="ml-2 flex items-center gap-1">
+          {([["runs", "运行历史"], ["jobs", "定时任务"]] as const).map(
+            ([k, label]) => (
+              <button key={k} onClick={() => setTab(k)}
+                className={`h-7 px-3 rounded-md text-xs font-medium
+                            transition-colors ${tab === k
+                  ? "bg-zinc-900 text-white"
+                  : "text-slate-500 hover:bg-slate-100"}`}>
+                {label}
+              </button>
+            ))}
+        </nav>
+      </div>
+
+      {tab === "jobs" && <JobsPanel />}
+
+      {tab === "runs" && (
+      <>
 
       {!list.length && (
         <p className="text-sm text-slate-400 py-8 text-center">
@@ -91,6 +112,8 @@ export function Runs() {
           </div>
         ))}
       </div>
+      </>
+      )}
     </div>
   );
 }

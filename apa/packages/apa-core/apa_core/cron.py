@@ -105,3 +105,32 @@ class CronExpr:
 def is_due(expr: str, epoch_ms: int) -> bool:
     """便捷函数：epoch 毫秒时刻是否命中 cron。"""
     return CronExpr(expr).matches(datetime.fromtimestamp(epoch_ms / 1000))
+
+def next_after(expr: str, from_dt: Optional[datetime] = None,
+               *, max_scan_days: int = 366 * 5) -> datetime:
+    """下一次触发时刻（分钟精度，严格晚于 from_dt）。
+
+    扫描上限 max_scan_days 天；超限抛 CronError（永无命中属配置错误）。
+    快进优化：月/小时不满足时整段跳跃，最坏仍 O(每日分钟数×天数)。
+    """
+    base = (from_dt or datetime.now()).replace(second=0, microsecond=0)
+    cron = CronExpr(expr)
+
+    from datetime import timedelta
+
+    cur = base + timedelta(minutes=1)
+    limit = cur + timedelta(days=max_scan_days)
+    while cur < limit:
+        if cron.matches(cur):
+            return cur
+        if cur.month not in cron.month:
+            # 跳到下月 1 日零分
+            nxt_month = (cur.replace(day=1, hour=0, minute=0) +
+                         timedelta(days=32)).replace(day=1, hour=0, minute=0)
+            cur = nxt_month
+            continue
+        if cur.hour not in cron.hour:
+            cur = (cur + timedelta(hours=1)).replace(minute=0)
+            continue
+        cur += timedelta(minutes=1)
+    raise CronError(f"no matching time within {max_scan_days} days: {expr!r}")

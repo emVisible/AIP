@@ -153,6 +153,9 @@ class ServeApp:
         )
         self.processes_dir = self.studio.processes_dir
         self.scheduler = Scheduler()
+        self._job_specs: Dict[str, Dict[str, Any]] = {}
+        self._jobs_lock = threading.Lock()
+        self.jobs_path: Optional[Path] = None
 
         self.http_port: Optional[int] = None
         self._stop = threading.Event()
@@ -212,26 +215,136 @@ class ServeApp:
         else:
             raise ServeError(f"job {job_id!r}: 未知 kind {kind!r}")
 
+        # 规格（可持久化、可 CRUD）——handler 不可序列化故单列
+        self._job_specs[job_id] = {
+            "id": job_id, "kind": kind, "process": process,
+            "expr": expr, "event": event, "data": dict(data or {}),
+        }
+
     def load_jobs(self, path: str | Path) -> int:
-        """从 scheduler.yaml 批量加载任务。返回任务数。"""
+        """从 scheduler.yaml 批量加载任务。返回任务数；记录持久化路径。"""
         import yaml as _yaml
 
+        self.jobs_path = Path(path)
         raw = _yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
         count = 0
         for entry in raw.get("jobs", []):
             jid = entry.get("id")
             if not jid:
                 continue
-            self.add_process_job(
-                jid,
-                kind=entry.get("kind"),
-                process=entry.get("process"),
-                expr=entry.get("expr"),
-                event=entry.get("event"),
-                data=entry.get("data") or {},
-            )
+            with self._jobs_lock:
+                self.add_process_job(
+                    jid,
+                    kind=entry.get("kind"),
+                    process=entry.get("process"),
+                    expr=entry.get("expr"),
+                    event=entry.get("event"),
+                    data=entry.get("data") or {},
+                )
             count += 1
         return count
+
+    # ---- M2 任务 CRUD ---------------------------------------------------------
+    def list_job_specs(self) -> Dict[str, Any]:
+        """任务规格列表 + cron 下次触发时间。"""
+        from .cron import next_after, CronError
+
+        items = []
+        for jid, sp in sorted(self._job_specs.items()):
+            item = dict(sp)
+            item["exists"] = (self.processes_dir /
+                              f"{sp['process']}.yaml").is_file()
+            if sp["kind"] == "cron":
+                try:
+                    item["next_run"] = next_after(
+                        sp["expr"]).isoformat(timespec="minutes")
+                except Exception as e:  # noqa: BLE001
+                    item["next_run"] = None
+                    item["next_error"] = str(e)[:80]
+            items.append(item)
+        return {"jobs": items, "count": len(items)}
+
+    def upsert_job_spec(self, spec: Dict[str, Any]) -> Dict[str, Any]:
+        """创建/更新任务：校验 → 热替换调度器条目 → 持久化。"""
+        jid = str(spec.get("id") or "").strip()
+        kind = spec.get("kind")
+        process = str(spec.get("process") or "").strip()
+        if not jid:
+            raise ServeError("job id required")
+        if kind not in ("cron", "event"):
+            raise ServeError(f"kind must be cron|event, got {kind!r}")
+        if not process:
+            raise ServeError("process required")
+
+        with self._jobs_lock:
+            # 先在调度器层热替换（失败则不留半状态）
+            if jid in self.scheduler.jobs:
+                self.scheduler.remove(jid)
+            try:
+                self.add_process_job(
+                    jid, kind=kind, process=process,
+                    expr=spec.get("expr"),
+                    event=spec.get("event"),
+                    data=spec.get("data") or {})
+            except Exception:
+                if jid in self._job_specs and                         jid not in self.scheduler.jobs:
+                    pass  # 新建失败的规格也不保留
+                raise
+            self._job_specs[jid] = {
+                "id": jid, "kind": kind, "process": process,
+                "expr": spec.get("expr"), "event": spec.get("event"),
+                "data": dict(spec.get("data") or {}),
+            }
+            self._persist_jobs_locked()
+        return {"saved": jid}
+
+    def remove_job_spec(self, jid: str) -> Dict[str, Any]:
+        with self._jobs_lock:
+            existed_sched = self.scheduler.remove(jid)
+            existed_spec = self._job_specs.pop(jid, None) is not None
+            if existed_spec or existed_sched:
+                self._persist_jobs_locked()
+        return {"removed": jid,
+                "existed": existed_spec or existed_sched}
+
+    def run_job_now(self, jid: str) -> Dict[str, Any]:
+        """手动立即触发一次（等价于其事件/到点路径）。"""
+        with self._jobs_lock:
+            sp = self._job_specs.get(jid)
+        if sp is None:
+            raise ServeError(f"unknown job {jid!r}")
+
+        merged = dict(sp.get("data") or {})
+        trigger_event = (sp.get("event") or "") if sp["kind"] == "event" \
+            else f"manual.{jid}"
+        t = threading.Thread(
+            target=self._run_session_job,
+            args=(sp["process"], trigger_event, merged),
+            daemon=True, name=f"apa-job-{jid}-manual",
+        )
+        self._threads.append(t)
+        t.start()
+        return {"triggered": jid}
+
+    def _persist_jobs_locked(self) -> None:
+        """原子写 scheduler.yaml（调用方须已持有 _jobs_lock）。"""
+        import os
+        import tempfile
+        import yaml as _yaml
+
+        if self.jobs_path is None:
+            return  # 无持久化路径（纯编程式使用）→ 跳过
+        doc = {"jobs": [
+            {k: v for k, v in sp.items() if k != "exists"}
+            for _, sp in sorted(self._job_specs.items())
+        ]}
+        payload = _yaml.safe_dump(doc, allow_unicode=True, sort_keys=False)
+        d = os.path.dirname(self.jobs_path) or "."
+        os.makedirs(d, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(suffix=".yaml", dir=d)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(payload)
+        os.replace(tmp, self.jobs_path)
 
     # ---- 会话执行 -----------------------------------------------------------------
     def _build_executors(self, session: str) -> List[Any]:

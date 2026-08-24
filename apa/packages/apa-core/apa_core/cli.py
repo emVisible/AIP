@@ -96,6 +96,7 @@ def _cmd_serve(args) -> int:
         ai_status=_ai_status(),
         dispatch_event=serve_app.dispatch_external_event,
         resolve_task=None,
+        serve_app=serve_app,
     )
 
     print(f"==> APA 常驻服务: http://127.0.0.1:{args.port}   （Ctrl-C 退出）")

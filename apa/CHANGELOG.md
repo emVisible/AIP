@@ -2,6 +2,21 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.14.0-poc] — 2026-08-24
+
+Electron 现代化迁移 + 动作扩充。**418 pytest · 15 域 156 动作。**
+
+### electron-vite 迁移（大爆炸式）
+- CJS → TypeScript ESM 全链路（main/preload/renderer 三进程统一）
+- `electron.vite.config.ts` 替代独立 vite.config.ts
+- IPC 类型安全：IpcChannels 枚举 + ApaDesktopBridge 接口共享
+- `pnpm dev` 一条命令启动三进程全栈（vite HMR + Python serve + Electron）
+- 设计器 Tab 双视图：步骤列表(主编辑面) / 流程图概览——修复滚动断裂
+
+### 新动作 ×8（138→156）
+- db.sqlite.query / execute（stdlib sqlite3，零依赖）
+- notify.dingtalk / wecom_webhook / feishu_webhook（群机器人 webhook）
+
 ## [0.13.0-poc] — 2026-08-24
 
 Capability Pack 架构落地。**413 pytest · 15 域 152 动作 · AIP 协议零改动。**

@@ -87,6 +87,24 @@ def _cmd_serve(args) -> int:
         n = serve_app.load_jobs(args.jobs)
         print(f"==> 已加载调度任务 {n} 个")
 
+    # 意图编译器装配（Phase B）：模板策略一 + 自由策略二自动路由
+    from .intent.compiler import IntentCompiler
+    from .intent.free import AutoIntentCompiler, FreeIntentCompiler
+    from .intent.templates import TEMPLATE_REGISTRY
+
+    intent_compiler = None
+    if _ai_status()["mode"] == "cascade_llm":
+        try:
+            from .llm import LLMClient
+
+            llm_client = LLMClient(timeout_s=30.0)
+            intent_compiler = AutoIntentCompiler(
+                IntentCompiler(TEMPLATE_REGISTRY, llm_client),
+                FreeIntentCompiler(reg, llm_client),
+            )
+        except Exception as e:  # noqa: BLE001
+            print(f"[serve] intent compiler disabled: {e}")
+
     fast_app = create_app(
         journals=args.journals,
         processes_dir=args.processes_dir or None,
@@ -97,6 +115,7 @@ def _cmd_serve(args) -> int:
         dispatch_event=serve_app.dispatch_external_event,
         resolve_task=None,
         serve_app=serve_app,
+        intent_compiler=intent_compiler,
     )
 
     print(f"==> APA 常驻服务: http://127.0.0.1:{args.port}   （Ctrl-C 退出）")

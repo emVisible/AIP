@@ -5,6 +5,7 @@
 ocr.extract:
   executor_domain: ocr
   description: "OCR 文字识别：mock 离线测试 / http_ocr 通用云 API"
+  when_to_use: "识别图片中的文字（截图信息提取）"
   params:
     type: object
     required: [backend]
@@ -71,3 +72,19 @@ ocr.wait_text:
   risk: L0
   timeout_ms: 130000
   retries: 0
+
+
+if.text_on_screen:
+  executor_domain: ocr
+  description: "谓词：屏幕上存在目标文字(OCR) → matched + bounds"
+  params:
+    type: object
+    required: [text]
+    properties:
+      text: { type: string }
+      contains: { type: boolean, default: true }
+      region: { type: object }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 1

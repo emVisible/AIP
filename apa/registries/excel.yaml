@@ -112,6 +112,7 @@ excel.add_sheet:
 excel.append_rows:
   executor_domain: excel
   description: "批量追加多行（单次落盘；rows=[[...],[...]]）"
+  when_to_use: "把表格数据批量写入 Excel（日报/台账落盘）"
   params:
     type: object
     required: [file, rows]

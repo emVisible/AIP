@@ -2,6 +2,7 @@
 llm.text:
   executor_domain: llm
   description: "LLM 文本任务：classify(分类)/extract(抽取)/summarize(摘要)"
+  when_to_use: "对文本做分类/抽取/摘要（客服质检、工单归类）"
   params:
     type: object
     required: [task, input]

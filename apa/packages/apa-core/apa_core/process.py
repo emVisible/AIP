@@ -51,6 +51,19 @@ TEMPLATE_RE = re.compile(r"\{\{\s*([^}]+?)\s*\}\}")
 FORBIDDEN_KEYS = {"idempotency", "risk"}  # C3
 
 
+class _LoopBreak(Exception):
+    """loop.break 内部信号：最近的循环立即退出（引擎私有，不经协议）。"""
+
+
+class _LoopContinue(Exception):
+    """loop.continue 内部信号：跳过本轮剩余 body。"""
+
+
+
+
+def sub_engine_run_scopes_set(sub_engine, key: str, value) -> None:
+    sub_engine.run.scopes[key] = value
+
 class ProcessDefinitionError(ValueError):
     pass
 
@@ -144,6 +157,7 @@ def build_process(data: dict) -> ProcessDef:
             output_as=raw.get("output_as"),
             on_failure=raw.get("on_failure"),
             expect_event=raw.get("expect"),
+            body_steps=[to_step(b) for b in (raw.get("body_steps") or [])],
         )
 
     steps = [to_step(s) for s in steps_raw]
@@ -186,6 +200,9 @@ _ALLOWED_NODES = (
     _ast.Compare, _ast.Lt, _ast.LtE, _ast.Gt, _ast.GtE, _ast.Eq, _ast.NotEq,
     _ast.Is, _ast.IsNot, _ast.In, _ast.NotIn,
     _ast.Name, _ast.Load, _ast.Constant, _ast.Attribute,
+    # Phase A：算术（循环条件 n % 2、计数比较等）
+    _ast.BinOp, _ast.Add, _ast.Sub, _ast.Mult, _ast.Div, _ast.FloorDiv,
+    _ast.Mod, _ast.Pow,
 )
 
 
@@ -283,12 +300,15 @@ class ProcessEngine:
         decision_fn: Optional[Callable[[list, list], dict]] = None,
         complete_fn: Optional[Callable[[str], None]] = None,
         process_loader: Optional[Callable[[str], "ProcessDef"]] = None,
+        loop_depth: int = 0,
     ) -> None:
         self.proc = proc
         self.send_fn = send_fn
         self.decision_fn = decision_fn
         self.complete_fn = complete_fn
         self.process_loader = process_loader
+        # 循环嵌套深度：loop.break/continue 合法性判定（Phase A）
+        self.loop_depth = int(loop_depth)
         self.run = ProcessRun(proc)
 
     # --- 入口 ---------------------------------------------------------------
@@ -321,6 +341,16 @@ class ProcessEngine:
 
     def _exec_step(self, step: StepDef) -> bool:
         run = self.run
+
+        # ---- 循环控制流（Phase A）----
+        if step.type in ("loop.break", "loop.continue"):
+            if getattr(self, "loop_depth", 0) <= 0:
+                raise ProcessDefinitionError(
+                    f"{step.id}: {step.type} outside any loop "
+                    "(控制流必须位于 foreach/while 循环体内)")
+            if step.type == "loop.break":
+                raise _LoopBreak()
+            raise _LoopContinue()
 
         # ---- foreach 循环（对标 RF FOR / 影刀循环指令）----
         if step.type == "foreach":
@@ -429,8 +459,10 @@ class ProcessEngine:
                 "(死循环守卫，§10.2 精神)")
 
         body_action = step.params.get("body_action") or ""
+        body_steps_spec = (step.body_steps or [])
         body_params_tpl = step.params.get("body_params") or {}
         key_out = step.output_as or step.id
+        use_sub = bool(body_steps_spec)   # 子步骤模式：支持 break/continue
 
         def cond_holds() -> bool:
             """None（求值异常，如首轮无数据）→ 乐观进入。"""
@@ -439,6 +471,7 @@ class ProcessEngine:
 
         iterations = 0
         capped = True
+        broke = False
         last_data: Any = None
         last_ok = True
 
@@ -449,7 +482,7 @@ class ProcessEngine:
                 break
 
             # 全局预算守卫（§10.2）：条件判断不计动作，body 计
-            if body_action:
+            if body_action and not use_sub:
                 if run.actions_sent + 1 > self.proc.max_actions:
                     run.done = True
                     run.outcome = "max_actions_exceeded"
@@ -472,22 +505,99 @@ class ProcessEngine:
                         "status": "failed",
                         "result": data})
                     return self._goto_handler(step, reason="while_body_failed")
+            elif use_sub:
+                if run.actions_sent >= self.proc.max_actions:
+                    run.done = True
+                    run.outcome = "max_actions_exceeded"
+                    return False
+                body_form = self._build_loop_body(
+                    step, f"it_{iterations}", body_steps_spec, run.scopes)
+                sub_engine = ProcessEngine(
+                    body_form,
+                    self.send_fn,
+                    decision_fn=self.decision_fn,
+                                loop_depth=self.loop_depth + 1,)
+                for k, v in run.scopes.items():
+                    if k not in ("steps", "error"):
+                        sub_engine_run_scopes_set(sub_engine, k, v)
+                sub_engine.run.scopes["event"] = \
+                    dict(run.scopes.get("event") or {})
+                for k, v in (run.scopes.get("steps") or {}).items():
+                    sub_engine.run.scopes.setdefault("steps", {})[k] = v
+                try:
+                    sub_engine._run_from(0)
+                except _LoopBreak:
+                    iterations += 1
+                    broke = True
+                    break
+                except _LoopContinue:
+                    iterations += 1
+                    continue
+                run.actions_sent += sub_engine.run.actions_sent
+                ok = sub_engine.run.outcome == "success"
+                iterations += 1
+                last_ok = ok and last_ok
+                run.scopes.setdefault("steps", {})[key_out] = {
+                    "iterations": iterations, "capped": False}
+                if not ok:
+                    run.steps.append({
+                        "step": step.id, "type": "while",
+                        "iterations": iterations, "status": "failed"})
+                    return self._goto_handler(
+                        step, reason="while_body_failed")
             else:
                 iterations += 1  # 无 body：纯条件等待（配合 delay 使用）
 
-        if iterations >= max_iter and cond_holds():
-            capped = True
-        else:
-            capped = False
+        capped = bool(broke is False and iterations >= max_iter
+                      and cond_holds())
 
-        run.scopes.setdefault("steps", {})[key_out] = {
+        out_meta: Dict[str, Any] = {
             "iterations": iterations,
-            "last": last_data,
             "capped": capped,
         }
+        if last_data is not None:
+            out_meta["last"] = last_data
+        if broke:
+            out_meta["breaked"] = True
+        run.scopes.setdefault("steps", {})[key_out] = out_meta
         run.steps.append({"step": step.id, "type": "while",
-                          "iterations": iterations, "capped": capped})
+                          **out_meta})
         return last_ok
+
+
+    def _build_loop_body(self, step: StepDef, tag: str,
+                         steps_spec: List[StepDef],
+                         scopes_snapshot_src: Dict[str, Any],
+                         ) -> "ProcessDef":
+        """构建循环体子 ProcessDef（StepDef 已解析，逐字段渲染模板）。
+
+        预算：max_actions 取父流程剩余额度，执行后由调用方并账。
+        错误处理器继承父流程（escalate 等在循环体内同样可达）。
+        """
+        import dataclasses
+
+        rendered: List[StepDef] = []
+        for sd_raw in steps_spec:
+            sd = sd_raw if isinstance(sd_raw, StepDef) else StepDef(
+                id=str(sd_raw.get("id") or "inner"),
+                action=sd_raw.get("action"),
+                params=sd_raw.get("params") or {},
+                condition=sd_raw.get("condition"),
+                output_as=sd_raw.get("output_as"),
+            )
+            rendered.append(dataclasses.replace(
+                sd,
+                params=render(sd.params or {}, scopes_snapshot_src),
+                target=(render(sd.target, scopes_snapshot_src)
+                        if sd.target else None),
+            ))
+        remaining = max(1, self.proc.max_actions - self.run.actions_sent)
+        return dataclasses.replace(
+            self.proc,
+            process_id=f"{step.id}_{tag}",
+            steps=rendered,
+            max_actions=remaining,
+        )
 
     def _exec_foreach(self, step: StepDef) -> bool:
         """foreach 循环：遍历 source 数组，对每项执行 body_action。
@@ -510,38 +620,88 @@ class ProcessEngine:
                 items_raw = _j.loads(items_raw)
             except (ValueError, TypeError):
                 items_raw = []
-        if not isinstance(items_raw, list):
-            items_raw = [items_raw]
+
+        # Phase A: 字典 → {key, value} 二元组序列（ForEach 字典循环对标）
+        if isinstance(items_raw, dict):
+            items: List[Any] = [{"key": k, "value": v}
+                                 for k, v in items_raw.items()]
+        elif isinstance(items_raw, list):
+            items = items_raw
+        else:
+            items = [items_raw]
 
         item_var = step.params.get("item_var", "item")
         body_action = step.params.get("body_action", "")
         body_params_tpl = step.params.get("body_params") or {}
+        body_steps_spec = (step.body_steps or [])
+        has_body = bool(body_steps_spec) or bool(body_action)
 
         all_ok = True
         results: List[Dict[str, Any]] = []
+        broke = False
 
-        for idx, item in enumerate(items_raw):
+        for idx, item in enumerate(items):
+            # 预算穿透（Phase A）：子引擎动作并入全局守卫
+            if run.actions_sent >= self.proc.max_actions and has_body:
+                run.done = True
+                run.outcome = "max_actions_exceeded"
+                return False
+
             run.scopes[item_var] = item
 
-            body_form = build_process({"process": {
-                "id": f"{step.id}_body_{idx}",
-                "mode": "process",
-                "trigger": {},
-                "steps": step.body_steps or (
-                    [{"id": "inner", "action": body_action,
-                      "params": render(body_params_tpl, run.scopes)}]
-                    if body_action else []),
-            }})
+            steps_for_body = body_steps_spec or (
+                [{"id": "inner", "action": body_action,
+                  "params": render(body_params_tpl, run.scopes)}]
+                if body_action else [])
+
+            if not steps_for_body:
+                results.append({"index": idx, "ok": True})
+                continue
+            body_form = self._build_loop_body(
+                step, f"body_{idx}", steps_for_body, run.scopes)
 
             sub_engine = ProcessEngine(
                 body_form,
                 self.send_fn,
                 decision_fn=self.decision_fn,
-            )
+                        loop_depth=self.loop_depth + 1,)
+            # Phase A：顶层作用域整体继承（item_var 等循环变量
+            # 必须对子引擎可见），steps/error 由下方专门播种
+            for k, v in run.scopes.items():
+                if k not in ("steps", "error"):
+                    sub_engine_run_scopes_set(sub_engine, k, v)
             sub_engine.run.scopes["event"] = run.scopes.get("event", {})
             for k, v in run.scopes.get("steps", {}).items():
                 sub_engine.run.scopes.setdefault("steps", {})[k] = v
-            sub_engine._run_from(0)
+
+            def _absorb_budget() -> bool:
+                """子引擎消耗并入全局预算；超限置终态并返回 False。"""
+                run.actions_sent += getattr(sub_engine.run,
+                                             "actions_sent", 0)
+                if run.actions_sent > self.proc.max_actions:
+                    run.done = True
+                    run.outcome = "max_actions_exceeded"
+                    return False
+                return True
+
+            try:
+                sub_engine._run_from(0)
+            except _LoopBreak:
+                if not _absorb_budget():
+                    return False
+                # break：跳出整个循环（本轮视为完成）
+                results.append({"index": idx, "ok": True, "breaked": True})
+                broke = True
+                break
+            except _LoopContinue:
+                if not _absorb_budget():
+                    return False
+                results.append({"index": idx, "ok": True,
+                                 "continued": True})
+                continue
+
+            if not _absorb_budget():
+                return False
 
             ok = sub_engine.run.outcome == "success"
             results.append({"index": idx, "ok": ok})
@@ -549,7 +709,8 @@ class ProcessEngine:
                 all_ok = False
 
         key = step.output_as or step.id
-        run.scopes.setdefault("steps", {})[key] = {"count": len(results)}
+        run.scopes.setdefault("steps", {})[key] = {
+            "count": len(results), **({"breaked": True} if broke else {})}
         run.steps.append({
             "step": step.id, "type": "foreach",
             "iterations": len(results), "all_ok": all_ok,

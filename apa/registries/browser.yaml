@@ -4,6 +4,7 @@
 browser.navigate:
   executor_domain: browser
   description: "导航到 URL"
+  when_to_use: "打开指定页面；流程起点或跳转"
   params:
     type: object
     required: [url]
@@ -20,6 +21,7 @@ browser.navigate:
 browser.click:
   executor_domain: browser
   description: "点击目标元素"
+  when_to_use: "点击页面元素——按钮/链接/标签页切换"
   params:
     type: object
     required: [target]
@@ -35,6 +37,7 @@ browser.click:
 browser.input:
   executor_domain: browser
   description: "向输入框填充值（clear+fill 幂等）"
+  when_to_use: "向输入框填写文本（搜索框/表单）"
   params:
     type: object
     required: [target, value]
@@ -172,6 +175,7 @@ browser.take_screenshot:
 browser.extract_table:
   executor_domain: browser
   description: "结构化表格抓取：按行选择器+列选择器提取多行数据（只读）"
+  when_to_use: "抓取整张结构化表格为数据，配合 data.filter/foreach 使用"
   params:
     type: object
     required: [row_selector, columns]
@@ -423,3 +427,30 @@ browser.storage_state_load:
   risk: L2
   timeout_ms: 15000
   retries: 1
+
+
+if.element_visible:
+  executor_domain: browser
+  description: "谓词：目标元素当前可见 → matched（供 condition 组合）"
+  params:
+    type: object
+    required: [target]
+    properties:
+      target: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 8000
+  retries: 2
+
+if.url_contains:
+  executor_domain: browser
+  description: "谓词：当前 URL 含指定片段 → matched"
+  params:
+    type: object
+    required: [fragment]
+    properties: { fragment: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+

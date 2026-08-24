@@ -192,3 +192,14 @@ desktop.click_text:
   risk: L2
   timeout_ms: 60000
   retries: 0
+
+desktop.humanize:
+  executor_domain: desktop
+  description: "模拟真人开关：鼠标贝塞尔轨迹+高斯点击延迟"
+  params:
+    type: object
+    properties: { enabled: { type: boolean, default: true } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2

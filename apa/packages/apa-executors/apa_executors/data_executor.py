@@ -84,6 +84,10 @@ class DataExecutor(AIPExecutor):
             "file.mkdir": self._file_mkdir,
             "file.exists": self._file_exists,
             "file.stat": self._file_stat,
+            # ---- Phase A 谓词 / 等待 ----
+            "if.file_exists": self._if_file_exists,
+            "if.dir_exists": self._if_dir_exists,
+            "wait.file": self._wait_file,
         }
         fn = handler_map.get(name)
         if fn is None:
@@ -594,3 +598,34 @@ class DataExecutor(AIPExecutor):
         result = {"columns": cols, "rows": rows, "count": len(rows)}
         self._set_table(out_key, result)
         return True, {**result}
+
+    def _if_file_exists(self, p):
+        from pathlib import Path as _P
+
+        return True, {"matched": _P(str(p.get("path", ""))).is_file()}
+
+    def _if_dir_exists(self, p):
+        from pathlib import Path as _P
+
+        return True, {"matched": _P(str(p.get("path", ""))).is_dir()}
+
+    def _wait_file(self, p):
+        """轮询等待 glob 首个命中文件。返回 {path}。"""
+        import time as _t
+
+        from pathlib import Path as _P
+
+        pattern = str(p.get("glob", "")).strip()
+        if not pattern:
+            return False, {"code": "missing_param", "detail": "glob"}
+        timeout_s = min(float(p.get("timeout_s", 30.0)), 600.0)
+        interval = max(float(p.get("interval_s", 0.5)), 0.05)
+        g = _P(pattern)
+        deadline = _t.monotonic() + timeout_s
+        while _t.monotonic() < deadline:
+            hits = sorted(g.parent.glob(g.name)) if g.parent.exists() else []
+            if hits:
+                return True, {"path": str(hits[0])}
+            _t.sleep(interval)
+        return False, {"code": "wait_timeout", "glob": pattern,
+                       "timeout_s": timeout_s}

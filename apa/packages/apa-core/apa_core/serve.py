@@ -397,7 +397,8 @@ class ServeApp:
                 from apa_executors.ax_executor import AXExecutor
 
                 ax_mod = AXExecutor(f"bot_{suffix}", session)
-                mods.append((("desktop.ui", "desktop.click_text"), ax_mod))
+                mods.append((("desktop.ui", "desktop.click_text",
+                              "desktop.humanize"), ax_mod))
             except Exception:  # noqa: BLE001
                 pass
             try:

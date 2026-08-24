@@ -503,6 +503,18 @@ class BrowserExecutor(AIPExecutor):
                 self.page.reset_frame()
                 return True, {"frame": "main"}
 
+            case "if.element_visible":
+                try:
+                    visible = self.page.resolve(
+                        params["target"]).is_visible()
+                except Exception:
+                    visible = False
+                return True, {"matched": bool(visible)}
+
+            case "if.url_contains":
+                frag = str(params.get("fragment", ""))
+                return True, {"matched": frag in (self.page.url or "")}
+
             case "browser.storage_state_save":
                 path = params["path"]
                 self.page.storage_state_save(path)

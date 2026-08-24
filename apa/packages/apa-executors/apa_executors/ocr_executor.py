@@ -69,6 +69,20 @@ class OCRExecutor(AIPExecutor):
 
         if name == "ocr.screen_text":
             return self._screen_text(params)
+        if name == "if.text_on_screen":
+            from . import screen_ocr as so
+
+            try:
+                hit = so.locate_text(
+                    str(params.get("text", "")),
+                    region=params.get("region"),
+                    contains=params.get("contains", True))
+            except RuntimeError as e:
+                return False, {"code": "capture_denied", "detail": str(e)}
+            return True, {"matched": hit is not None,
+                          **({"bounds": hit["bounds"]}
+                             if hit else {})}
+
         if name == "ocr.wait_text":
             return self._wait_text(params)
 

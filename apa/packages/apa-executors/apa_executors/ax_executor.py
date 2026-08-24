@@ -40,6 +40,14 @@ class AXExecutor(AIPExecutor):
         pass
 
     def _execute_action(self, name: str, params: dict) -> Tuple[bool, dict]:
+        # Phase A：模拟真人开关（作用于本执行器的 InputEngine）
+        if name == "desktop.humanize":
+            if self._input is None:
+                return False, {"code": "dependency_missing",
+                               "detail": "InputEngine unavailable"}
+            self._input.humanize = bool(params.get("enabled", True))
+            return True, {"humanize": self._input.humanize}
+
         if ax is None:
             return False, {"code": "dependency_missing",
                            "detail": "requires darwin + pyobjc "

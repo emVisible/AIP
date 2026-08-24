@@ -124,6 +124,7 @@ string.split:
 email.send:
   executor_domain: email
   description: "SMTP 发送邮件（TLS，支持附件/CC）；C4：password 走凭据注入"
+  when_to_use: "发送通知/报表邮件，支持附件与抄送"
   params:
     type: object
     required: [to, subject]
@@ -665,6 +666,7 @@ file.stat:
 email.receive:
   executor_domain: email
   description: "IMAP 拉取邮件（默认 BODY.PEEK 不标已读，只读可重试）"
+  when_to_use: "拉取邮箱邮件（客服质检/订单通知场景入口）"
   params:
     type: object
     required: [host, username]
@@ -700,3 +702,42 @@ data.merge:
   timeout_ms: 30000
   retries: 2
 
+
+if.file_exists:
+  executor_domain: data
+  description: "谓词：文件是否存在 → matched"
+  params:
+    type: object
+    required: [path]
+    properties: { path: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+if.dir_exists:
+  executor_domain: data
+  description: "谓词：目录是否存在 → matched"
+  params:
+    type: object
+    required: [path]
+    properties: { path: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+wait.file:
+  executor_domain: data
+  description: "轮询等待 glob 首个命中文件（返回 path）"
+  params:
+    type: object
+    required: [glob]
+    properties:
+      glob: { type: string }
+      timeout_s: { type: number, minimum: 0.5, maximum: 600, default: 30 }
+      interval_s: { type: number, minimum: 0.05, maximum: 5, default: 0.5 }
+  idempotency: optional
+  risk: L0
+  timeout_ms: 620000
+  retries: 0

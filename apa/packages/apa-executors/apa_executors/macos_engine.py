@@ -76,12 +76,38 @@ class InputEngine:
     def _post(self, ev) -> None: _post(ev)
 
     # ---- 鼠标 ----
+    def _human_move(self, x: int, y: int) -> None:
+        """贝塞尔近似轨迹：分 14 段插值 + 微抖动。"""
+        import random as _r
+
+        cur = self.mouse_position()
+        x0, y0 = float(cur[0]), float(cur[1])
+        steps = 14
+        # 控制点偏移制造弧线
+        cx = (x0 + x) / 2 + _r.uniform(-60, 60)
+        cy = (y0 + y) / 2 + _r.uniform(-60, 60)
+        for i in range(1, steps + 1):
+            t = i / steps
+            bx = (1 - t) ** 2 * x0 + 2 * (1 - t) * t * cx + t * t * x
+            by = (1 - t) ** 2 * y0 + 2 * (1 - t) * t * cy + t * t * y
+            jx = _r.uniform(-1.2, 1.2)
+            jy = _r.uniform(-1.2, 1.2)
+            _post(_mouse_ev(5, bx + jx, by + jy))
+            _sleep(int(self.delay_ms / max(steps // 3, 1)))
+
     def move_mouse(self, x: int, y: int) -> None:
+        if getattr(self, "humanize", False):
+            self._human_move(x, y)
+            return
         _post(_mouse_ev(Quartz.kCGEventMouseMoved, x, y, 0))
 
     def click(self, x: int, y: int, *,
               button: MouseBtn = MouseBtn.LEFT, clicks: int = 1) -> None:
-        self.move_mouse(x, y); _sleep(30)
+        self.move_mouse(x, y)
+        if getattr(self, "humanize", False):
+            import random as _r
+            _sleep(int(_r.gauss(180, 60)) // max(self.delay_ms, 1))
+        _sleep(30)
         types = {
             MouseBtn.LEFT: (Quartz.kCGEventLeftMouseDown, Quartz.kCGEventLeftMouseUp),
             MouseBtn.RIGHT: (Quartz.kCGEventRightMouseDown, Quartz.kCGEventRightMouseUp),

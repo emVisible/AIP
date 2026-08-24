@@ -213,6 +213,30 @@ class DesktopExecutor(AIPExecutor):
     def _execute_action(self, name: str, params: dict) -> Tuple[bool, dict]:
         b = self.backend
         match name:
+            case "if.window_exists":
+                title_kw = str(params.get("title_contains", ""))
+                hits = [w for w in b.list_windows()
+                        if title_kw.lower() in (w.title or "").lower()]
+                return True, {"matched": bool(hits),
+                              "windows": [{"app": w.app_name,
+                                           "title": w.title}
+                                          for w in hits[:5]]}
+
+            case "wait.window":
+                import time as _t
+
+                title_kw = str(params.get("title_contains", ""))
+                timeout_s = min(float(params.get("timeout_s", 30.0)), 300.0)
+                deadline = _t.monotonic() + timeout_s
+                while _t.monotonic() < deadline:
+                    for w in b.list_windows():
+                        if title_kw.lower() in (w.title or "").lower():
+                            return True, {"window": {"app": w.app_name,
+                                                      "title": w.title}}
+                    _t.sleep(0.4)
+                return False, {"code": "wait_timeout",
+                               "title_contains": title_kw}
+
             case "desktop.window.activate":
                 ok = b.activate(app_name=params.get("app_name", ""),
                                 title=params.get("title", ""))

@@ -2,6 +2,30 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.10.0-poc] — 2026-08-24
+
+审计修复 + 地基补缺 + 循环体可视化。**341 pytest · 14 域 131 动作 ·
+电商运营场景矩阵 6/6 可落地。**
+
+### P20-B UI 审计修复（8 项）
+- **拖拽双插入根因修复**：步骤卡 onDrop 缺 stopPropagation 导致事件
+  冒泡到画布再插入一次（用户报告的拖拽 bug 根因）
+- Firefox DnD text/plain 兜底 · VarPicker fixed 定位逃逸弹窗裁剪 ·
+  fitView 仅首挂（视图跳动根治）· 画布高度随节点包围盒自适应 ·
+  目录搜索词跨 Tab 保留 · 排序拖拽虚线高亮反馈 · 左栏可折叠
+
+### P20-A 地基补缺
+- browser.iframe_switch/frame_reset：FrameLocator 穿透定位模型
+- browser.storage_state_save/load：登录态跨次运行一行持久化
+- llm.text 新域：classify(越权标签拒绝)/extract/summarize，
+  DeepSeek-chat，离线 dependency_missing 优雅降级
+- data.merge：concat 列并集 / inner|left join（JSON 规范键匹配）
+
+### P20-C 循环体可视化编辑
+- StepEditDialog 内嵌 LoopBodyEditor：foreach body_steps 增删改/
+  上下移/参数 JSON——批量操作类场景全程 UI 搭建
+- examples/ecommerce/: batch-reprice(S4) / cs-quality-check(S5) 模板
+
 ## [0.9.0-poc] — 2026-08-24
 
 触发器与通道补全。**334 pytest · 14 域 125 动作。**

@@ -187,6 +187,23 @@ class MyExecutor(AIPExecutor):
         ...  # self.emit(name, data) 发语义事件（data ≤ 4KB，CoD-1）
 ```
 
+
+## 电商运营场景覆盖
+
+`examples/ecommerce/` 内置样例；能力矩阵基于当前动作集实测：
+
+| 场景 | 可行性 | 关键组件 | 预估搭建 |
+|---|---|---|---|
+| 竞品价格监控预警 | ✅ | cron+extract_table+filter+email | ~25min |
+| 多平台数据日报 | ✅ | extract+excel.append_rows+chart+邮件附件 | ~40min |
+| 库存预警+补货审批 | ✅ | file.watch+read_range+HITL+foreach | ~45min |
+| 批量改价/上架 | ✅ | storage_state+foreach(body_steps)+iframe+截图 | ~30min(UI) |
+| 客服会话质检 | ✅ | email.receive+llm.text(classify)+汇总 | ~30min |
+| 订单拉单发货回传 | ✅ | api.get/post+foreach+HITL 异常单 | ~35min |
+
+学习成本锚点：会「录制→微调」即入门（约 15 分钟）；
+掌握模板变量 `{{...}}` 与 foreach 即进阶。
+
 ## REST API 一览（serve 模式）
 
 ```

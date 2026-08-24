@@ -1,0 +1,27 @@
+# 电商场景 S5：客服会话质检（IMAP 收件 → LLM 分类 → 汇总）
+process:
+  id: cs_quality_check
+  mode: process
+  trigger: { type: manual }
+  max_actions: 100
+  steps:
+    - id: fetch_mail
+      action: email.receive
+      params:
+        host: imap.example.com
+        username: qa@example.com
+        folder: "INBOX/chats"
+        criteria: UNSEEN
+        limit: 20
+
+    - id: classify_loop
+      type: foreach
+      params:
+        source: "{{steps.fetch_mail.messages}}"
+        item_var: mail
+        body_action: llm.text
+        body_params:
+          task: classify
+          input: "{{mail.text}}"
+          labels: ["咨询", "投诉", "好评"]
+          output_context: "cls_{{index}}"

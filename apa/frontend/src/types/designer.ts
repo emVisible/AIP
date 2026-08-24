@@ -9,6 +9,8 @@ export interface DStep {
   condition: string;
   output_as: string;
   on_failure_goto: string;
+  /** foreach 循环体子步骤（引擎 _exec_foreach 原生支持；UI C 工作流） */
+  body_steps?: DStep[];
 }
 
 export interface ProcessMeta {

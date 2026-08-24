@@ -11,6 +11,7 @@ import { Trash2 } from "lucide-react";
 import type { ActionMeta } from "../../api/types";
 import type { VariableInfo } from "../../hooks/useVariableRegistry";
 import { Badge, Button, Dialog, Field, Input, riskTone } from "../ui";
+import { LoopBodyEditor } from "./LoopBodyEditor";
 import { SchemaForm } from "./SchemaForm";
 import type { DStep } from "../../types/designer";
 
@@ -91,6 +92,21 @@ export function StepEditDialog({
             onChange={setParam}
           />
         </section>
+
+        {draft.type === "foreach" && (
+          <section className="space-y-2 border-t border-slate-100 pt-3">
+            <p className="text-[11px] font-medium text-slate-600">
+              循环体步骤（每轮迭代按序执行）
+              <span className="ml-1 text-slate-300">
+                可用变量: row(当前项) / index
+              </span>
+            </p>
+            <LoopBodyEditor
+              steps={draft.body_steps ?? []}
+              onChange={(next) => patch({ body_steps: next })}
+            />
+          </section>
+        )}
 
         <details className="group">
           <summary className="text-[11px] text-slate-400 cursor-pointer

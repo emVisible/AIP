@@ -1,0 +1,31 @@
+# 电商场景 S4：批量改价（登录态复用 + 循环体多步 + 截图留证）
+# 前置：storage_state.json 由首次手动登录后 storage_state_save 导出
+process:
+  id: batch_reprice
+  mode: process
+  trigger: { type: manual }
+  max_actions: 200
+  steps:
+    - id: load_login
+      action: browser.storage_state_load
+      params: { path: "secrets/storage_state.json" }
+
+    - id: open_backend
+      action: browser.navigate
+      params: { url: "https://seller.example.com/items" }
+
+    - id: read_price_table
+      action: excel.read_range
+      params: { file: "data/reprice.xlsx", sheet: "Sheet1" }
+
+    - id: loop_items
+      type: foreach
+      params:
+        source: "{{steps.read_price_table.rows}}"
+        item_var: row
+        body_action: context.update      # 多步时改用 body_steps（UI 循环体编辑）
+        body_params: {}
+
+    - id: proof_shot
+      action: browser.take_screenshot
+      params: { output_context: reprice_proof }

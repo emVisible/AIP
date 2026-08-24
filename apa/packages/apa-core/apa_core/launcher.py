@@ -169,7 +169,7 @@ def default_registries() -> List[Path]:
 
 _REGISTRY_FILES = ("core.yaml", "browser.yaml", "desktop.yaml",
                    "document.yaml", "api.yaml", "excel.yaml",
-                   "ocr.yaml", "dataops.yaml")
+                   "ocr.yaml", "dataops.yaml", "llm.yaml")
 
 
 def run_process(

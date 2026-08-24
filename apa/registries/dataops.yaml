@@ -681,3 +681,22 @@ email.receive:
   risk: L1
   timeout_ms: 60000
   retries: 2
+
+
+data.merge:
+  executor_domain: data
+  description: "两表合并：concat 纵向拼接 / inner|left 按 key 连接"
+  params:
+    type: object
+    required: [a, b]
+    properties:
+      a: { type: string }
+      b: { type: string }
+      how: { enum: [concat, inner, left], default: concat }
+      on: { type: string, description: "连接键（join 模式必填）" }
+      output_key: { type: string, default: merged }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 2
+

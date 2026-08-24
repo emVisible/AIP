@@ -1,0 +1,25 @@
+# LLM 文本任务域
+llm.text:
+  executor_domain: llm
+  description: "LLM 文本任务：classify(分类)/extract(抽取)/summarize(摘要)"
+  params:
+    type: object
+    required: [task, input]
+    properties:
+      task: { enum: [classify, extract, summarize] }
+      input: { type: string, maxLength: 8000 }
+      labels:
+        type: array
+        items: { type: string }
+        description: "classify 必填：候选标签"
+      fields:
+        type: array
+        items: { type: string }
+        description: "extract 字段清单"
+      instruction: { type: string, description: "附加要求" }
+      max_chars: { type: integer, minimum: 50, maximum: 4000, default: 500 }
+      output_context: { type: string }
+  idempotency: required
+  risk: L1
+  timeout_ms: 45000
+  retries: 2

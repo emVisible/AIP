@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import os
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from apa_sdk import AIPExecutor, ExecutorPreconditionError, SemanticAdapter
@@ -54,6 +55,20 @@ class PageOps:
                       max_rows: int = 100) -> List[Dict[str, str]]:
         raise NotImplementedError
 
+    # A1/A2：frame 与登录态（默认不支持的后端抛 NotImplementedError）
+    def set_frame(self, index: Optional[int] = None,
+                  selector: Optional[str] = None) -> None:
+        raise NotImplementedError
+
+    def reset_frame(self) -> None:
+        raise NotImplementedError
+
+    def storage_state_save(self, path: str) -> None:
+        raise NotImplementedError
+
+    def storage_state_load(self, path: str) -> None:
+        raise NotImplementedError
+
     def select_option(self, target: str, value: str) -> None:
         raise NotImplementedError
 
@@ -77,6 +92,9 @@ class PageOps:
 class PlaywrightPageOps(PageOps):
     def __init__(self, page) -> None:
         self.page = page
+        # A1: 当前 frame 上下文（None = 主文档）。
+        # 定位统一经 _locator() 穿透；set_frame 可嵌套，reset 回主文档。
+        self._fl = None
 
     @property
     def url(self) -> str:
@@ -93,15 +111,20 @@ class PlaywrightPageOps(PageOps):
     def goto(self, url: str, wait_until: str = "networkidle") -> None:
         self.page.goto(url, wait_until=wait_until)
 
+    def _root(self):
+        """定位根：frame 上下文存在时返回 FrameLocator，否则 Page。"""
+        return self._fl if self._fl is not None else self.page
+
     def _locator(self, target: str):
+        root = self._root()
         if target.startswith(("#", ".", "[", "//")):
-            return self.page.locator(target)  # 已是 CSS/XPath 选择器，直接用
-        loc = self.page.locator(f"[data-apa-id='{target}']")
+            return root.locator(target)  # 已是 CSS/XPath 选择器，直接用
+        loc = root.locator(f"[data-apa-id='{target}']")
         try:
             if loc.count() == 0:
-                loc = self.page.get_by_label(target)
+                loc = root.get_by_label(target)
             if loc.count() == 0:
-                loc = self.page.get_by_role("button", name=target)
+                loc = root.get_by_role("button", name=target)
         except Exception:
             pass
         return loc
@@ -202,6 +225,54 @@ class PlaywrightPageOps(PageOps):
 
     def wait_for_load_state(self, state: str = "networkidle") -> None:
         self.page.wait_for_load_state(state)
+    # ---- A1/A2: frame 与登录态 ----------------------------------------------
+
+    def set_frame(self, selector: Optional[str] = None,
+                  index: Optional[int] = None) -> None:
+        """进入子 frame（selector 优先）。可嵌套调用；reset_frame 返回。"""
+        if selector:
+            parent = self._fl if self._fl is not None else self.page
+            self._fl = parent.frame_locator(selector)
+            return
+        idx = int(index or 0)
+        frames = self.page.frames
+        if idx >= len(frames):
+            raise IndexError(f"frame index {idx} out of range "
+                             f"(have {len(frames)})")
+        fr = frames[idx]
+        # 用 frame url/name 构造稳定选择器链
+        sel = (f'iframe[name="{fr.name}"]' if fr.name
+               else "iframe")
+        parent_fl = self.page.frame_locator(sel)
+        # 非首帧时按 index 取第 n 个匹配
+        if idx > 0 and not fr.name:
+            parent_fl = parent_fl.nth(idx)
+        self._fl = parent_fl
+
+    def reset_frame(self) -> None:
+        self._fl = None
+
+    def storage_state_save(self, path: str) -> None:
+        import json as _j
+
+        state = self.page.context.storage_state()
+        Path(path).write_text(_j.dumps(state, ensure_ascii=False),
+                              encoding="utf-8")
+
+    def storage_state_load(self, path: str) -> None:
+        from pathlib import Path as _P
+
+        p = _P(path)
+        if not p.is_file():
+            raise FileNotFoundError(path)
+        import json as _j
+
+        state = _j.loads(p.read_text(encoding="utf-8"))
+        cookies = state.get("cookies") or []
+        if cookies:
+            self.page.context.add_cookies(cookies)
+
+
 
 
 class BrowserExecutor(AIPExecutor):
@@ -421,6 +492,26 @@ class BrowserExecutor(AIPExecutor):
             case "browser.get_page_info":
                 return True, {"url": self.page.url,
                               "title": self.page.title}
+
+            case "browser.iframe_switch":
+                self.page.set_frame(selector=params.get("selector"),
+                                    index=params.get("index"))
+                return True, {"frame": params.get("selector")
+                              or f"index:{params.get('index', 0)}"}
+
+            case "browser.frame_reset":
+                self.page.reset_frame()
+                return True, {"frame": "main"}
+
+            case "browser.storage_state_save":
+                path = params["path"]
+                self.page.storage_state_save(path)
+                return True, {"path": path}
+
+            case "browser.storage_state_load":
+                path = params["path"]
+                self.page.storage_state_load(path)
+                return True, {"path": path}
 
             case "browser.element_attr":
                 attr = params["attr"]

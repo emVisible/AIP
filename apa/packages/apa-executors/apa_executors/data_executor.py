@@ -71,6 +71,7 @@ class DataExecutor(AIPExecutor):
             "data.distinct": self._data_distinct,
             "data.slice": self._data_slice,
             "data.json_to_table": self._data_json_to_table,
+            "data.merge": self._data_merge,
             # ---- M2 流程控制配套 ----
             "core.delay": self._core_delay,
             "data.count": self._data_count,
@@ -543,3 +544,53 @@ class DataExecutor(AIPExecutor):
                 st.st_mtime).isoformat(),
             "is_dir": fp.is_dir(),
         }
+
+    def _data_merge(self, p):
+        """两表拼接 concat（纵向）或按键 inner/left 连接。"""
+        a = self._get_table(p.get("a", ""))
+        b = self._get_table(p.get("b", ""))
+        how = p.get("how", "concat")
+        out_key = p.get("output_key", "merged")
+
+        if how == "concat":
+            cols = list(a["columns"])
+            for c in b["columns"]:
+                if c not in cols:
+                    cols.append(c)
+            def pad(row, tbl_cols):
+                return [row[tbl_cols.index(c)] if c in tbl_cols else None
+                        for c in cols]
+            rows = [pad(r, a["columns"]) for r in a["rows"]] + \
+                   [pad(r, b["columns"]) for r in b["rows"]]
+            result = {"columns": cols, "rows": rows, "count": len(rows)}
+            self._set_table(out_key, result)
+            return True, {**result}
+
+        on = p.get("on")
+        if not on:
+            return False, {"code": "missing_param",
+                           "detail": "on required for join modes"}
+        ai = a["columns"].index(on) if on in a["columns"] else None
+        bi = b["columns"].index(on) if on in b["columns"] else None
+        if ai is None or bi is None:
+            return False, {"code": "join_key_missing", "column": on}
+
+        cols = list(a["columns"]) + [c for c in b["columns"] if c != on]
+        b_index = {}
+        for row in b["rows"]:
+            b_index.setdefault(json.dumps(row[bi], sort_keys=True,
+                                          default=str), row)
+        rows = []
+        for ra in a["rows"]:
+            key = json.dumps(ra[ai], sort_keys=True, default=str)
+            rb = b_index.get(key)
+            if rb is not None:
+                extra = [v for j, v in enumerate(rb)
+                         if j != bi]
+                rows.append(list(ra) + extra)
+            elif how == "left":
+                rows.append(list(ra) +
+                            [None] * (len(cols) - len(a["columns"])))
+        result = {"columns": cols, "rows": rows, "count": len(rows)}
+        self._set_table(out_key, result)
+        return True, {**result}

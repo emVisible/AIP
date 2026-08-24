@@ -372,3 +372,54 @@ browser.element_attr:
   risk: L0
   timeout_ms: 15000
   retries: 2
+
+# ============================================================
+# A: 地基补缺 —— frame / 登录态
+# ============================================================
+browser.iframe_switch:
+  executor_domain: browser
+  description: "进入子 frame（后续定位在其内解析；可嵌套）"
+  params:
+    type: object
+    properties:
+      selector:
+        type: string
+        description: "iframe CSS 选择器（优先）"
+      index: { type: integer, minimum: 0, description: "按序号切换" }
+  idempotency: required
+  risk: L0
+  timeout_ms: 10000
+  retries: 1
+
+browser.frame_reset:
+  executor_domain: browser
+  description: "返回主文档 frame"
+  params: { type: object, properties: {} }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+browser.storage_state_save:
+  executor_domain: browser
+  description: "保存登录态（cookies+storage → JSON），跨次运行免登录"
+  params:
+    type: object
+    required: [path]
+    properties: { path: { type: string } }
+  idempotency: required
+  risk: L2
+  timeout_ms: 15000
+  retries: 1
+
+browser.storage_state_load:
+  executor_domain: browser
+  description: "加载已保存登录态（同源重放幂等）"
+  params:
+    type: object
+    required: [path]
+    properties: { path: { type: string } }
+  idempotency: required
+  risk: L2
+  timeout_ms: 15000
+  retries: 1

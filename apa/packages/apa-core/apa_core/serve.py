@@ -383,6 +383,14 @@ class ServeApp:
         data_mod = DataExecutor(f"bot_{suffix}", session)
         mods.append(("data", data_mod))
 
+        # M-A3: llm.text 文本任务（无 Key 时 dependency_missing 优雅降级）
+        try:
+            from apa_core.llm_actions import LlmTextExecutor
+
+            mods.append(("llm", LlmTextExecutor(f"bot_{suffix}", session)))
+        except Exception:  # noqa: BLE001
+            pass
+
         # M1：macOS 元素识别执行器（非 darwin / 缺框架时静默跳过）
         if sys.platform == "darwin":
             try:

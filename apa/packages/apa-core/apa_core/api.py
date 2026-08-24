@@ -83,10 +83,12 @@ def create_app(
     runs_dir: Optional[str] = None,
     spy_service: Optional[Any] = None,
     serve_app: Optional[Any] = None,
+    intent_compiler=None,
 ) -> FastAPI:
     """构建 FastAPI 实例。依赖注入：所有外部交互通过参数传入。"""
     _recorder = None  # RecorderService 惰性单例（录制会话注册表）
     _spy = spy_service  # SpyService 注入点（None 则惰性构造）
+    _intent = intent_compiler  # IntentCompiler 注入
     _scrape = None  # ScrapeWizardService 惰性单例
 
     from .studio import StudioServer  # 延迟导入复用现有逻辑
@@ -377,6 +379,21 @@ def create_app(
             return _scrape.stop(sid)
         except ScrapeError:
             return {"stopped": False}
+
+    # ---- 意图编译（Phase B）----
+    @app.post("/api/intent/compile")
+    async def intent_compile(body: dict):
+        utterance = str(body.get("utterance", ""))
+        if not intent_compiler:
+            raise HTTPException(501, "intent compiler not configured")
+        result = intent_compiler.compile(utterance)
+        return {
+            "ok": result.ok,
+            "process_yaml": result.process_yaml,
+            "template_id": result.template_id,
+            "questions": result.questions,
+            "error": result.error,
+        }
 
     # ---- 定时任务 CRUD（M2）----
     @app.get("/api/jobs")

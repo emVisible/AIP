@@ -187,6 +187,19 @@ function DesignerInner() {
     setRfEdges(edges);
   }, [steps, selectedIdx, setRfNodes, setRfEdges]);
 
+  // 工作台草稿拾取（Phase B 对话→设计器通道）
+  useEffect(() => {
+    const draftKey = "apa_draft_import";
+    const draft = sessionStorage.getItem(draftKey);
+    if (draft) {
+      sessionStorage.removeItem(draftKey);
+      setYamlText(draft);
+      void loadFromYaml();
+      setStatusMsg("已从工作台导入流程草稿 ✓");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // 数据加载
   useEffect(() => {
     api<ProcessInfo[]>("/api/processes").then(setProcessList).catch(() => {});

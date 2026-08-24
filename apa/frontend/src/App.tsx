@@ -6,7 +6,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { DesignerPage } from "./pages/designer/DesignerPage";
 import { Runs } from "./pages/Runs";
 import { Hitl } from "./pages/Hitl";
-import { Assistant } from "./pages/Assistant";
+import { Workbench } from "./pages/Workbench";
 import { Settings } from "./pages/Settings";
 import { ComingSoon } from "./pages/ComingSoon";
 
@@ -28,7 +28,7 @@ export function App() {
             <Route path="runs" element={<Runs />} />
             <Route path="hitl" element={<Hitl />} />
             <Route path="settings" element={<Settings />} />
-            <Route path="ai" element={<Assistant />} />
+            <Route path="ai" element={<Workbench />} />
             <Route path="*" element={<ComingSoon title="404" />} />
           </Route>
         </Routes>

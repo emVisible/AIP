@@ -55,6 +55,55 @@ class Scheduler:
             "data_filter": dict(data_filter or {}), "handler": handler,
         }
 
+    def add_watch(self, job_id: str, path_glob: str,
+                  handler: Callable[[dict], None]) -> None:
+        """文件监听任务：tick 时对 glob 命中文件做 mtime 快照比对。
+
+        新增或修改的每个文件触发一次 handler({path, mtime_ms})。
+        快照存内存 —— 进程重启后首轮视为全量新增（幂等语义由流程侧保证）。
+        """
+        from pathlib import Path
+
+        if not str(path_glob).strip():
+            raise SchedulerError(f"job {job_id!r}: empty watch glob")
+        self.jobs[job_id] = {
+            "job_id": job_id, "kind": "watch",
+            "glob": str(path_glob),
+            "snapshot": {},          # abspath -> mtime_ns
+            "handler": handler,
+            "_Path": Path,
+        }
+
+    def _fire_watch(self, job: dict) -> int:
+        """扫描 + 比对 + 触发。返回触发次数。"""
+        import time as _t
+
+        Path = job["_Path"]
+        fired = 0
+        snap: dict = job["snapshot"]
+        seen_now: dict = {}
+        try:
+            g = Path(job["glob"])
+            matches = list(g.parent.glob(g.name))
+        except Exception:
+            return 0
+        for fp in matches:
+            if not fp.is_file():
+                continue
+            ap = str(fp.resolve())
+            try:
+                mt = fp.stat().st_mtime_ns
+            except OSError:
+                continue
+            seen_now[ap] = mt
+            old = snap.get(ap)
+            if old is None or old != mt:
+                job["handler"]({"path": ap, "mtime_ms": mt // 1e6})
+                fired += 1
+        # 已删除文件从快照移除（再次出现视为新增）
+        job["snapshot"] = seen_now
+        return fired
+
     def remove(self, job_id: str) -> bool:
         return self.jobs.pop(job_id, None) is not None
 
@@ -64,6 +113,14 @@ class Scheduler:
         now = now_ms if now_ms is not None else self._now()
         fired: List[dict] = []
         for job in list(self.jobs.values()):
+            if job.get("kind") == "watch":
+                n = self._fire_watch(job)
+                if n:
+                    ctx = {"job_id": job["job_id"], "kind": "watch",
+                           "ts_ms": now_ms or self._now(), "count": n}
+                    fired.append(ctx)
+                    self.fired.append(ctx)
+                continue
             if job["kind"] != "cron":
                 continue
             dt = datetime.fromtimestamp(now / 1000)
@@ -85,6 +142,14 @@ class Scheduler:
         data = data or {}
         fired: List[dict] = []
         for job in list(self.jobs.values()):
+            if job.get("kind") == "watch":
+                n = self._fire_watch(job)
+                if n:
+                    ctx = {"job_id": job["job_id"], "kind": "watch",
+                           "ts_ms": now_ms or self._now(), "count": n}
+                    fired.append(ctx)
+                    self.fired.append(ctx)
+                continue
             if job["kind"] != "event" or job["event"] != event_name:
                 continue
             ok = all(data.get(k) == v

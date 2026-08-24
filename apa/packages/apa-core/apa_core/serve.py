@@ -204,7 +204,23 @@ class ServeApp:
             self._threads.append(t)
             t.start()
 
-        if kind == "cron":
+        if kind == "watch":
+            if not expr:
+                raise ServeError(
+                    f"job {job_id!r}: watch 需要 expr（监听路径 glob）")
+
+            def watch_handler(evt: Dict[str, Any]) -> None:
+                merged = {**(data or {}), **evt}
+                t2 = threading.Thread(
+                    target=self._run_session_job,
+                    args=(process, f"file.changed", merged),
+                    daemon=True, name=f"apa-job-{job_id}-watch",
+                )
+                self._threads.append(t2)
+                t2.start()
+
+            self.scheduler.add_watch(job_id, expr, watch_handler)
+        elif kind == "cron":
             if not expr:
                 raise ServeError(f"job {job_id!r}: cron 需要 expr")
             self.scheduler.add_cron(job_id, expr, handler)
@@ -271,8 +287,8 @@ class ServeApp:
         process = str(spec.get("process") or "").strip()
         if not jid:
             raise ServeError("job id required")
-        if kind not in ("cron", "event"):
-            raise ServeError(f"kind must be cron|event, got {kind!r}")
+        if kind not in ("cron", "event", "watch"):
+            raise ServeError(f"kind must be cron|event|watch, got {kind!r}")
         if not process:
             raise ServeError("process required")
 
@@ -316,7 +332,8 @@ class ServeApp:
 
         merged = dict(sp.get("data") or {})
         trigger_event = (sp.get("event") or "") if sp["kind"] == "event" \
-            else f"manual.{jid}"
+            else ("file.changed" if sp["kind"] == "watch"
+                  else f"manual.{jid}")
         t = threading.Thread(
             target=self._run_session_job,
             args=(sp["process"], trigger_event, merged),

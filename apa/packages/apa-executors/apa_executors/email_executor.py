@@ -21,10 +21,15 @@ class EmailExecutor:
         pass
 
     def _execute_action(self, name: str, params: dict) -> Tuple[bool, dict]:
-        if name != "email.send":
+        handlers = {
+            "email.send": self._send,
+            "email.receive": self._receive,
+        }
+        fn = handlers.get(name)
+        if fn is None:
             return False, {"code": "action_not_supported_by_executor"}
         try:
-            return self._send(params)
+            return fn(params)
         except smtplib.SMTPAuthenticationError as e:
             return False, {"code": "smtp_auth_failed", "detail": str(e)}
         except smtplib.SMTPConnectError as e:
@@ -74,3 +79,82 @@ class EmailExecutor:
             srv.send_message(msg)
 
         return True, {"sent": True, "to": p["to"], "subject": p.get("subject")}
+
+    # ---- M2 收件（IMAP）------------------------------------------------------
+
+    def _receive(self, p: dict) -> Tuple[bool, dict]:
+        """IMAP 拉取邮件 → 结构化列表。
+
+        params: host/port(993)/username/password/folder=INBOX/
+                criteria=UNSEEN/limit=10/mark_seen=False
+        返回 messages: [{from,subject,date,text}]
+        """
+        import email as _em
+        import imaplib
+        from email.header import decode_header
+
+        def _decode(raw) -> str:
+            if raw is None:
+                return ""
+            parts = decode_header(str(raw))
+            out = []
+            for data, charset in parts:
+                if isinstance(data, bytes):
+                    out.append(data.decode(charset or "utf-8", "replace"))
+                else:
+                    out.append(str(data))
+            return "".join(out)
+
+        def _body(msg) -> str:
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        payload = part.get_payload(decode=True)
+                        if payload:
+                            cs = part.get_content_charset() or "utf-8"
+                            return payload.decode(cs, "replace")
+                return ""
+            payload = msg.get_payload(decode=True)
+            if payload is None:
+                return str(payload or "")
+            cs = msg.get_content_charset() or "utf-8"
+            return payload.decode(cs, "replace")
+
+        host = p.get("host", "")
+        port = int(p.get("port", 993))
+        user = p.get("username", "")
+        password = str(p.get("password", ""))
+        folder = p.get("folder", "INBOX")
+        criteria = p.get("criteria", "UNSEEN")
+        limit = int(p.get("limit", 10))
+        mark_seen = bool(p.get("mark_seen", False))
+
+        conn = imaplib.IMAP4_SSL(host, port)
+        try:
+            conn.login(user, password)
+            conn.select(folder, readonly=not mark_seen)
+            status, data = conn.search(None, criteria)
+            if status != "OK":
+                return False, {"code": "imap_search_failed",
+                               "status": status}
+            ids = data[0].split()[-limit:] if data and data[0] else []
+            messages = []
+            for mid in reversed(ids):     # 最新在前
+                fetch_item = "(RFC822)" if mark_seen else "(BODY.PEEK[])"
+                st, fetched = conn.fetch(mid, fetch_item)
+                if st != "OK" or not fetched or fetched[0] is None:
+                    continue
+                raw = fetched[0][1]
+                msg = _em.message_from_bytes(raw)
+                messages.append({
+                    "from": _decode(msg.get("From")),
+                    "subject": _decode(msg.get("Subject")),
+                    "date": str(msg.get("Date", "")),
+                    "text": _body(msg)[:5000],
+                })
+            return True, {"messages": messages, "count": len(messages)}
+        finally:
+            try:
+                conn.logout()
+            except Exception:
+                pass

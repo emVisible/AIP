@@ -412,6 +412,25 @@ def create_app(
             raise HTTPException(404, str(e))
 
     # ---- SSE journal stream ----
+    @app.get("/api/journal/records")
+    async def journal_records_by_session(session: str = ""):
+        """按会话查询 journal 记录（Runs 页详情）。
+
+        扫描配置的全部 journal 文件；session 为空返回 400。
+        """
+        if not session:
+            raise HTTPException(400, "session query param required")
+        out = []
+        for path in server.journal_paths:
+            try:
+                for rec in journal_records(path):
+                    if rec.get("session") == session:
+                        out.append(rec)
+            except OSError:
+                continue
+        out.sort(key=lambda r: float(r.get("ts", 0)))
+        return {"session": session, "records": out, "count": len(out)}
+
     @app.get("/api/journal/stream")
     async def journal_stream():
         from sse_starlette.sse import EventSourceResponse

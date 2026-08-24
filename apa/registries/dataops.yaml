@@ -661,3 +661,23 @@ file.stat:
   risk: L0
   timeout_ms: 5000
   retries: 2
+
+email.receive:
+  executor_domain: email
+  description: "IMAP 拉取邮件（默认 BODY.PEEK 不标已读，只读可重试）"
+  params:
+    type: object
+    required: [host, username]
+    properties:
+      host: { type: string }
+      port: { type: integer, default: 993 }
+      username: { type: string }
+      password: { type: string, writeOnly: true }
+      folder: { type: string, default: INBOX }
+      criteria: { type: string, default: UNSEEN }
+      limit: { type: integer, minimum: 1, maximum: 100, default: 10 }
+      mark_seen: { type: boolean, default: false }
+  idempotency: required
+  risk: L1
+  timeout_ms: 60000
+  retries: 2

@@ -15,6 +15,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import time as _t
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -68,6 +69,8 @@ class OCRExecutor(AIPExecutor):
 
         if name == "ocr.screen_text":
             return self._screen_text(params)
+        if name == "ocr.wait_text":
+            return self._wait_text(params)
 
         return False, {"code": "action_not_supported_by_executor"}
 
@@ -143,6 +146,45 @@ class OCRExecutor(AIPExecutor):
         }
         self._store(out, params)
         return True, out
+
+    def _wait_text(self, params: dict) -> Tuple[bool, dict]:
+        """轮询等待屏幕文字出现（影刀「等待文字」对标）。"""
+        from . import screen_ocr as so
+
+        target = str(params.get("text", ""))
+        if not target:
+            return False, {"code": "missing_param", "detail": "text"}
+        timeout_s = min(float(params.get("timeout_s", 10.0)), 120.0)
+        interval_s = max(float(params.get("interval_s", 0.5)), 0.1)
+        region = params.get("region")
+
+        deadline = _t.monotonic() + timeout_s
+        last_err: Optional[str] = None
+        while _t.monotonic() < deadline:
+            try:
+                hit = so.locate_text(
+                    target, region=region,
+                    contains=params.get("contains", True),
+                    min_confidence=float(
+                        params.get("min_confidence", 0.3)))
+            except RuntimeError as e:
+                last_err = str(e)[:80]      # 屏幕录制权限等
+                hit = None
+            if hit is not None:
+                out = {"found": True, "bounds": hit["bounds"],
+                       "text": hit["text"],
+                       "confidence": hit["confidence"]}
+                ref = params.get("output_context")
+                if ref and self.context_store is not None:
+                    r2 = self.context_store.make_ref(self.peer.session_id,
+                                                     str(ref))
+                    self.context_store.put(r2, out)
+                return True, out
+            _t.sleep(interval_s)
+
+        return False, {"code": "text_timeout",
+                       "text": target,
+                       "detail": last_err or "not found"}
 
     def _store(self, out: dict, params: dict) -> None:
         ref_key = params.get("output_context")

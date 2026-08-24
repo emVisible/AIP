@@ -61,3 +61,52 @@ class TestOfflineOCR:
         hits = so.ocr_image(img)
         joined = "".join(h["text"] for h in hits).replace(" ", "")
         assert any(ch in joined for ch in ("订单", "审批", "通")), hits
+
+class TestWaitText:
+    def test_found_on_second_poll(self, monkeypatch):
+        from apa_executors.ocr_executor import OCRExecutor
+
+        ex = OCRExecutor.__new__(OCRExecutor)
+        seq = [None, {"bounds": {"x": 1, "y": 2, "w": 3, "h": 4},
+                      "text": "就绪", "confidence": 0.9}]
+        calls = []
+
+        def fake_locate(target, **kw):
+            calls.append(target)
+            return seq[len(calls) - 1] if len(calls) <= len(seq) else None
+
+        from apa_executors import screen_ocr as so
+        import apa_executors.ocr_executor as oe
+        import time as _t
+
+        monkeypatch.setattr(so, "locate_text", fake_locate)
+        monkeypatch.setattr(_t, "sleep", lambda s: None)
+
+        ok, out = ex._execute_action("ocr.wait_text",
+                                     {"text": "就绪", "interval_s": 0.01,
+                                      "timeout_s": 5})
+        assert ok and out["found"] and out["bounds"]["w"] == 3
+        assert calls == ["就绪", "就绪"]
+
+    def test_timeout_returns_text_timeout(self, monkeypatch):
+        from apa_executors.ocr_executor import OCRExecutor
+
+        ex = OCRExecutor.__new__(OCRExecutor)
+        from apa_executors import screen_ocr as so
+        import apa_executors.ocr_executor as oe
+        import time as _t
+
+        monkeypatch.setattr(so, "locate_text", lambda t, **kw: None)
+        # monotonic 加速流逝：每次读取 +0.2s
+        base = {"v": _t.monotonic()}
+
+        def fast_mono():
+            base["v"] += 0.2
+            return base["v"]
+        monkeypatch.setattr(oe._t, "monotonic", fast_mono)
+        monkeypatch.setattr(_t, "sleep", lambda s: None)
+
+        ok, err = ex._execute_action("ocr.wait_text",
+                                     {"text": "不存在", "timeout_s": 1,
+                                      "interval_s": 0.1})
+        assert not ok and err["code"] == "text_timeout"

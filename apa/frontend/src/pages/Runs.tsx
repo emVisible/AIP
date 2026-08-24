@@ -20,13 +20,14 @@ export function Runs() {
     if (expanded === sid) { setExpanded(null); return; }
     setExpanded(sid);
     try {
-      // POC：复用 sessions 数据展开（完整 journal 查询为 M2 增强）
-      const recs = await api<Record<string, unknown>[]>(
-        `/api/journal/records?session=${sid}`);
-      setDetails(prev => ({ ...prev, [sid]: { session: sid, records: recs } }));
-    } catch {
+      const d = await api<{ records: Record<string, unknown>[] }>(
+        `/api/journal/records?session=${encodeURIComponent(sid)}`);
+      setDetails(prev => ({ ...prev,
+        [sid]: { session: sid, records: d.records ?? [] } }));
+    } catch (e) {
       setDetails(prev => ({ ...prev, [sid]: {
-        session: sid, records: [{ info: "详细轨迹查询为 M2 增强" }] } }));
+        session: sid,
+        records: [{ info: e instanceof Error ? e.message : String(e) }] } }));
     }
   }
 
@@ -98,7 +99,15 @@ export function Runs() {
                   {(details[s.id]?.records ?? []).map((rec, i) => (
                     <div key={i} className="flex items-center gap-2 text-xs
                                             font-mono text-slate-600">
-                      <span className="text-slate-300">{String(rec.kind)}</span>
+                      <span className="text-slate-300">{String(rec.kind ?? rec.info ?? "")}</span>
+                      {rec.to ? <Badge tone={stateTone(String(rec.to))}>{String(rec.to)}</Badge> : null}
+                      {rec.outcome ? (
+                        <span className={String(rec.outcome) === "success"
+                          ? "text-emerald-600" : "text-red-500"}>
+                          {String(rec.outcome)}
+                        </span>) : null}
+                      {rec.step ? <span>{String(rec.step)}</span> : null}
+                      {rec.action ? <span className="text-slate-400">{String(rec.action)}</span> : null}
                       <span>{String(rec.to ?? rec.status ??
                              rec.name ?? "")}</span>
                     </div>

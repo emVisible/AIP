@@ -155,3 +155,49 @@ class TestJobsCrud:
             if not done:
                 time.sleep(0.1)
         assert done, "run-now 会话未产生终态 journal"
+
+
+class TestFileWatch:
+    def test_watch_triggers_on_new_file(self, app_env, tmp_path):
+        sa, c, jobs_file, _ = app_env
+        inbox = tmp_path / "inbox"
+        inbox.mkdir()
+
+        r = c.post("/api/jobs/save", json={
+            "id": "watcher", "kind": "watch", "process": "job_demo",
+            "expr": str(inbox) + "/*.csv"})
+        assert r.status_code == 200
+
+        # 首轮 tick 建立快照（空目录）
+        sa.scheduler.tick()
+        (inbox / "data.csv").write_text("a,b\n1,2\n")
+        deadline = time.time() + 8
+        done = False
+        while time.time() < deadline and not done:
+            sa.scheduler.tick()
+            for jf in Path(tmp_path).rglob("*.jsonl"):
+                if "outcome_summary" in jf.read_text(encoding="utf-8"):
+                    done = True
+                    break
+            if not done:
+                time.sleep(0.1)
+        assert done, "文件监听未触发会话"
+
+    def test_modify_fires_again(self, app_env, tmp_path):
+        sa, c, _, _ = app_env
+        inbox = tmp_path / "inbox2"
+        inbox.mkdir()
+        target = inbox / "f.txt"
+        target.write_text("v1")
+
+        c.post("/api/jobs/save", json={
+            "id": "w2", "kind": "watch", "process": "job_demo",
+            "expr": str(inbox) + "/*"})
+        sa.scheduler.tick()          # 快照 v1
+
+        fired = 0
+        for round_no in range(2):
+            time.sleep(0.02)         # 确保 mtime 变化
+            target.write_text(f"v{round_no + 2}")
+            fired += len(sa.scheduler.tick())
+        assert fired == 2            # 每次修改各触发一次

@@ -49,3 +49,25 @@ ocr.screen_text:
   risk: L0
   timeout_ms: 60000
   retries: 2
+
+
+ocr.wait_text:
+  executor_domain: ocr
+  description: "轮询等待屏幕文字出现（超时返回 text_timeout）"
+  params:
+    type: object
+    required: [text]
+    properties:
+      text: { type: string }
+      contains: { type: boolean, default: true }
+      region:
+        type: object
+        description: "{x,y,w,h} 搜索区域"
+      timeout_s: { type: number, minimum: 0.5, maximum: 120, default: 10 }
+      interval_s: { type: number, minimum: 0.1, maximum: 5, default: 0.5 }
+      min_confidence: { type: number, minimum: 0, maximum: 1, default: 0.3 }
+      output_context: { type: string }
+  idempotency: optional
+  risk: L0
+  timeout_ms: 130000
+  retries: 0

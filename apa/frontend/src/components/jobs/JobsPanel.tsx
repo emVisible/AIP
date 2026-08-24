@@ -10,7 +10,7 @@ import { Badge, Button, Card, Dialog, Field, IconButton, Input,
 
 interface JobSpec {
   id: string;
-  kind: "cron" | "event";
+  kind: "cron" | "event" | "watch";
   process: string;
   expr?: string | null;
   event?: string | null;
@@ -28,8 +28,8 @@ export function JobsPanel() {
   const [jobs, setJobs] = useState<JobSpec[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [editing, setEditing] = useState<null | {
-    id: string; kind: "cron" | "event"; process: string;
-    expr: string; event: string;
+    id: string; kind: "cron" | "event" | "watch";
+    process: string; expr: string; event: string;
   }>(null);
   const [msg, setMsg] = useState("");
 
@@ -106,7 +106,8 @@ export function JobsPanel() {
         {jobs.map(j => (
           <div key={j.id} className="flex items-center gap-2 px-3 py-2
                                      hover:bg-slate-50/60">
-            <Badge tone={j.kind === "cron" ? "blue" : "violet"}>
+            <Badge tone={j.kind === "cron" ? "blue"
+                       : j.kind === "watch" ? "amber" : "violet"}>
               {j.kind}
             </Badge>
             <span className="font-mono text-xs text-slate-700">{j.id}</span>
@@ -161,12 +162,20 @@ export function JobsPanel() {
               <Field label="触发方式">
                 <Select value={editing.kind}
                         onChange={e => setEditing({ ...editing,
-                          kind: e.target.value as "cron" | "event" })}>
+                          kind: e.target.value as JobSpec["kind"] })}>
                   <option value="cron">定时 (cron)</option>
                   <option value="event">事件</option>
+                  <option value="watch">文件监听</option>
                 </Select>
               </Field>
-              {editing.kind === "cron" ? (
+              {editing.kind === "watch" ? (
+                <Field label="监听路径 (glob)" hint="相对当前目录">
+                  <Input value={editing.expr} className="font-mono"
+                         placeholder="data/inbox/*.csv"
+                         onChange={e => setEditing({ ...editing,
+                                                     expr: e.target.value })} />
+                </Field>
+              ) : editing.kind === "cron" ? (
                 <Field label="Cron 表达式" hint="分 时 日 月 周">
                   <Input value={editing.expr} className="font-mono"
                          placeholder="0 9 * * *"

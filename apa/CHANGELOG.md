@@ -2,6 +2,29 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [0.9.0-poc] — 2026-08-24
+
+触发器与通道补全。**334 pytest · 14 域 125 动作。**
+
+### P19-M1 运行详情真实化
+- `GET /api/journal/records?session=` 按会话查询 journal（Runs 页
+  「详细轨迹为 M2 增强」占位符退役）；前端结构化渲染终态/步骤/动作
+
+### P19-M2 邮件收件
+- `email.receive`：IMAP4_SSL 拉取，BODY.PEEK 默认不标已读，
+  multipart text 提取 + RFC2047 头解码，limit/criteria/mark_seen 可控
+  （Fake imaplib ×5 测试）
+
+### P19-M3 文件监听触发器
+- Scheduler 新增 watch 类型：glob mtime 快照比对，tick 驱动；
+  新增/修改各触发一次，删除自动出快照
+- serve kind=watch 热接线；Jobs UI 第三种触发方式（amber 徽标）
+- E2E：新建文件 → tick → 会话 journal 终态
+
+### P19-M4 OCR 等待
+- `ocr.wait_text`：轮询定位屏幕文字直至出现或超时
+  （text_timeout），bounds 入 ContextStore 供后续点击引用
+
 ## [0.8.0-poc] — 2026-08-24
 
 决策贯通 + 调度管理。**324 pytest · 123 动作 · cascade_llm 从标签变事实。**

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { ActionMeta } from "../../api/types";
 import { cn } from "../../lib/utils";
+import { getLanguage } from "../../hooks/useLanguage";
 
 /** 流程控制特殊节点（非 registry 动作，由 ProcessEngine 内建解释）。 */
 export const FLOW_NODES: [string, string][] = [
@@ -116,9 +117,10 @@ export function CatalogPanel({ onInsert, filter, onFilterChange }: {
         title={(meta.description ?? "") +
                ` [${meta.risk} · ${meta.executor_domain}]`}
       >
-        <span className="truncate">{meta.label_cn || name}</span>
-                <span className="font-mono text-[9px] text-slate-300
-                                 truncate max-w-[80px] ml-1">{name}</span>
+        <span className="truncate">
+          {getLanguage() === "zh" && meta.label_cn
+            ? meta.label_cn : name}
+        </span>
         <span
           className={`text-[10px] rounded px-1 shrink-0 ml-1 ${
             tone === "violet"

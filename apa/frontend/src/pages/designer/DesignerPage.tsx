@@ -15,6 +15,7 @@ import {
   useReactFlow,
 } from "@xyflow/react";
 import { readDnDAction, readDnDStepIndex } from "./designerDnd";
+import { generateDefaults } from "../../lib/schema-defaults";
 import { nodeTypes, type StepNodeData } from "../../components/designer/StepNode";
 import { EngineChip } from "../../components/designer/EngineChip";
 
@@ -68,8 +69,17 @@ function blankStep(i: number): DStep {
 }
 
 /** 按目录选择生成带模板参数的步骤（流程控制节点预填骨架）。 */
-function stepFromAction(action: string, i: number): DStep {
+function stepFromAction(action: string, i: number,
+                         catalog?: Record<string, ActionMeta>): DStep {
   const base = blankStep(i);
+  const meta = catalog?.[action];
+  // Schema 驱动默认值（影刀同款：添加即可运行，参数后调）
+  const defaults = generateDefaults(
+    (meta?.params ?? null) as Parameters<typeof generateDefaults>[0]);
+  const paramsJson = Object.keys(defaults).length
+    ? JSON.stringify(defaults, null, 2)
+    : "{}";
+
   if (action === "flow.foreach") {
     return { ...base, type: "foreach", id: `loop_${i + 1}`,
       params_json: JSON.stringify({
@@ -89,7 +99,7 @@ function stepFromAction(action: string, i: number): DStep {
         context: [], available_actions: [],
       }, null, 2) };
   }
-  return { ...base, action };
+  return { ...base, action, params_json: paramsJson };
 }
 
 
@@ -246,7 +256,7 @@ function DesignerInner() {
     if (!action) return;
     e.preventDefault();
     const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY });
-    const step = stepFromAction(action, steps.length);
+    const step = stepFromAction(action, steps.length, catalog);
     dropPosRef.current.set(step.id, pos);
     setSelectedIdx(steps.length);
     setSteps((prev) => [...prev, step]);
@@ -275,7 +285,7 @@ function DesignerInner() {
     if (from === null) {
       // 目录动作落到步骤卡上 → 插到该卡之后
       const action = readDnDAction(e.nativeEvent as DragEvent);
-      if (action) insertStep(target + 1, stepFromAction(action, target + 1));
+      if (action) insertStep(target + 1, stepFromAction(action, target + 1, catalog));
       e.preventDefault();
       return;
     }
@@ -564,7 +574,7 @@ function DesignerInner() {
                 filter={catalogFilter}
                 onFilterChange={setCatalogFilter}
                 onInsert={(action: string) => {
-                  setSteps(prev => [...prev, stepFromAction(action, prev.length)]);
+                  setSteps(prev => [...prev, stepFromAction(action, prev.length, catalog)]);
                 }} />
             )}
             {toolTab === "spy" && <SpyPanel onCapture={captureSpyElement} />}

@@ -654,3 +654,41 @@ browser.drag_drop:
   risk: L1
   timeout_ms: 30000
   retries: 0
+
+browser.scroll_to_element:
+  executor_domain: browser
+  description: "滚动到目标元素可见"
+  params:
+    type: object
+    required: [target]
+    properties: { target: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 10000
+  retries: 2
+
+browser.get_element_count:
+  executor_domain: browser
+  description: "获取匹配选择器的元素数量"
+  params:
+    type: object
+    required: [selector]
+    properties: { selector: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 10000
+  retries: 2
+
+browser.wait_close:
+  executor_domain: browser
+  description: "等待元素从页面消失（state=detached）"
+  params:
+    type: object
+    required: [target]
+    properties:
+      target: { type: string }
+      timeout_ms: { type: integer, default: 10000 }
+  idempotency: optional
+  risk: L0
+  timeout_ms: 15000
+  retries: 0

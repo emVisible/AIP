@@ -267,6 +267,63 @@ class DesktopExecutor(AIPExecutor):
                 b.key_code(str(params.get("keys", "")))
                 return True, {}
 
+            case "desktop.process.list":
+                import subprocess as _sp
+
+                kw = str(params.get("name_contains", ""))
+                r = _sp.run(["ps", "aux"], capture_output=True,
+                            text=True, timeout=10)
+                procs = []
+                for line in (r.stdout or "").splitlines()[1:]:
+                    parts = line.split(None, 10)
+                    if len(parts) < 11:
+                        continue
+                    pname = parts[10]
+                    if kw and kw.lower() not in pname.lower():
+                        continue
+                    procs.append({
+                        "pid": int(parts[1]),
+                        "cpu_pct": float(parts[2]),
+                        "mem_pct": float(parts[3]),
+                        "command": pname[:120],
+                    })
+                procs.sort(key=lambda x: -x["cpu_pct"])
+                return True, {"processes": procs[:params.get("limit", 30)],
+                               "count": len(procs)}
+
+            case "desktop.window.resize":
+                import subprocess as _sp
+
+                app_name = str(params.get("app_name", ""))
+                w, h = int(params.get("width", 800)), int(params.get("height", 600))
+                script = (
+                    f'tell application "System Events" to '
+                    f'tell (first process whose name is "{app_name}") to '
+                    f'set size of front window to {{{w}, {h}}}')
+                _sp.run(["osascript", "-e", script],
+                        capture_output=True, timeout=10)
+                return True, {"resized": [w, h]}
+
+            case "desktop.window.minimize":
+                import subprocess as _sp
+
+                app_name = str(params.get("app_name", ""))
+                _sp.run(["osascript", "-e",
+                    f'tell application "System Events" to '
+                    f'set miniaturized of front window of '
+                    f'(first process whose name is "{app_name}") to true'],
+                    capture_output=True, timeout=10)
+                return True, {"minimized": app_name}
+
+            case "desktop.window.maximize":
+                import subprocess as _sp
+
+                _sp.run(["osascript", "-e",
+                    'tell application "System Events" to '
+                    'keystroke "f" using {control down, command down}'],
+                    capture_output=True, timeout=10)
+                return True, {"maximized": True}
+
             case "desktop.process.launch":
                 b.launch(params["executable"])
                 return True, {}

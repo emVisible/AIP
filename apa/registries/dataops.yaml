@@ -1527,3 +1527,31 @@ dict.remove:
   risk: L0
   timeout_ms: 5000
   retries: 0
+
+env.get:
+  executor_domain: data
+  description: "读取环境变量（支持 default）"
+  params:
+    type: object
+    required: [key]
+    properties:
+      key: { type: string }
+      default: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 2
+
+env.set:
+  executor_domain: data
+  description: "设置环境变量（进程内，不持久化）"
+  params:
+    type: object
+    required: [key, value]
+    properties:
+      key: { type: string }
+      value: { type: string }
+  idempotency: required
+  risk: L1
+  timeout_ms: 5000
+  retries: 1

@@ -561,6 +561,21 @@ class BrowserExecutor(AIPExecutor):
                 return True, {"from": params["from"],
                               "to": params["to"]}
 
+            case "browser.scroll_to_element":
+                self.page.resolve(params["target"]) \
+                    .scroll_into_view_if_needed()
+                return True, {"target": params["target"]}
+
+            case "browser.get_element_count":
+                cnt = self.page.resolve(params["selector"]).count()
+                return True, {"count": cnt}
+
+            case "browser.wait_close":
+                self.page.resolve(params["target"]).first \
+                    .wait_for(state="detached",
+                              timeout=params.get("timeout_ms", 10000))
+                return True, {"target": params["target"]}
+
             case "if.element_visible":
                 try:
                     visible = self.page.resolve(

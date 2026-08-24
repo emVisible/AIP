@@ -294,3 +294,39 @@ desktop.process.list:
   risk: L0
   timeout_ms: 15000
   retries: 2
+
+desktop.window.resize:
+  executor_domain: desktop
+  description: "调整应用窗口尺寸（AppleScript）"
+  params:
+    type: object
+    required: [app_name]
+    properties:
+      app_name: { type: string }
+      width: { type: integer, minimum: 100 }
+      height: { type: integer, minimum: 100 }
+  idempotency: required
+  risk: L1
+  timeout_ms: 15000
+  retries: 1
+
+desktop.window.minimize:
+  executor_domain: desktop
+  description: "最小化应用窗口"
+  params:
+    type: object
+    required: [app_name]
+    properties: { app_name: { type: string } }
+  idempotency: none
+  risk: L1
+  timeout_ms: 15000
+  retries: 0
+
+desktop.window.maximize:
+  executor_domain: desktop
+  description: "全屏切换（Cmd+Ctrl+F 模拟）"
+  params: { type: object, properties: {} }
+  idempotency: none
+  risk: L1
+  timeout_ms: 15000
+  retries: 0

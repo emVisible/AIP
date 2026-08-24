@@ -13,9 +13,9 @@ import { StepEditDialog } from "../../components/designer/StepEditDialog";
 import { TestRunPanel } from "../../components/designer/TestRunPanel";
 import { SpyPanel } from "../../components/designer/SpyPanel";
 import { ScrapePanel } from "../../components/designer/ScrapePanel";
-import { Badge, Button, Drawer } from "../../components/ui";
+import { Badge, Button, Drawer, IconButton } from "../../components/ui";
 import { availableVariables } from "../../hooks/useVariableRegistry";
-import { FolderOpen, Save, SquareDot, Terminal, } from "lucide-react";
+import { FolderOpen, PanelLeftClose, PanelLeftOpen, Save, SquareDot, Terminal, } from "lucide-react";
 import "../../types/desktop";
 function blankStep(i) {
     return {
@@ -66,17 +66,31 @@ function DesignerInner() {
     const [recording, setRecording] = useState(null);
     const [rfNodes, setRfNodes, onNodesChange] = useNodesState([]);
     const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState([]);
-    const { screenToFlowPosition } = useReactFlow();
+    const { screenToFlowPosition, fitView } = useReactFlow();
+    /** U4: fitView 只在首次挂载执行一次，避免编辑时视图跳动。 */
+    useEffect(() => {
+        const t = setTimeout(() => fitView({ padding: 0.1 }), 60);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
     /** 新建节点的落点（画布流坐标），同步时优先于网格默认值。 */
     const dropPosRef = useRef(new Map());
     /** 步骤卡右键菜单状态。 */
     const [menu, setMenu] = useState(null);
     /** 影刀式步骤编辑弹窗：当前编辑的步骤下标。 */
     const [editIdx, setEditIdx] = useState(null);
+    /** U7: 排序拖拽悬停的目标卡下标（插入位置指示）。 */
+    const [dragOverIdx, setDragOverIdx] = useState(null);
     /** 试运行底部抽屉。 */
     const [runOpen, setRunOpen] = useState(false);
     /** 左栏工具面板 Tab。 */
     const [toolTab, setToolTab] = useState("");
+    /** U6: 目录搜索词（跨 Tab 保留）。 */
+    const [catalogFilter, setCatalogFilter] = useState("");
+    /** U8: 左栏折叠（窄屏可用性）。 */
+    const [leftOpen, setLeftOpen] = useState(true);
+    // U5: 画布高度 = 节点最低边 + padding（随自由拖拽自适应）
+    const canvasHeight = Math.max(280, ...rfNodes.map((n) => n.position.y + 110), 60) + 24;
     // steps → RF graph sync（保留用户拖动过的节点位置）
     useEffect(() => {
         const edges = [];
@@ -170,6 +184,8 @@ function DesignerInner() {
         setSelectedIdx(to);
     }
     function handleCardDrop(target, e) {
+        // U1: 阻断向画布容器冒泡——否则目录动作会二次插入（卡片后 + 末尾）
+        e.stopPropagation();
         const from = readDnDStepIndex(e.nativeEvent);
         if (from === null) {
             // 目录动作落到步骤卡上 → 插到该卡之后
@@ -371,27 +387,35 @@ function DesignerInner() {
         }
     }
     return (_jsxs("div", { className: "h-full flex flex-col overflow-hidden", children: [_jsxs("header", { className: "flex items-center gap-2 px-3 py-2 border-b\n                         border-slate-200 bg-white z-10", children: [_jsx("span", { className: "text-sm font-semibold tracking-tight text-zinc-900\n                         px-1", children: "APA" }), _jsx("div", { className: "h-4 w-px bg-slate-200" }), _jsx(EngineChip, {}), _jsx("input", { className: "w-44 h-8 px-2 text-xs font-medium bg-transparent\n                          border border-transparent rounded-md\n                          hover:border-slate-200 focus:border-slate-300\n                          focus:bg-white outline-none", placeholder: "\u6D41\u7A0B ID", value: metaId, onChange: e => setMetaId(e.target.value) }), _jsx("input", { className: "w-56 h-8 px-2 text-xs bg-transparent\n                          border border-transparent rounded-md\n                          hover:border-slate-200 focus:border-slate-300\n                          focus:bg-white outline-none", placeholder: "\u89E6\u53D1\u4E8B\u4EF6\uFF08\u53EF\u9009\uFF09", value: triggerName, onChange: e => setTriggerName(e.target.value) }), _jsxs("div", { className: "ml-auto flex items-center gap-1.5", children: [_jsxs(Button, { size: "sm", variant: "ghost", onClick: () => void openFile(currentFile), disabled: !currentFile, title: "\u91CD\u65B0\u52A0\u8F7D\u5DF2\u4FDD\u5B58\u7248\u672C", children: [_jsx(FolderOpen, { size: 13 }), " \u91CD\u8F7D"] }), _jsxs(Button, { size: "sm", variant: "secondary", onClick: () => { setRunOpen(o => !o); }, children: [_jsx(Terminal, { size: 13 }), " \u8BD5\u8FD0\u884C"] }), _jsxs(Button, { size: "sm", variant: "secondary", onClick: () => setRecording({ sid: "", url: "https://",
-                                    events: 0, phase: "enter" }), children: [_jsx(SquareDot, { size: 13, className: "text-red-500" }), " \u5F55\u5236"] }), _jsxs(Button, { size: "sm", variant: "primary", onClick: () => void save(), children: [_jsx(Save, { size: 13 }), " \u4FDD\u5B58"] })] })] }), _jsxs("div", { className: "flex-1 grid grid-cols-[240px_1fr] overflow-hidden relative", children: [_jsxs("aside", { className: "border-r border-slate-200 bg-white flex flex-col\n                          overflow-hidden", children: [_jsx("nav", { className: "flex items-center gap-1 px-2 pt-2", children: [["", "动作"], ["spy", "拾取"],
-                                    ["scrape", "抓取"]].map(([k, label]) => (_jsx("button", { onClick: () => setToolTab(k), className: `h-6 px-2 rounded text-[11px] font-medium
+                                    events: 0, phase: "enter" }), children: [_jsx(SquareDot, { size: 13, className: "text-red-500" }), " \u5F55\u5236"] }), _jsxs(Button, { size: "sm", variant: "primary", onClick: () => void save(), children: [_jsx(Save, { size: 13 }), " \u4FDD\u5B58"] })] })] }), _jsxs("div", { className: `flex-1 grid overflow-hidden relative ${leftOpen ? "grid-cols-[240px_1fr]" : "grid-cols-[36px_1fr]"}`, children: [_jsx("aside", { className: "border-r border-slate-200 bg-white flex flex-col\n                          overflow-hidden", children: leftOpen ? (_jsxs(_Fragment, { children: [_jsxs("nav", { className: "flex items-center gap-1 px-2 pt-2", children: [_jsx(IconButton, { label: "\u6536\u8D77\u4FA7\u680F", onClick: () => setLeftOpen(false), children: _jsx(PanelLeftClose, { size: 13 }) }), [["", "动作"], ["spy", "拾取"],
+                                            ["scrape", "抓取"]].map(([k, label]) => (_jsx("button", { onClick: () => setToolTab(k), className: `h-6 px-2 rounded text-[11px] font-medium
                             transition-colors ${toolTab === k
-                                        ? "bg-zinc-900 text-white"
-                                        : "text-slate-500 hover:bg-slate-100"}`, children: label }, k))) }), _jsxs("div", { className: "flex-1 overflow-y-auto p-2", children: [toolTab === "" && (_jsx(CatalogPanel, { onInsert: (action) => {
-                                            setSteps(prev => [...prev, stepFromAction(action, prev.length)]);
-                                        } })), toolTab === "spy" && _jsx(SpyPanel, { onCapture: captureSpyElement }), toolTab === "scrape" && _jsx(ScrapePanel, { onGenerate: addGeneratedSteps })] }), _jsxs("div", { className: "border-t border-slate-100 max-h-[30%] overflow-y-auto", children: [_jsx(TemplateLibrary, { onPick: importTemplate }), _jsxs("details", { className: "mt-1 px-2 pb-2", children: [_jsxs("summary", { className: "text-xs text-slate-400 cursor-pointer py-0.5", children: ["\u5DF2\u4FDD\u5B58\u6D41\u7A0B (", processList.filter(pl => pl.valid).length, ")"] }), _jsx("div", { className: "mt-1 space-y-0.5", children: processList.map(pl => (_jsxs("div", { onClick: () => void openFile(pl.id), className: "flex items-center justify-between px-1.5 py-1\n                                  text-xs hover:bg-slate-50 rounded cursor-pointer", children: [_jsx("span", { className: "font-mono truncate", children: pl.id }), _jsx(Badge, { tone: pl.valid ? "green" : "red", children: pl.valid ? `${pl.steps}` : "invalid" })] }, pl.id))) })] })] })] }), _jsxs("div", { className: "overflow-y-auto p-3", children: [_jsx("div", { style: { height: Math.max(280, rfNodes.length * 80 + 60) }, className: "border rounded-xl min-h-[250px] overflow-hidden", onDragOver: handleCanvasDragOver, onDrop: handleCanvasDrop, children: _jsxs(ReactFlow, { nodes: rfNodes, edges: rfEdges, onNodesChange: onNodesChange, onEdgesChange: onEdgesChange, nodeTypes: nodeTypes, fitView: true, children: [_jsx(Background, { variant: BackgroundVariant.Dots, gap: 20, size: 1.5, color: "#cbd5e1" }), _jsx(Controls, { showInteractive: false })] }) }), _jsx("div", { className: "mt-3 space-y-2", children: steps.map((s, i) => (_jsxs("div", { draggable: true, onDragStart: (e) => {
+                                                ? "bg-zinc-900 text-white"
+                                                : "text-slate-500 hover:bg-slate-100"}`, children: label }, k)))] }), _jsxs("div", { className: "flex-1 overflow-y-auto p-2", children: [toolTab === "" && (_jsx(CatalogPanel, { filter: catalogFilter, onFilterChange: setCatalogFilter, onInsert: (action) => {
+                                                setSteps(prev => [...prev, stepFromAction(action, prev.length)]);
+                                            } })), toolTab === "spy" && _jsx(SpyPanel, { onCapture: captureSpyElement }), toolTab === "scrape" && _jsx(ScrapePanel, { onGenerate: addGeneratedSteps })] }), _jsxs("div", { className: "border-t border-slate-100 max-h-[30%] overflow-y-auto", children: [_jsx(TemplateLibrary, { onPick: importTemplate }), _jsxs("details", { className: "mt-1 px-2 pb-2", children: [_jsxs("summary", { className: "text-xs text-slate-400 cursor-pointer py-0.5", children: ["\u5DF2\u4FDD\u5B58\u6D41\u7A0B (", processList.filter(pl => pl.valid).length, ")"] }), _jsx("div", { className: "mt-1 space-y-0.5", children: processList.map(pl => (_jsxs("div", { onClick: () => void openFile(pl.id), className: "flex items-center justify-between px-1.5 py-1\n                                  text-xs hover:bg-slate-50 rounded cursor-pointer", children: [_jsx("span", { className: "font-mono truncate", children: pl.id }), _jsx(Badge, { tone: pl.valid ? "green" : "red", children: pl.valid ? `${pl.steps}` : "invalid" })] }, pl.id))) })] })] })] })) : (_jsxs("div", { className: "flex flex-col items-center pt-2 gap-2", children: [_jsx(IconButton, { label: "\u5C55\u5F00\u4FA7\u680F", onClick: () => setLeftOpen(true), children: _jsx(PanelLeftOpen, { size: 13 }) }), _jsx("button", { onClick: () => setLeftOpen(true), className: "text-[10px] text-slate-400 hover:text-slate-600", style: { writingMode: "vertical-rl" }, children: "\u52A8\u4F5C\u76EE\u5F55" })] })) }), _jsxs("div", { className: "overflow-y-auto p-3", children: [_jsx("div", { style: { height: canvasHeight }, className: "border rounded-xl min-h-[250px] overflow-hidden", onDragOver: handleCanvasDragOver, onDrop: handleCanvasDrop, children: _jsxs(ReactFlow, { nodes: rfNodes, edges: rfEdges, onNodesChange: onNodesChange, onEdgesChange: onEdgesChange, nodeTypes: nodeTypes, children: [_jsx(Background, { variant: BackgroundVariant.Dots, gap: 20, size: 1.5, color: "#cbd5e1" }), _jsx(Controls, { showInteractive: false })] }) }), _jsx("div", { className: "mt-3 space-y-2", children: steps.map((s, i) => (_jsxs("div", { draggable: true, onDragStart: (e) => {
                                         e.dataTransfer.setData("application/apa-step-index", String(i));
+                                        e.dataTransfer.setData("text/plain", String(i));
                                         e.dataTransfer.effectAllowed = "move";
                                     }, onDragOver: (e) => {
                                         if (e.dataTransfer.types.includes("application/apa-step-index") ||
                                             e.dataTransfer.types.includes("application/apa-action")) {
                                             e.preventDefault();
+                                            if (dragOverIdx !== i)
+                                                setDragOverIdx(i);
                                         }
-                                    }, onDrop: (e) => handleCardDrop(i, e), onClick: () => setSelectedIdx(i), onContextMenu: (e) => {
+                                    }, onDragLeave: () => {
+                                        if (dragOverIdx === i)
+                                            setDragOverIdx(null);
+                                    }, onDrop: (e) => { setDragOverIdx(null); handleCardDrop(i, e); }, onClick: () => setSelectedIdx(i), onContextMenu: (e) => {
                                         e.preventDefault();
                                         setMenu({ idx: i, x: e.clientX, y: e.clientY });
                                     }, className: `cursor-grab active:cursor-grabbing rounded-lg
-                            border px-3 py-2 text-xs ${selectedIdx === i
+                            border px-3 py-2 text-xs transition-colors ${selectedIdx === i
                                         ? "ring-1 ring-blue-300 border-blue-300 bg-blue-50"
-                                        : "border-slate-200 bg-white"}`, children: [_jsxs("span", { className: "font-semibold mr-2", children: [i + 1, ". ", s.id] }), _jsx("span", { className: "text-slate-400 font-mono", children: s.action || (s.type ? `[${s.type}]` : "(未设置)") })] }, s.id || i))) }), _jsx("button", { onClick: () => setSteps(prev => [...prev, blankStep(prev.length)]), className: "w-full mt-2 py-2 text-xs border border-dashed border-slate-300\n                       rounded-lg text-slate-400 hover:border-blue-400 transition-colors", children: "\uFF0B \u6DFB\u52A0\u6B65\u9AA4" }), _jsxs("details", { className: "mt-4", children: [_jsx("summary", { className: "text-xs text-slate-400 cursor-pointer", children: "YAML" }), _jsx("textarea", { className: "w-full mt-1 p-2 text-xs font-mono border rounded resize-y min-h-[120px]", rows: 10, value: yamlText, onChange: e => setYamlText(e.target.value) }), _jsxs("div", { className: "flex gap-2 mt-1", children: [_jsx("button", { onClick: () => void syncToYaml(), className: "px-3 py-1 text-xs border rounded hover:bg-slate-50", children: "\u8868\u5355 \u2192 YAML" }), _jsx("button", { onClick: () => void loadFromYaml(), className: "px-3 py-1 text-xs border rounded hover:bg-slate-50", children: "YAML \u2192 \u8868\u5355" })] })] })] })] }), _jsx(Drawer, { open: runOpen, onClose: () => setRunOpen(false), height: 280, title: "\u8BD5\u8FD0\u884C", children: _jsx("div", { className: "p-3", children: _jsx(TestRunPanel, { yaml: yamlText }) }) }), editIdx != null && steps[editIdx] && (_jsx(StepEditDialog, { open: editIdx !== null, step: steps[editIdx], meta: steps[editIdx].action
+                                        : dragOverIdx === i
+                                            ? "border-dashed border-blue-400 bg-blue-50/60"
+                                            : "border-slate-200 bg-white"}`, children: [_jsxs("span", { className: "font-semibold mr-2", children: [i + 1, ". ", s.id] }), _jsx("span", { className: "text-slate-400 font-mono", children: s.action || (s.type ? `[${s.type}]` : "(未设置)") })] }, s.id || i))) }), _jsx("button", { onClick: () => setSteps(prev => [...prev, blankStep(prev.length)]), className: "w-full mt-2 py-2 text-xs border border-dashed border-slate-300\n                       rounded-lg text-slate-400 hover:border-blue-400 transition-colors", children: "\uFF0B \u6DFB\u52A0\u6B65\u9AA4" }), _jsxs("details", { className: "mt-4", children: [_jsx("summary", { className: "text-xs text-slate-400 cursor-pointer", children: "YAML" }), _jsx("textarea", { className: "w-full mt-1 p-2 text-xs font-mono border rounded resize-y min-h-[120px]", rows: 10, value: yamlText, onChange: e => setYamlText(e.target.value) }), _jsxs("div", { className: "flex gap-2 mt-1", children: [_jsx("button", { onClick: () => void syncToYaml(), className: "px-3 py-1 text-xs border rounded hover:bg-slate-50", children: "\u8868\u5355 \u2192 YAML" }), _jsx("button", { onClick: () => void loadFromYaml(), className: "px-3 py-1 text-xs border rounded hover:bg-slate-50", children: "YAML \u2192 \u8868\u5355" })] })] })] })] }), _jsx(Drawer, { open: runOpen, onClose: () => setRunOpen(false), height: 280, title: "\u8BD5\u8FD0\u884C", children: _jsx("div", { className: "p-3", children: _jsx(TestRunPanel, { yaml: yamlText }) }) }), editIdx != null && steps[editIdx] && (_jsx(StepEditDialog, { open: editIdx !== null, step: steps[editIdx], meta: steps[editIdx].action
                     ? catalog[steps[editIdx].action]
                     : undefined, availableVars: availableVariables(steps, editIdx), onClose: () => setEditIdx(null), onSave: (next) => updateStep(editIdx, next), onDelete: () => { deleteStep(editIdx); setSelectedIdx(null); } })), _jsxs("div", { className: "px-4 py-1 bg-slate-900 text-slate-300 text-xs flex justify-between", children: [_jsx("span", { children: statusMsg }), _jsx("span", { children: currentFile })] }), menu && (_jsx("div", { className: "fixed inset-0 z-40", onClick: () => setMenu(null), onContextMenu: (e) => { e.preventDefault(); setMenu(null); }, children: _jsxs("div", { style: { left: menu.x, top: menu.y }, className: "absolute bg-white border border-slate-200\n                          rounded-lg shadow-lg py-1 w-36 text-xs", children: [_jsx("button", { onClick: () => duplicateStep(menu.idx), className: "w-full px-3 py-1.5 text-left hover:bg-slate-50", children: "\u29C9 \u590D\u5236\u6B65\u9AA4" }), _jsx("button", { onClick: () => blankAt(menu.idx), className: "w-full px-3 py-1.5 text-left hover:bg-slate-50", children: "\u2191 \u5728\u524D\u9762\u63D2\u5165" }), _jsx("button", { onClick: () => blankAt(menu.idx + 1), className: "w-full px-3 py-1.5 text-left hover:bg-slate-50", children: "\u2193 \u5728\u540E\u9762\u63D2\u5165" }), _jsx("div", { className: "my-0.5 border-t border-slate-100" }), _jsx("button", { onClick: () => deleteStep(menu.idx), className: "w-full px-3 py-1.5 text-left text-red-600\n                         hover:bg-red-50", children: "\u2715 \u5220\u9664\u6B65\u9AA4" })] }) })), recording && (_jsx("div", { className: "fixed inset-0 bg-black/40 flex items-center\n                        justify-center z-50", children: _jsxs("div", { className: "bg-white rounded-xl shadow-xl p-5 w-[380px]", children: [_jsx("p", { className: "text-sm font-semibold mb-3", children: "\u6D4F\u89C8\u5668\u64CD\u4F5C\u5F55\u5236" }), recording.phase === "enter" ? (_jsxs(_Fragment, { children: [_jsx("input", { autoFocus: true, className: "w-full px-3 py-2 text-sm border rounded-md mb-3", placeholder: "\u8D77\u59CB URL\uFF08https://\u2026\uFF09", value: recording.url, onChange: e => setRecording({ ...recording,
                                         url: e.target.value }), onKeyDown: e => {

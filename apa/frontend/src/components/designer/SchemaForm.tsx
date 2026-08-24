@@ -6,7 +6,7 @@
  *
  * 设计模式：策略模式 —— 根据 schema type 分派到不同的控件组件。
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { VariableInfo } from "../../hooks/useVariableRegistry";
 
 interface SchemaProp {
@@ -28,18 +28,48 @@ function VarPicker({ vars, onPick }: {
   vars: VariableInfo[]; onPick: (path: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  // U3: fixed 定位 + 实时坐标 —— 逃逸弹窗 overflow 裁剪
+  function toggle() {
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      const width = 256;
+      setPos({
+        top: Math.min(r.bottom + 4, window.innerHeight - 200),
+        left: Math.max(8, Math.min(r.right - width,
+                                   window.innerWidth - width - 8)),
+      });
+    }
+    setOpen(!open);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open]);
+
   if (!vars.length) return null;
   return (
     <div className="relative">
-      <button
+      <button ref={btnRef}
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={toggle}
         className="text-[10px] text-blue-500 hover:text-blue-700 px-1"
         title="引用前序步骤输出"
       >{"{}"}</button>
-      {open && (
-        <div className="absolute z-50 mt-1 w-64 bg-white border rounded-lg shadow-lg
-                        max-h-48 overflow-y-auto right-0">
+      {open && pos && (
+        <div style={{ position: "fixed", top: pos.top, left: pos.left,
+                      width: 256 }}
+             className="z-[60] bg-white border rounded-lg shadow-lg
+                        max-h-48 overflow-y-auto">
           {vars.map(v => (
             <div key={v.path}
               className="px-3 py-1.5 hover:bg-blue-50 cursor-pointer text-xs"

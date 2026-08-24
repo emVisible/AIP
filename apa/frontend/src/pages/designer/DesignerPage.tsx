@@ -25,10 +25,12 @@ import { StepEditDialog } from "../../components/designer/StepEditDialog";
 import { TestRunPanel } from "../../components/designer/TestRunPanel";
 import { SpyPanel } from "../../components/designer/SpyPanel";
 import { ScrapePanel } from "../../components/designer/ScrapePanel";
-import { Badge, Button, Drawer } from "../../components/ui";
+import { Badge, Button, Drawer, IconButton } from "../../components/ui";
 import { availableVariables } from "../../hooks/useVariableRegistry";
 import {
   FolderOpen,
+  PanelLeftClose,
+  PanelLeftOpen,
   Save,
   SquareDot,
   Terminal,
@@ -117,7 +119,13 @@ function DesignerInner() {
 
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<Node>([]);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
+  /** U4: fitView 只在首次挂载执行一次，避免编辑时视图跳动。 */
+  useEffect(() => {
+    const t = setTimeout(() => fitView({ padding: 0.1 }), 60);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   /** 新建节点的落点（画布流坐标），同步时优先于网格默认值。 */
   const dropPosRef = useRef(new Map<string, { x: number; y: number }>());
   /** 步骤卡右键菜单状态。 */
@@ -125,10 +133,23 @@ function DesignerInner() {
                                  | null>(null);
   /** 影刀式步骤编辑弹窗：当前编辑的步骤下标。 */
   const [editIdx, setEditIdx] = useState<number | null>(null);
+  /** U7: 排序拖拽悬停的目标卡下标（插入位置指示）。 */
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   /** 试运行底部抽屉。 */
   const [runOpen, setRunOpen] = useState(false);
   /** 左栏工具面板 Tab。 */
   const [toolTab, setToolTab] = useState<"" | "spy" | "scrape">("");
+  /** U6: 目录搜索词（跨 Tab 保留）。 */
+  const [catalogFilter, setCatalogFilter] = useState("");
+  /** U8: 左栏折叠（窄屏可用性）。 */
+  const [leftOpen, setLeftOpen] = useState(true);
+
+  // U5: 画布高度 = 节点最低边 + padding（随自由拖拽自适应）
+  const canvasHeight = Math.max(
+    280,
+    ...rfNodes.map((n) => n.position.y + 110),
+    60,
+  ) + 24;
 
   // steps → RF graph sync（保留用户拖动过的节点位置）
   useEffect(() => {
@@ -231,6 +252,8 @@ function DesignerInner() {
   }
 
   function handleCardDrop(target: number, e: React.DragEvent) {
+    // U1: 阻断向画布容器冒泡——否则目录动作会二次插入（卡片后 + 末尾）
+    e.stopPropagation();
     const from = readDnDStepIndex(e.nativeEvent as DragEvent);
     if (from === null) {
       // 目录动作落到步骤卡上 → 插到该卡之后
@@ -495,12 +518,18 @@ function DesignerInner() {
       </header>
 
       {/* 三面板 */}
-      <div className="flex-1 grid grid-cols-[240px_1fr] overflow-hidden relative">
+      <div className={`flex-1 grid overflow-hidden relative ${
+        leftOpen ? "grid-cols-[240px_1fr]" : "grid-cols-[36px_1fr]"}`}>
 
         {/* 左：目录 / 工具 / 资产 */}
         <aside className="border-r border-slate-200 bg-white flex flex-col
                           overflow-hidden">
+          {leftOpen ? (
+          <>
           <nav className="flex items-center gap-1 px-2 pt-2">
+            <IconButton label="收起侧栏" onClick={() => setLeftOpen(false)}>
+              <PanelLeftClose size={13} />
+            </IconButton>
             {([["", "动作"], ["spy", "拾取"],
                ["scrape", "抓取"]] as const).map(([k, label]) => (
               <button key={k} onClick={() => setToolTab(k)}
@@ -514,9 +543,12 @@ function DesignerInner() {
           </nav>
           <div className="flex-1 overflow-y-auto p-2">
             {toolTab === "" && (
-              <CatalogPanel onInsert={(action: string) => {
-                setSteps(prev => [...prev, stepFromAction(action, prev.length)]);
-              }} />
+              <CatalogPanel
+                filter={catalogFilter}
+                onFilterChange={setCatalogFilter}
+                onInsert={(action: string) => {
+                  setSteps(prev => [...prev, stepFromAction(action, prev.length)]);
+                }} />
             )}
             {toolTab === "spy" && <SpyPanel onCapture={captureSpyElement} />}
             {toolTab === "scrape" && <ScrapePanel onGenerate={addGeneratedSteps} />}
@@ -542,18 +574,31 @@ function DesignerInner() {
               </div>
             </details>
           </div>
-        </aside>
+                  </>
+          ) : (
+            <div className="flex flex-col items-center pt-2 gap-2">
+              <IconButton label="展开侧栏" onClick={() => setLeftOpen(true)}>
+                <PanelLeftOpen size={13} />
+              </IconButton>
+              <button onClick={() => setLeftOpen(true)}
+                className="text-[10px] text-slate-400 hover:text-slate-600"
+                style={{ writingMode: "vertical-rl" }}>
+                动作目录
+              </button>
+            </div>
+          )}
+</aside>
 
         {/* 中：画布 + 步骤编辑 */}
         <div className="overflow-y-auto p-3">
-          <div style={{ height: Math.max(280, rfNodes.length * 80 + 60) }}
+          <div style={{ height: canvasHeight }}
                className="border rounded-xl min-h-[250px] overflow-hidden"
                onDragOver={handleCanvasDragOver}
                onDrop={handleCanvasDrop}>
             <ReactFlow
               nodes={rfNodes} edges={rfEdges}
               onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
-              nodeTypes={nodeTypes} fitView
+              nodeTypes={nodeTypes}
             >
               <Background variant={BackgroundVariant.Dots}
                           gap={20} size={1.5} color="#cbd5e1" />
@@ -568,6 +613,7 @@ function DesignerInner() {
                 onDragStart={(e) => {
                   e.dataTransfer.setData("application/apa-step-index",
                                          String(i));
+                  e.dataTransfer.setData("text/plain", String(i));
                   e.dataTransfer.effectAllowed = "move";
                 }}
                 onDragOver={(e) => {
@@ -575,19 +621,25 @@ function DesignerInner() {
                     "application/apa-step-index") ||
                       e.dataTransfer.types.includes("application/apa-action")) {
                     e.preventDefault();
+                    if (dragOverIdx !== i) setDragOverIdx(i);
                   }
                 }}
-                onDrop={(e) => handleCardDrop(i, e)}
+                onDragLeave={() => {
+                  if (dragOverIdx === i) setDragOverIdx(null);
+                }}
+                onDrop={(e) => { setDragOverIdx(null); handleCardDrop(i, e); }}
                 onClick={() => setSelectedIdx(i)}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   setMenu({ idx: i, x: e.clientX, y: e.clientY });
                 }}
                 className={`cursor-grab active:cursor-grabbing rounded-lg
-                            border px-3 py-2 text-xs ${
+                            border px-3 py-2 text-xs transition-colors ${
                   selectedIdx === i
                     ? "ring-1 ring-blue-300 border-blue-300 bg-blue-50"
-                    : "border-slate-200 bg-white"}`}>
+                    : dragOverIdx === i
+                      ? "border-dashed border-blue-400 bg-blue-50/60"
+                      : "border-slate-200 bg-white"}`}>
                 <span className="font-semibold mr-2">{i + 1}. {s.id}</span>
                 <span className="text-slate-400 font-mono">
                   {s.action || (s.type ? `[${s.type}]` : "(未设置)")}

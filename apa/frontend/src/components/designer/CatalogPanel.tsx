@@ -12,8 +12,15 @@ export const FLOW_NODES: [string, string][] = [
 ];
 
 /** 动作目录侧栏 —— 单一职责：展示+搜索+选中回调。 */
-export function CatalogPanel({ onInsert }: { onInsert: (action: string) => void }) {
-  const [filter, setFilter] = useState("");
+export function CatalogPanel({ onInsert, filter, onFilterChange }: {
+  onInsert: (action: string) => void;
+  /** 受控搜索词（状态提升：左栏 Tab 切换不丢失） */
+  filter?: string;
+  onFilterChange?: (v: string) => void;
+}) {
+  const [inner, setInner] = useState("");
+  const filter_ = filter ?? inner;
+  const setFilter = onFilterChange ?? setInner;
 
   const { data: catalog = {} } = useQuery({
     queryKey: ["registry", "actions"],
@@ -21,13 +28,13 @@ export function CatalogPanel({ onInsert }: { onInsert: (action: string) => void 
   });
 
   const flowItems = useMemo(() => {
-    const q = filter.toLowerCase();
+    const q = filter_.toLowerCase();
     return FLOW_NODES.filter(([n, d]) =>
       !q || n.toLowerCase().includes(q) || d.toLowerCase().includes(q));
   }, [filter]);
 
   const groups = useMemo(() => {
-    const q = filter.toLowerCase();
+    const q = filter_.toLowerCase();
     const byDomain: Record<string, [string, ActionMeta][]> = {};
     for (const [name, meta] of Object.entries(
       catalog as Record<string, ActionMeta>,
@@ -47,7 +54,7 @@ export function CatalogPanel({ onInsert }: { onInsert: (action: string) => void 
       <input
         className="w-full px-2 py-1 text-xs border border-slate-200 rounded"
         placeholder="搜索动作…"
-        value={filter}
+        value={filter_}
         onChange={(e) => setFilter(e.target.value)}
       />
       <div className="max-h-[400px] overflow-y-auto">
@@ -60,6 +67,8 @@ export function CatalogPanel({ onInsert }: { onInsert: (action: string) => void 
                 draggable
                 onDragStart={(e) => {
                   e.dataTransfer.setData("application/apa-action", name);
+                  // U2: Firefox 需 text/plain 才稳定启动 DnD 会话
+                  e.dataTransfer.setData("text/plain", name);
                   e.dataTransfer.effectAllowed = "copy";
                 }}
                 onClick={() => onInsert(name)}
@@ -83,6 +92,8 @@ export function CatalogPanel({ onInsert }: { onInsert: (action: string) => void 
                 draggable
                 onDragStart={(e) => {
                   e.dataTransfer.setData("application/apa-action", name);
+                  // U2: Firefox 需 text/plain 才稳定启动 DnD 会话
+                  e.dataTransfer.setData("text/plain", name);
                   e.dataTransfer.effectAllowed = "copy";
                 }}
                 onClick={() => onInsert(name)}

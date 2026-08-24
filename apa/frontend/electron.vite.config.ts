@@ -6,11 +6,9 @@ import { resolve } from "path";
 /**
  * electron-vite 统一配置 —— main / preload / renderer 三进程。
  *
- * renderer 段继承原 vite.config.ts（React + Tailwind + /api proxy）；
- * dev 模式下 proxy 把 /api/* 转发到 Python serve，设计器目录正常加载。
+ * renderer proxy 把 /api/* 转发到 Python serve（dev 默认 :8686）。
  */
 export default defineConfig({
-  // ---- 主进程（TypeScript）----
   main: {
     plugins: [externalizeDepsPlugin()],
     build: {
@@ -20,8 +18,6 @@ export default defineConfig({
       },
     },
   },
-
-  // ---- Preload 安全桥（TypeScript）----
   preload: {
     plugins: [externalizeDepsPlugin()],
     build: {
@@ -31,8 +27,6 @@ export default defineConfig({
       },
     },
   },
-
-  // ---- 渲染器（React SPA）----
   renderer: {
     root: ".",
     plugins: [react(), tailwindcss()],
@@ -45,7 +39,10 @@ export default defineConfig({
     server: {
       port: 5173,
       proxy: {
-        "/api": { target: "http://127.0.0.1:8686", changeOrigin: true },
+        "/api": {
+          target: "http://127.0.0.1:8686",
+          changeOrigin: true,
+        },
       },
     },
   },

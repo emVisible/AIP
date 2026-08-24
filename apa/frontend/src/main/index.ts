@@ -1,12 +1,15 @@
 /**
- * APA Desktop 主进程 —— Python sidecar 编排 + 窗口管理 + overlay IPC。
+ * APA Desktop 主进程 —— 窗口先行，sidecar 异步就绪。
+ *
+ * 核心原则：窗口永远先创建（用户看到东西），
+ *           后端服务异步启动（数据渐进加载）。
  *
  * 双模式：
- *   dev（!app.isPackaged）→ .venv python + 仓库资源
+ *   dev  → .venv python + vite HMR(localhost:5173) + /api proxy
  *   packaged → Resources/apa-server 冻结二进制 + userData 可写目录
  */
 import { app, BrowserWindow, ipcMain, screen } from "electron";
-import { spawn, execSync, type ChildProcess } from "child_process";
+import { spawn, type ChildProcess } from "child_process";
 import fs from "fs";
 import path from "path";
 import net from "net";
@@ -14,8 +17,9 @@ import net from "net";
 import { IpcChannels } from "../shared/ipc-types";
 
 const isDev = !app.isPackaged;
+const VITE_PORT = 5173;
 
-// ---- 布局解析 ---------------------------------------------------------------
+// ---- 布局 ---------------------------------------------------------------------
 
 interface Layout {
   apaDir: string;
@@ -29,6 +33,7 @@ interface Layout {
 
 function resolveLayout(): Layout {
   if (isDev) {
+    // __dirname = <frontend>/out/main → 上三级 = apa/
     const apaDir = path.resolve(__dirname, "..", "..", "..");
     return {
       apaDir,
@@ -68,14 +73,16 @@ function freePort(): Promise<number> {
   });
 }
 
-function waitHealthy(port: number, timeoutMs = 30_000): Promise<void> {
+function waitHealthy(port: number, timeoutMs = 20_000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const poll = (): void => {
       fetch(`http://127.0.0.1:${port}/api/processes`)
-        .then((r) => (r.ok ? resolve() : setTimeout(poll, 500)))
-        .catch(() => setTimeout(poll, 500));
-      if (Date.now() > deadline) reject(new Error("timeout"));
+        .then((r) => resolve(r.ok))
+        .catch(() => {
+          if (Date.now() < deadline) setTimeout(poll, 500);
+          else resolve(false);
+        });
     };
     poll();
   });
@@ -83,10 +90,10 @@ function waitHealthy(port: number, timeoutMs = 30_000): Promise<void> {
 
 // ---- Python sidecar -----------------------------------------------------------
 
-async function startServe(port: number, L: Layout): Promise<void> {
+async function startServe(port: number, L: Layout): Promise<boolean> {
   const isFrozen = !!L.serverBin;
   const bin = isFrozen
-    ? (L.serverBin ? path.join(L.serverBin, "apa_server") : "")
+    ? path.join(L.serverBin ?? "", "apa_server")
     : L.venvPy ?? "";
   const args = isFrozen
     ? ["serve", "--port", String(port),
@@ -95,76 +102,83 @@ async function startServe(port: number, L: Layout): Promise<void> {
     : ["-m", "apa_core.cli", "serve",
        "--port", String(port),
        "--journals", L.journalGlob,
-       "--processes-dir", L.processesDir,
-       "--frontend-dist", path.join(__dirname, "..", "..", "dist")];
+       "--processes-dir", L.processesDir];
 
-  const logFd = fs.openSync(L.logFile, "a");
-  pythonProc = spawn(bin, args, {
-    cwd: L.cwd, stdio: ["ignore", logFd, logFd],
-  });
-
-  await waitHealthy(port);
-  console.log(`[desktop] serve ready on :${port}`);
-}
-
-// ---- 启动前置检查 -------------------------------------------------------------
-
-function checkRuntime(L: Layout): boolean {
   try {
-    if (isDev && L.venvPy) {
-      execSync(`"${L.venvPy}" -c "import apa_core"`, { timeout: 10_000 });
-    } else if (L.serverBin) {
-      fs.accessSync(path.join(L.serverBin, "apa_server"),
-                     fs.constants.X_OK);
-    }
-    return true;
-  } catch {
+    const logFd = fs.openSync(L.logFile, "a");
+    pythonProc = spawn(bin, args, {
+      cwd: L.cwd, stdio: ["ignore", logFd, logFd],
+    });
+  } catch (e) {
+    console.error("[desktop] failed to spawn python:", e);
     return false;
   }
+
+  const ok = await waitHealthy(port);
+  if (ok) console.log(`[desktop] serve ready on :${port}`);
+  else console.warn(`[desktop] serve health check timeout on :${port}`);
+  return ok;
 }
 
-// ---- 主入口 -------------------------------------------------------------------
+// ---- 窗口创建（永不失败——先给用户看东西）---------------------------------------
 
-async function main(): Promise<void> {
-  const L = resolveLayout();
-
-  if (!checkRuntime(L)) {
-    console.error(
-      "[desktop] server runtime not available.\n" +
-      (isDev
-        ? "         Run first: cd apa/frontend && pnpm setup"
-        : "         Runtime missing — reinstall the application"));
-    app.quit();
-    return;
-  }
-
-  const port = await freePort();
-  await startServe(port, L);
-
+function createWindow(loadUrl?: string): void {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 900,
     title: "APA Desktop",
+    show: true,                       // ← 立即可见
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, "../preload/index.js"),
+      preload: path.join(__dirname, "../preload/index.mjs"),
     },
   });
 
-  // dev 模式加载 vite HMR；packaged 模式加载 Python serve 的 SPA
+  if (loadUrl) {
+    mainWindow.loadURL(loadUrl).catch(() => {
+      // 加载失败显示空白页而不是白屏崩溃
+      mainWindow?.loadURL(
+        "data:text/html,<h2 style='font-family:sans-serif'>Loading…</h2>");
+    });
+  }
+}
+
+// ---- 主流程：窗口先行，sidecar 异步 ---------------------------------------------
+
+async function main(): Promise<void> {
+  const L = resolveLayout();
+
+  // ① 立即创建窗口（用户先看到 UI）
   if (isDev) {
-    mainWindow.loadURL("http://localhost:5173");
+    createWindow(`http://localhost:${VITE_PORT}`);
   } else {
-    mainWindow.loadURL(`http://127.0.0.1:${port}`);
+    createWindow();   // packaged 模式等 sidecar 就绪后再加载 URL
   }
 
-  mainWindow.on("closed", () => {
-    if (pythonProc) pythonProc.kill("SIGTERM");
-    pythonProc = null;
-    mainWindow = null;
-  });
+  // ② 启动 Python sidecar（异步，不阻塞窗口）
+  const port = await freePort();
+
+  // dev 模式下把实际端口传给 vite proxy（通过环境变量）
+  if (isDev) {
+    process.env.APA_SERVE_PORT = String(port);
+  }
+
+  const healthy = await startServe(port, L);
+
+  // ③ packaged 模式：sidecar 就绪后加载页面
+  if (!isDev) {
+    const url = healthy
+      ? `http://127.0.0.1:${port}`
+      : "data:text/html," +
+        encodeURIComponent(
+          "<h2 style='font-family:sans-serif;color:#999'>" +
+          "Backend unavailable</h2>");
+    mainWindow?.loadURL(url);
+  }
+
+  console.log(`[desktop] ready (healthy=${healthy}, port=${port})`);
 }
 
 // ---- 拾取器 overlay -----------------------------------------------------------
@@ -175,23 +189,13 @@ function ensureOverlay(): BrowserWindow {
   if (overlayWin && !overlayWin.isDestroyed()) return overlayWin;
   const disp = screen.getPrimaryDisplay();
   overlayWin = new BrowserWindow({
-    x: disp.bounds.x,
-    y: disp.bounds.y,
-    width: disp.bounds.width,
-    height: disp.bounds.height,
-    transparent: true,
-    frame: false,
-    resizable: false,
-    movable: false,
-    fullscreenable: false,
-    skipTaskbar: true,
-    hasShadow: false,
-    show: true,
-    alwaysOnTop: true,
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-    },
+    x: disp.bounds.x, y: disp.bounds.y,
+    width: disp.bounds.width, height: disp.bounds.height,
+    transparent: true, frame: false,
+    resizable: false, movable: false,
+    fullscreenable: false, skipTaskbar: true,
+    hasShadow: false, show: true, alwaysOnTop: true,
+    webPreferences: { nodeIntegration: true, contextIsolation: false },
   });
   overlayWin.setIgnoreMouseEvents(true);
   overlayWin.loadFile(
@@ -216,10 +220,39 @@ function setupSpyIpc(): void {
   });
 }
 
+// ---- IPC handlers（桌面应用 OS 能力入口）----------------------------------------
+
+function setupOsIpc(): void {
+  /** 打开原生文件选择对话框 */
+  ipcMain.handle("os:pick-file", async (_, options?) => {
+    const { dialog } = await import("electron");
+    const result = await dialog.showOpenDialog({
+      properties: ["openFile"],
+      ...options,
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  /** 发送系统通知 */
+  ipcMain.handle("os:notify", async (_, { title, body }) => {
+    const { Notification } = await import("electron");
+    new Notification({ title: title || "APA", body: body || "" }).show();
+  });
+
+  /** 获取系统信息（调试用） */
+  ipcMain.handle("os:info", async () => ({
+    platform: process.platform,
+    arch: process.arch,
+    electronVersion: process.versions.electron,
+    nodeVersion: process.versions.node,
+  }));
+}
+
 // ---- 生命周期 -------------------------------------------------------------------
 
 app.whenReady().then(() => {
   setupSpyIpc();
+  setupOsIpc();
   void main();
 });
 

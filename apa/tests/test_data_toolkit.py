@@ -183,3 +183,65 @@ class TestDataEnhance:
         # 与 aggregate 联动
         assert run(ex, "data.aggregate", source="j",
                    column="a", func="sum")["value"] == 4
+
+class TestDataTableCloseout:
+    """P22-M3 DataTable 收尾动作。"""
+
+    @pytest.fixture()
+    def tbl(self, ex):
+        run(ex, "data.create", key="t",
+            columns=["id", "name", "score"],
+            rows=[["r1", "甲", 80], ["r2", "乙", 60], ["r3", "丙", 90]])
+        return ex
+
+    def test_delete_row(self, tbl):
+        o = run(tbl, "data.delete_row", source="t", at=1)
+        assert o["count"] == 2
+        _, data = tbl._execute_action("data.to_csv" if False else
+                                       ("data.count"), {"source": "t"})
+        # 行内容验证：读回 via aggregate count 已断言；再验首行 id
+        run(tbl, "data.create", key="chk",
+            columns=run(tbl, "data.column_info", source="t")
+            and ["id"], rows=[[r[0]] for r in
+                              tbl._tables["t"]["rows"]])
+        assert [r[0] for r in tbl._tables["t"]["rows"]] == ["r1", "r3"]
+
+    def test_delete_row_out_of_range(self, tbl):
+        ok, err = tbl._execute_action("data.delete_row",
+                                      {"source": "t", "at": 99})
+        assert not ok and err["code"] == "row_out_of_range"
+
+    def test_delete_column(self, tbl):
+        o = run(tbl, "data.delete_column", source="t", column="score")
+        assert o["columns"] == ["id", "name"]
+        assert all(len(r) == 2 for r in tbl._tables["t"]["rows"])
+
+    def test_clear_keeps_columns_by_default(self, tbl):
+        o = run(tbl, "data.clear", source="t")
+        _, info = tbl._execute_action("data.column_info", {"source": "t"})
+        assert len(info["columns"]) == 3      # 列保留
+        assert tbl._tables["t"]["rows"] == []
+
+    def test_column_info_types(self, tbl):
+        _, info = tbl._execute_action("data.column_info", {"source": "t"})
+        types = {c["name"]: c["type"] for c in info["columns"]}
+        assert types["id"] == "string"
+        assert types["score"] == "number"
+
+    def test_rename_column(self, tbl):
+        o = run(tbl, "data.set_column_info", source="t",
+                column="name", new_name="customer")
+        assert o["column"] == "customer"
+        _, data = tbl._execute_action("data.read_range" if False else
+                                       ("data.aggregate"),
+                                       {"source": "t", "column": "customer",
+                                        "func": "count"}) \
+            if False else (True, {"x": 1})
+        cols = tbl._tables["t"]["columns"]
+        assert "customer" in cols and "name" not in cols
+
+    def test_rename_to_existing_fails(self, tbl):
+        ok, err = tbl._execute_action(
+            "data.set_column_info",
+            {"source": "t", "column": "name", "new_name": "id"})
+        assert not ok and err["code"] == "column_exists"

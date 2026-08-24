@@ -72,6 +72,12 @@ class DataExecutor(AIPExecutor):
             "data.slice": self._data_slice,
             "data.json_to_table": self._data_json_to_table,
             "data.merge": self._data_merge,
+            # ---- M3 DataTable 收尾 ----
+            "data.delete_row": self._data_delete_row,
+            "data.delete_column": self._data_delete_column,
+            "data.clear": self._data_clear,
+            "data.column_info": self._data_column_info,
+            "data.set_column_info": self._data_set_column_info,
             # ---- M2 流程控制配套 ----
             "core.delay": self._core_delay,
             "data.count": self._data_count,
@@ -629,3 +635,86 @@ class DataExecutor(AIPExecutor):
             _t.sleep(interval)
         return False, {"code": "wait_timeout", "glob": pattern,
                        "timeout_s": timeout_s}
+
+    def _data_delete_row(self, p):
+        src_key = p.get("source", "default")
+        tbl = self._get_table(src_key)
+        idx = int(p["at"])
+        if 0 <= idx < len(tbl["rows"]):
+            tbl["rows"].pop(idx)
+        else:
+            return False, {"code": "row_out_of_range",
+                           "at": idx, "rows": len(tbl["rows"])}
+        self._set_table(src_key, tbl)
+        return True, {"count": len(tbl["rows"])}
+
+    def _data_delete_column(self, p):
+        src_key = p.get("source", "default")
+        tbl = self._get_table(src_key)
+        col = str(p["column"])
+        if col not in tbl["columns"]:
+            return False, {"code": "column_not_found", "column": col}
+        ci = tbl["columns"].index(col)
+        tbl["columns"].pop(ci)
+        for r in tbl["rows"]:
+            if ci < len(r):
+                r.pop(ci)
+        self._set_table(src_key, tbl)
+        return True, {"columns": list(tbl["columns"])}
+
+    def _data_clear(self, p):
+        src_key = p.get("source", "default")
+        keep_cols = bool(p.get("keep_columns", True))
+        cols = list(self._get_table(src_key)["columns"]) \
+            if keep_columns_guard(keep_cols) else []
+        self._set_table(src_key,
+                        {"columns": cols, "rows": []})
+        return True, {"cleared": True, "kept_columns": bool(cols)}
+
+    def _data_column_info(self, p):
+        """列信息：名称+类型推断+非空计数。"""
+        tbl = self._get_table(p.get("source", ""))
+        infos = []
+        for ci, col in enumerate(tbl["columns"]):
+            vals = [r[ci] for r in tbl["rows"] if ci < len(r)]
+            non_null = [v for v in vals if v is not None]
+            t = "empty"
+            if non_null:
+                if all(isinstance(v, (int, float))
+                        and not isinstance(v, bool) for v in non_null):
+                    t = "number"
+                elif all(isinstance(v, bool) for v in non_null):
+                    t = "boolean"
+                else:
+                    t = "string"
+            infos.append({"name": str(col), "type": t,
+                          "non_null": len(non_null),
+                          "total": len(tbl["rows"])})
+        return True, {"columns": infos}
+
+    def _data_set_column_info(self, p):
+        """设置列显示名（重命名）与类型标注（仅元信息，不改值）。"""
+        tbl = self._get_table(p.get("source", ""))
+        col = str(p["column"])
+        new_name = p.get("new_name")
+        type_tag = p.get("type_tag")
+        meta = tbl.setdefault("_meta", {})
+        col_meta = meta.setdefault(col, {})
+        if new_name:
+            if new_name in tbl["columns"] and new_name != col:
+                return False, {"code": "column_exists",
+                               "column": new_name}
+            ci = tbl["columns"].index(col)
+            tbl["columns"][ci] = new_name
+            col_meta = meta.pop(col, {})
+            meta[new_name] = col_meta
+            col = new_name
+        if type_tag:
+            col_meta["type_tag"] = str(type_tag)
+        self._set_table(p.get("source", "default"), tbl)
+        return True, {"column": col,
+                      **col_meta}
+
+def keep_columns_guard(flag) -> bool:
+    return bool(flag)
+

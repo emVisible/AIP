@@ -741,3 +741,74 @@ wait.file:
   risk: L0
   timeout_ms: 620000
   retries: 0
+
+
+data.delete_row:
+  executor_domain: data
+  description: "删除指定下标行（0 基）"
+  params:
+    type: object
+    required: [source, at]
+    properties:
+      source: { type: string }
+      at: { type: integer, minimum: 0 }
+  idempotency: none
+  risk: L1
+  timeout_ms: 10000
+  retries: 0
+
+data.delete_column:
+  executor_domain: data
+  description: "删除列"
+  params:
+    type: object
+    required: [source, column]
+    properties:
+      source: { type: string }
+      column: { type: string }
+  idempotency: none
+  risk: L1
+  timeout_ms: 10000
+  retries: 0
+
+data.clear:
+  executor_domain: data
+  description: "清空表格行（重放为 no-op，幂等）"
+  params:
+    type: object
+    required: [source]
+    properties:
+      source: { type: string }
+      keep_columns: { type: boolean, default: true }
+  idempotency: required
+  risk: L1
+  timeout_ms: 10000
+  retries: 1
+
+data.column_info:
+  executor_domain: data
+  description: "列元信息：名称/类型推断/非空计数"
+  params:
+    type: object
+    required: [source]
+    properties: { source: { type: string } }
+  idempotency: required
+  risk: L0
+  timeout_ms: 10000
+  retries: 2
+
+data.set_column_info:
+  executor_domain: data
+  description: "设置列显示名与类型标注（元信息）"
+  params:
+    type: object
+    required: [source, column]
+    properties:
+      source: { type: string }
+      column: { type: string }
+      new_name: { type: string }
+      type_tag: { type: string }
+  idempotency: required
+  risk: L1
+  timeout_ms: 10000
+  retries: 1

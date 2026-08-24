@@ -105,6 +105,15 @@ def _cmd_serve(args) -> int:
         except Exception as e:  # noqa: BLE001
             print(f"[serve] intent compiler disabled: {e}")
 
+    failure_diagnostic = None
+    if _ai_status()["mode"] == "cascade_llm":
+        try:
+            from .intent.diagnose import FailureDiagnostic
+
+            failure_diagnostic = FailureDiagnostic(llm_client)
+        except Exception as e:  # noqa: BLE001
+            print(f"[serve] failure diagnostic disabled: {e}")
+
     fast_app = create_app(
         journals=args.journals,
         processes_dir=args.processes_dir or None,
@@ -116,6 +125,7 @@ def _cmd_serve(args) -> int:
         resolve_task=None,
         serve_app=serve_app,
         intent_compiler=intent_compiler,
+        failure_diagnostic=failure_diagnostic,
     )
 
     print(f"==> APA 常驻服务: http://127.0.0.1:{args.port}   （Ctrl-C 退出）")

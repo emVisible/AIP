@@ -84,11 +84,13 @@ def create_app(
     spy_service: Optional[Any] = None,
     serve_app: Optional[Any] = None,
     intent_compiler=None,
+    failure_diagnostic=None,
 ) -> FastAPI:
     """构建 FastAPI 实例。依赖注入：所有外部交互通过参数传入。"""
     _recorder = None  # RecorderService 惰性单例（录制会话注册表）
     _spy = spy_service  # SpyService 注入点（None 则惰性构造）
     _intent = intent_compiler  # IntentCompiler 注入
+    _diag = failure_diagnostic  # FailureDiagnostic 注入
     _scrape = None  # ScrapeWizardService 惰性单例
 
     from .studio import StudioServer  # 延迟导入复用现有逻辑
@@ -394,6 +396,44 @@ def create_app(
             "questions": result.questions,
             "error": result.error,
         }
+
+    # ---- 失败回流诊断（Phase C）----
+    @app.post("/api/intent/explain-failure")
+    async def explain_failure(body: dict):
+        session = str(body.get("session", "")).strip()
+        if not session:
+            raise HTTPException(400, "session required")
+        if _diag is None:
+            raise HTTPException(
+                501, "failure diagnostic not configured (需 LLM Key)")
+
+        records: List[Dict[str, Any]] = []
+        for path in server.journal_paths:
+            try:
+                from .persist import journal_records
+
+                for rec in journal_records(path):
+                    if rec.get("session") == session:
+                        records.append(rec)
+            except OSError:
+                continue
+        if not records:
+            raise HTTPException(404, f"no journal found for {session!r}")
+
+        ctx = _diag.extract_failures(records)
+        process_yaml = ""
+        proc_id = next((r.get("process_id") for r in records
+                        if r.get("process_id")), None)
+        if proc_id and server.processes_dir:
+            from pathlib import Path as _P
+
+            pf = _P(server.processes_dir) / f"{proc_id}.yaml"
+            if pf.is_file():
+                process_yaml = pf.read_text(encoding="utf-8")[:3000]
+
+        out = _diag.explain(ctx, process_yaml=process_yaml)
+        out["failure_context"] = ctx
+        return out
 
     # ---- 定时任务 CRUD（M2）----
     @app.get("/api/jobs")

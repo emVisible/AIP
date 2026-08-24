@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Badge } from "../components/ui/primitives";
 import { JobsPanel } from "../components/jobs/JobsPanel";
+import { Dialog, Button as UiButton } from "../components/ui";
 import { api } from "../api/client";
 import { useSessions } from "../hooks/useSessions";
 import { stateTone } from "../lib/utils";
@@ -13,8 +14,32 @@ interface RunDetail {
 export function Runs() {
   const sessions = useSessions();
   const [tab, setTab] = useState<"runs" | "jobs">("runs");
+  const [diag, setDiag] = useState<null | {
+    session: string; loading: boolean;
+    explanation?: string; suggestion?: string; error?: string;
+  }>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [details, setDetails] = useState<Record<string, RunDetail>>({});
+
+
+  async function diagnoseSession(sid: string) {
+    setDiag({ session: sid, loading: true });
+    try {
+      const r = await fetch("/api/intent/explain-failure", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session: sid }),
+      });
+      const d = await r.json();
+      setDiag({ session: sid, loading: false,
+                explanation: d.explanation,
+                suggestion: d.suggestion,
+                error: d.detail ?? d.error });
+    } catch (e) {
+      setDiag({ session: sid, loading: false,
+                error: e instanceof Error ? e.message : String(e) });
+    }
+  }
 
   async function toggleDetail(sid: string) {
     if (expanded === sid) { setExpanded(null); return; }
@@ -76,6 +101,16 @@ export function Runs() {
               <div className="flex items-center gap-3">
                 <Badge tone={stateTone(s.state)}>{s.state}</Badge>
                 <span className="font-mono text-sm">{s.id}</span>
+                {(s.state === "FAILED" || s.outcome === "failed") && (
+                  <button
+                    onClick={(e) => { e.stopPropagation();
+                                      void diagnoseSession(s.id); }}
+                    className="text-[10px] px-1.5 py-0.5 rounded
+                               border border-violet-200 text-violet-600
+                               hover:bg-violet-50">
+                    APA 诊断
+                  </button>
+                )}
                 {s.outcome && (
                   <span className="text-xs text-slate-400">→ {s.outcome}</span>
                 )}
@@ -123,6 +158,47 @@ export function Runs() {
       </div>
       </>
       )}
+
+      {/* 失败诊断弹窗 */}
+      <Dialog open={!!diag} onClose={() => setDiag(null)} width={520}>
+        {diag && (
+          <>
+            <div className="px-4 py-3 border-b border-slate-100">
+              <h2 className="text-sm font-semibold text-slate-800">
+                APA 失败诊断
+                <span className="ml-2 font-mono text-[10px]
+                                 text-slate-400">{diag.session}</span>
+              </h2>
+            </div>
+            <div className="px-4 py-3 space-y-3 text-xs max-h-[50vh]
+                            overflow-y-auto">
+              {diag.loading && (
+                <p className="text-slate-400">分析中…</p>
+              )}
+              {!diag.loading && diag.error && (
+                <p className="text-red-500">{diag.error}</p>
+              )}
+              {!diag.loading && diag.explanation && (
+                <div className="space-y-1">
+                  <p className="font-medium text-slate-600">根因</p>
+                  <p className="text-slate-700">{diag.explanation}</p>
+                </div>
+              )}
+              {!diag.loading && diag.suggestion && (
+                <div className="space-y-1">
+                  <p className="font-medium text-slate-600">修正建议</p>
+                  <p className="text-slate-700">{diag.suggestion}</p>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end px-4 py-2.5 border-t
+                            border-slate-100 bg-slate-50/50">
+              <UiButton size="sm" variant="ghost"
+                        onClick={() => setDiag(null)}>关闭</UiButton>
+            </div>
+          </>
+        )}
+      </Dialog>
     </div>
   );
 }

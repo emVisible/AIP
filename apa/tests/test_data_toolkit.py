@@ -245,3 +245,115 @@ class TestDataTableCloseout:
             "data.set_column_info",
             {"source": "t", "column": "name", "new_name": "id"})
         assert not ok and err["code"] == "column_exists"
+
+class TestOsCloseout:
+    """P22-M4 zip/unzip + process.kill。"""
+
+    @pytest.fixture()
+    def dex(self):
+        ex = DataExecutor.__new__(DataExecutor)
+        ex._tables = {}
+        return ex
+
+    def test_zip_roundtrip(self, dex, tmp_path):
+        src_dir = tmp_path / "docs"
+        src_dir.mkdir()
+        (src_dir / "a.txt").write_text("AAA")
+        sub = src_dir / "sub"
+        sub.mkdir()
+        (sub / "b.txt").write_text("BBB")
+        dest = tmp_path / "out.zip"
+
+        ok, out = dex._execute_action("file.zip", {
+            "paths": [str(src_dir)], "dest": str(dest)})
+        assert ok and out["files"] == 2
+
+        import zipfile
+        with zipfile.ZipFile(dest) as zf:
+            names = zf.namelist()
+        normalized = [n.replace("\\", "/") for n in names]
+        assert any(n.endswith("a.txt") for n in normalized) and \
+            any(n.endswith("b.txt") for n in normalized)
+
+    def test_unzip_with_traversal_guard(self, dex, tmp_path):
+        import zipfile
+
+        evil = tmp_path / "evil.zip"
+        with zipfile.ZipFile(evil, "w") as zf:
+            zf.writestr("../../evil.txt", "bad")
+        ok, err = dex._execute_action("file.unzip",
+                                      {"src": str(evil),
+                                       "dest_dir": str(tmp_path / "out")})
+        assert not ok and err["code"] == "unsafe_path"
+
+    def test_unzip_normal(self, dex, tmp_path):
+        import zipfile
+
+        src = tmp_path / "ok.zip"
+        with zipfile.ZipFile(src, "w") as zf:
+            zf.writestr("inner/c.txt", "CONTENT")
+        out_dir = tmp_path / "extracted"
+        ok, out = dex._execute_action("file.unzip",
+                                      {"src": str(src),
+                                       "dest_dir": str(out_dir)})
+        assert ok and out["extracted"] == 1
+        assert (out_dir / "inner" / "c.txt").read_text() == "CONTENT"
+
+    def test_kill_by_pid(self, dex, monkeypatch):
+        import signal
+
+        killed = []
+        monkeypatch.setattr("apa_executors.data_executor.os.kill",
+                            lambda pid, sig: killed.append((pid, sig)))
+        ok, out = dex._execute_action("process.kill", {"pid": 4321})
+        assert ok and out["killed_pid"] == 4321
+        assert killed[0][1] == signal.SIGTERM
+
+    def test_kill_by_name(self, dex, monkeypatch):
+        calls = []
+
+        def fake_run(*a, **kw):
+            class R:
+                returncode = 0
+            calls.append(a[0])
+            return R()
+
+        import subprocess
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        ok, out = dex._execute_action("process.kill",
+                                      {"name": "stale_worker"})
+        assert ok and out["matched"] is True
+        assert calls[0][:2] == ["pkill", "-f"]
+
+    def test_missing_target(self, dex):
+        ok, err = dex._execute_action("process.kill", {})
+        assert not ok and err["code"] == "missing_param"
+
+
+class TestScreenshotAction:
+    def test_region_screenshot_writes_png(self):
+        """真实截屏（需屏幕录制权限；无权限走 capture_denied）。"""
+        from apa_executors.ax_executor import AXExecutor
+
+        ex = AXExecutor.__new__(AXExecutor)
+        ex.source = "t"
+        ex.session_id = "s_shot"
+        ex.context_store = None
+        try:
+            from apa_executors.macos_engine import InputEngine
+            ex._input = InputEngine()
+        except Exception:
+            ex._input = None
+        # _execute_action 需要 peer —— 用 object.__new__ 绕过
+        from types import SimpleNamespace
+        ex.peer = SimpleNamespace(session_id="s_shot")
+        ok, out = ex._execute_action(
+            "desktop.screenshot",
+            {"region": {"x": 0, "y": 0, "w": 100, "h": 80},
+             "path": "/tmp/apa_p22_shot.png"})
+        if ok:
+            import os as _os
+            assert _os.path.getsize("/tmp/apa_p22_shot.png") > 0
+            _os.unlink("/tmp/apa_p22_shot.png")
+        else:
+            assert out["code"] in ("capture_denied",)

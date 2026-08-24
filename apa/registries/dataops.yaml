@@ -812,3 +812,47 @@ data.set_column_info:
   risk: L1
   timeout_ms: 10000
   retries: 1
+
+file.zip:
+  executor_domain: data
+  description: "打包文件/目录到 zip（目录递归，原子落盘）"
+  params:
+    type: object
+    required: [paths, dest]
+    properties:
+      paths:
+        type: array
+        items: { type: string }
+        minItems: 1
+      dest: { type: string }
+  idempotency: required
+  risk: L1
+  timeout_ms: 120000
+  retries: 1
+
+file.unzip:
+  executor_domain: data
+  description: "解压 zip 到目录（防路径穿越；同源重放覆盖幂等）"
+  params:
+    type: object
+    required: [src]
+    properties:
+      src: { type: string }
+      dest_dir: { type: string }
+  idempotency: required
+  risk: L1
+  timeout_ms: 120000
+  retries: 1
+
+process.kill:
+  executor_domain: data
+  description: "终止进程（pid SIGTERM / name pkill 模糊匹配）"
+  params:
+    type: object
+    properties:
+      pid: { type: integer, minimum: 1 }
+      name: { type: string }
+  idempotency: none
+  risk: L3
+  timeout_ms: 15000
+  retries: 0

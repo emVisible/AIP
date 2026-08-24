@@ -170,3 +170,16 @@ def render_text_image(text: str, *, width: int = 600, height: int = 160,
     CTLineDraw(line, ctx)
 
     return Quartz.CGBitmapContextCreateImage(ctx)
+
+def save_cgimage_png(cgimage, path: str) -> None:
+    """CGImage → PNG 文件（ImageIO）。"""
+    from Foundation import NSURL
+
+    url = NSURL.fileURLWithPath_(str(path))
+    dest = Quartz.CGImageDestinationCreateWithURL(
+        url, "public.png", 1, None)
+    if dest is None:
+        raise RuntimeError(f"cannot write png: {path}")
+    Quartz.CGImageDestinationAddImage(dest, cgimage, None)
+    if not Quartz.CGImageDestinationFinalize(dest):
+        raise RuntimeError("png finalize failed")

@@ -203,3 +203,19 @@ desktop.humanize:
   risk: L0
   timeout_ms: 5000
   retries: 2
+
+desktop.screenshot:
+  executor_domain: desktop
+  description: "区域/全屏截屏 → PNG 落盘或 ContextStore 引用；同参重拍幂等"
+  params:
+    type: object
+    properties:
+      region:
+        type: object
+        description: "{x,y,w,h} 全局点坐标；缺省全屏"
+      path: { type: string, description: "落盘路径；缺省临时文件" }
+      output_context: { type: string }
+  idempotency: required
+  risk: L0
+  timeout_ms: 30000
+  retries: 1

@@ -40,6 +40,34 @@ class AXExecutor(AIPExecutor):
         pass
 
     def _execute_action(self, name: str, params: dict) -> Tuple[bool, dict]:
+        # M4：区域截屏（引擎 screenshot(region) 能力暴露）
+        if name == "desktop.screenshot":
+            import base64 as _b64
+
+            from . import screen_ocr as so
+
+            region = params.get("region")
+            img = so.capture_screen(region)
+            raw = img if isinstance(img, (bytes, bytearray)) else None
+            if raw is None:
+                # CGImage → PNG bytes（经 Vision handler 兼容路径：
+                # 直接存临时 png 由 Quartz 写出）
+                import tempfile as _tf
+
+                from Foundation import NSData  # noqa: F401
+
+                dest = params.get("path") or _tf.mktemp(suffix=".png")
+                so.save_cgimage_png(img, str(dest))
+                size = __import__("os").path.getsize(str(dest))
+                out = {"path": str(dest), "bytes": size}
+                ref = params.get("output_context")
+                if ref and self.context_store is not None:
+                    rr = self.context_store.make_ref(self.peer.session_id,
+                                                      str(ref))
+                    self.context_store.put(rr, out)
+                return True, {**out}
+            return True, {"bytes": len(raw)}
+
         # Phase A：模拟真人开关（作用于本执行器的 InputEngine）
         if name == "desktop.humanize":
             if self._input is None:

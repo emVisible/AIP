@@ -10,6 +10,7 @@ import json
 import os
 import re
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -94,6 +95,10 @@ class DataExecutor(AIPExecutor):
             "if.file_exists": self._if_file_exists,
             "if.dir_exists": self._if_dir_exists,
             "wait.file": self._wait_file,
+            # ---- M4 OS 补全 ----
+            "file.zip": self._file_zip,
+            "file.unzip": self._file_unzip,
+            "process.kill": self._process_kill,
         }
         fn = handler_map.get(name)
         if fn is None:
@@ -715,6 +720,78 @@ class DataExecutor(AIPExecutor):
         return True, {"column": col,
                       **col_meta}
 
+    def _file_zip(self, p):
+        """打包文件/目录到 zip（目录递归；原子落盘）。"""
+        import os
+        import zipfile
+
+        dest = str(p["dest"])
+        sources = [str(x) for x in (p.get("paths") or [])]
+        if not sources:
+            return False, {"code": "missing_param", "detail": "paths"}
+        d = os.path.dirname(dest) or "."
+        os.makedirs(d, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(suffix=".zip", dir=d)
+        os.close(fd)
+        count = 0
+        try:
+            with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+                for src in sources:
+                    sp = Path(src)
+                    if sp.is_dir():
+                        for root, _, files in os.walk(sp):
+                            for fn in files:
+                                full = Path(root) / fn
+                                arc = str(full.relative_to(sp.parent))
+                                zf.write(full, arc)
+                                count += 1
+                    elif sp.is_file():
+                        zf.write(sp, sp.name)
+                        count += 1
+            os.replace(tmp, dest)
+            return True, {"dest": dest, "files": count}
+        except Exception:
+            if os.path.exists(tmp):
+                os.unlink(tmp)
+            raise
+
+    def _file_unzip(self, p):
+        import zipfile
+
+        src = str(p["src"])
+        dest_dir = str(p.get("dest_dir") or
+                        Path(src).parent / Path(src).stem)
+        if not Path(src).is_file():
+            return False, {"code": "file_not_found", "src": src}
+        os.makedirs(dest_dir, exist_ok=True)
+        extracted = 0
+        with zipfile.ZipFile(src) as zf:
+            for name in zf.namelist():
+                target = (Path(dest_dir) / name).resolve()
+                if not str(target).startswith(
+                        str(Path(dest_dir).resolve())):
+                    return False, {"code": "unsafe_path", "entry": name}
+            zf.extractall(dest_dir)
+            extracted = len(zf.namelist())
+        return True, {"dest_dir": dest_dir, "extracted": extracted}
+
+    def _process_kill(self, p):
+        """终止进程：pid 或按名称模糊匹配（darwin: pkill）。"""
+        import signal
+        import subprocess
+
+        pid = p.get("pid")
+        name = p.get("name")
+        if pid is None and not name:
+            return False, {"code": "missing_param",
+                           "detail": "pid or name"}
+        if pid is not None:
+            os.kill(int(pid), signal.SIGTERM)
+            return True, {"killed_pid": int(pid)}
+        r = subprocess.run(["pkill", "-f", str(name)],
+                           capture_output=True, timeout=10)
+        return True, {"matched": r.returncode == 0,
+                      "pattern": str(name)}
+
 def keep_columns_guard(flag) -> bool:
     return bool(flag)
-

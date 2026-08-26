@@ -746,6 +746,7 @@ data.json_to_table:
   retries: 2
 core.delay:
   executor_domain: data
+  label_cn: 延迟等待
   description: 等待 N 秒（上限 300s；非幂等不重试）
   params:
     type: object
@@ -1299,6 +1300,7 @@ notify.feishu_webhook:
 # ============================================================
 list.create:
   executor_domain: data
+  label_cn: 创建列表
   description: "创建列表（可含初始元素）"
   params:
     type: object
@@ -1312,6 +1314,7 @@ list.create:
 
 list.append:
   executor_domain: data
+  label_cn: 追加列表项
   description: "列表尾部追加元素"
   params:
     type: object
@@ -1326,6 +1329,7 @@ list.append:
 
 list.insert:
   executor_domain: data
+  label_cn: 插入列表项
   description: "指定下标插入元素"
   params:
     type: object
@@ -1341,6 +1345,7 @@ list.insert:
 
 list.remove_at:
   executor_domain: data
+  label_cn: 按下标删除项
   description: "按下标移除元素"
   params:
     type: object
@@ -1355,6 +1360,7 @@ list.remove_at:
 
 list.remove_value:
   executor_domain: data
+  label_cn: 按值删除项
   description: "按值移除首个匹配元素"
   params:
     type: object
@@ -1369,6 +1375,7 @@ list.remove_value:
 
 list.get:
   executor_domain: data
+  label_cn: 获取列表项
   description: "按下标取值"
   params:
     type: object
@@ -1383,6 +1390,7 @@ list.get:
 
 list.set:
   executor_domain: data
+  label_cn: 设置列表项
   description: "按下标覆盖元素"
   params:
     type: object
@@ -1398,6 +1406,7 @@ list.set:
 
 list.length:
   executor_domain: data
+  label_cn: 列表长度
   description: "列表长度"
   params:
     type: object
@@ -1409,6 +1418,7 @@ list.length:
 
 list.reverse:
   executor_domain: data
+  label_cn: 反转列表
   description: "原地反转列表"
   params:
     type: object
@@ -1420,6 +1430,7 @@ list.reverse:
 
 list.sort:
   executor_domain: data
+  label_cn: 列表排序
   description: "排序列表（可选按 dict 子键排序）"
   params:
     type: object
@@ -1437,6 +1448,7 @@ list.sort:
 # ============================================================
 dict.create:
   executor_domain: data
+  label_cn: 创建字典
   description: "创建字典（可含初始键值对）"
   params:
     type: object
@@ -1450,6 +1462,7 @@ dict.create:
 
 dict.get:
   executor_domain: data
+  label_cn: 获取字典值
   description: "按键取值（支持 default）"
   params:
     type: object
@@ -1465,6 +1478,7 @@ dict.get:
 
 dict.set:
   executor_domain: data
+  label_cn: 设置字典键值
   description: "设置键值对"
   params:
     type: object
@@ -1480,6 +1494,7 @@ dict.set:
 
 dict.has_key:
   executor_domain: data
+  label_cn: 判断键存在
   description: "判断键是否存在 → exists"
   params:
     type: object
@@ -1494,6 +1509,7 @@ dict.has_key:
 
 dict.keys:
   executor_domain: data
+  label_cn: 获取全部键
   description: "返回全部键列表"
   params:
     type: object
@@ -1505,6 +1521,7 @@ dict.keys:
 
 dict.values:
   executor_domain: data
+  label_cn: 获取全部值
   description: "返回全部值列表"
   params:
     type: object
@@ -1516,6 +1533,7 @@ dict.values:
 
 dict.remove:
   executor_domain: data
+  label_cn: 删除字典键
   description: "删除指定键"
   params:
     type: object
@@ -1530,6 +1548,7 @@ dict.remove:
 
 env.get:
   executor_domain: data
+  label_cn: 读取环境变量
   description: "读取环境变量（支持 default）"
   params:
     type: object
@@ -1544,6 +1563,7 @@ env.get:
 
 env.set:
   executor_domain: data
+  label_cn: 设置环境变量
   description: "设置环境变量（进程内，不持久化）"
   params:
     type: object
@@ -1558,6 +1578,7 @@ env.set:
 
 file.read_csv:
   executor_domain: data
+  label_cn: 读取 CSV 文件
   description: "读取 CSV → {columns, rows, count}（与 data.create 输出对齐）"
   params:
     type: object
@@ -1567,6 +1588,10 @@ file.read_csv:
       encoding: { type: string, default: utf-8-sig }
       delimiter: { type: string, default: "," }
       header: { type: boolean, default: true }
+      spill:
+        type: boolean
+        default: false
+        description: 超大结果落盘为引用（配合 context.spill_read 回读）
   idempotency: required
   risk: L0
   timeout_ms: 30000
@@ -1574,6 +1599,7 @@ file.read_csv:
 
 file.write_csv:
   executor_domain: data
+  label_cn: 写入 CSV 文件
   description: "写入 CSV（utf-8-sig 编码兼容 Excel，原子落盘）"
   params:
     type: object
@@ -1590,6 +1616,7 @@ file.write_csv:
 
 pdf.extract_text:
   executor_domain: data
+  label_cn: 提取 PDF 文本
   description: "提取 PDF 文本（PyPDF2 纯 Python，支持分页）"
   params:
     type: object
@@ -1604,6 +1631,7 @@ pdf.extract_text:
 
 api.upload_file:
   executor_domain: data
+  label_cn: HTTP 上传文件
   description: "multipart/form-data 文件上传到 HTTP 端点"
   params:
     type: object

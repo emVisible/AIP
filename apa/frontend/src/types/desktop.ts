@@ -1,16 +1,14 @@
 /**
- * Electron preload 暴露的桌面能力（M2 拾取器 overlay）。
- * 纯浏览器环境下不存在 → 使用处全部可选链守卫。
+ * Electron preload 暴露的桌面能力（Window 全局类型增强）。
+ *
+ * 单一真相源为 shared/ipc-types.ts 的 ApaDesktopBridge；
+ * 此处仅做「全部可选」投影——纯浏览器环境下 window.apaDesktop
+ * 不存在 → 使用处全部可选链守卫。
  */
-export interface ApaDesktopBridge {
-  startSpyOverlay?: () => void;
-  stopSpyOverlay?: () => void;
-  spyBounds?: (
-    bounds: { x: number; y: number; w: number; h: number },
-    label: string,
-  ) => void;
-  spyEnded?: () => void;
-}
+import type { ApaDesktopBridge as IpcDesktopBridge }
+  from "../shared/ipc-types";
+
+export type ApaDesktopBridge = Partial<IpcDesktopBridge>;
 
 declare global {
   interface Window {

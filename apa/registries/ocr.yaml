@@ -37,6 +37,10 @@ ocr.extract:
       output_context:
         type: string
         description: ContextStore 引用键
+      spill:
+        type: boolean
+        default: false
+        description: 超大结果落盘为引用（配合 context.spill_read 回读）
   idempotency: required
   risk: L1
   timeout_ms: 60000

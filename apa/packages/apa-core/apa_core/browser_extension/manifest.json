@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "APA 元素拾取器",
+  "version": "0.1.0",
+  "description": "在任意网页点选元素，自动生成 CSS 选择器并回传 APA 设计器填充参数。",
+  "permissions": ["storage", "activeTab", "scripting", "tabs"],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "APA 元素拾取"
+  },
+  "commands": {
+    "start-pick": {
+      "suggested_key": { "default": "Alt+Shift+P" },
+      "description": "在当前标签页开始元素拾取"
+    }
+  }
+}

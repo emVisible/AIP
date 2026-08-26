@@ -8,7 +8,8 @@
  *   dev  → .venv python + vite HMR(localhost:5173) + /api proxy
  *   packaged → Resources/apa-server 冻结二进制 + userData 可写目录
  */
-import { app, BrowserWindow, ipcMain, screen } from "electron";
+import { app, BrowserWindow, globalShortcut, ipcMain, screen }
+  from "electron";
 import { spawn, type ChildProcess } from "child_process";
 import fs from "fs";
 import path from "path";
@@ -218,11 +219,40 @@ function setupSpyIpc(): void {
       overlayWin.webContents.send(IpcChannels.SpyBounds, payload);
     }
   });
+
+  // 拾取捕获快捷键：会话期间全局生效（焦点在任意应用均可按）
+  // 首选 F2，被占用时降级 F6；返回实际键位供 UI 提示
+  ipcMain.handle(IpcChannels.SpyHotkeyRegister, () => {
+    for (const accel of ["F2", "F6"]) {
+      try {
+        if (globalShortcut.register(accel, () => {
+          mainWindow?.webContents.send(IpcChannels.SpyCaptureTrigger);
+        })) {
+          return accel;
+        }
+      } catch (e) {
+        console.error("[spy] hotkey register failed:", e);
+      }
+    }
+    return null;
+  });
+  ipcMain.handle(IpcChannels.SpyHotkeyUnregister, () => {
+    globalShortcut.unregister("F2");
+    globalShortcut.unregister("F6");
+    return true;
+  });
 }
 
 // ---- IPC handlers（桌面应用 OS 能力入口）----------------------------------------
 
 function setupOsIpc(): void {
+  // 系统默认方式打开外部链接（白名单 scheme：http/https/x-apple 系统深链）
+  ipcMain.on("os:open-external", (_e, url: string) => {
+    if (typeof url !== "string") return;
+    if (!/^(https?:|x-apple\.systempreferences:)/.test(url)) return;
+    import("electron").then(({ shell }) => void shell.openExternal(url));
+  });
+
   /** 打开原生文件选择对话框 */
   ipcMain.handle("os:pick-file", async (_, options?) => {
     const { dialog } = await import("electron");
@@ -257,6 +287,7 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  globalShortcut.unregisterAll();
   if (pythonProc) pythonProc.kill("SIGTERM");
   app.quit();
 });

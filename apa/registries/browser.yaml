@@ -115,6 +115,7 @@ browser.extract:
   - selectors
 browser.wait_element:
   executor_domain: browser
+  label_cn: 等待元素出现
   description: 等待元素出现
   params:
     type: object
@@ -133,6 +134,7 @@ browser.wait_element:
   - target
 browser.scroll:
   executor_domain: browser
+  label_cn: 滚动页面
   description: 滚动页面
   params:
     type: object
@@ -153,6 +155,7 @@ browser.scroll:
   - direction
 browser.upload_file:
   executor_domain: browser
+  label_cn: 上传附件
   description: 上传文件
   params:
     type: object
@@ -173,6 +176,7 @@ browser.upload_file:
   - filename
 browser.download_file:
   executor_domain: browser
+  label_cn: 下载文件
   description: 触发并等待文件下载
   params:
     type: object
@@ -191,6 +195,7 @@ browser.download_file:
   - target
 browser.run_script:
   executor_domain: browser
+  label_cn: 执行 JavaScript
   description: 在页面执行 JS（高风险，禁止自动执行）
   params:
     type: object
@@ -208,6 +213,7 @@ browser.run_script:
   - script_hash
 browser.take_screenshot:
   executor_domain: browser
+  label_cn: 页面截图
   description: 截图存入 ContextStore，ref 写入 result（C6，不传输原始字节）
   params:
     type: object
@@ -248,6 +254,10 @@ browser.extract_table:
         type: integer
         minimum: 1
         maximum: 1000
+      spill:
+        type: boolean
+        default: false
+        description: 超大结果落盘为引用（配合 context.spill_read 回读）
   idempotency: required
   risk: L0
   timeout_ms: 60000
@@ -381,6 +391,7 @@ browser.download:
   retries: 1
 browser.cookies_get:
   executor_domain: browser
+  label_cn: 读取 Cookie
   description: 读取上下文 Cookie（可按 urls 过滤）
   params:
     type: object
@@ -395,6 +406,7 @@ browser.cookies_get:
   retries: 2
 browser.cookies_set:
   executor_domain: browser
+  label_cn: 写入 Cookie
   description: 写入 Cookie（同 name+domain 覆盖，重放幂等）
   params:
     type: object
@@ -411,6 +423,7 @@ browser.cookies_set:
   retries: 1
 browser.cookies_clear:
   executor_domain: browser
+  label_cn: 清空 Cookie
   description: 清空全部 Cookie
   params:
     type: object
@@ -657,6 +670,7 @@ browser.drag_drop:
 
 browser.scroll_to_element:
   executor_domain: browser
+  label_cn: 滚动至元素
   description: "滚动到目标元素可见"
   params:
     type: object
@@ -669,6 +683,7 @@ browser.scroll_to_element:
 
 browser.get_element_count:
   executor_domain: browser
+  label_cn: 获取元素数量
   description: "获取匹配选择器的元素数量"
   params:
     type: object
@@ -681,6 +696,7 @@ browser.get_element_count:
 
 browser.wait_close:
   executor_domain: browser
+  label_cn: 等待元素消失
   description: "等待元素从页面消失（state=detached）"
   params:
     type: object

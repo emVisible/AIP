@@ -412,6 +412,16 @@ class ServeApp:
                 mods.append(("ocr", ocr_mod))
             except Exception:  # noqa: BLE001
                 pass
+
+        # H5 二期：外部 MCP 工具桥（env APA_MCP_SERVERS 未配置则跳过）
+        try:
+            from apa_executors.mcp_executor import McpBridgeExecutor
+
+            if McpBridgeExecutor.configured():
+                mods.append((("mcp",),
+                             McpBridgeExecutor(f"bot_{suffix}", session)))
+        except Exception:  # noqa: BLE001
+            pass
         return mods
 
     def _run_session_job(

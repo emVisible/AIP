@@ -11,6 +11,9 @@ export const IpcChannels = {
   SpyOverlayShow: "spy-overlay-show",
   SpyOverlayHide: "spy-overlay-hide",
   SpyBounds: "spy-bounds",
+  SpyHotkeyRegister: "spy-hotkey-register",
+  SpyHotkeyUnregister: "spy-hotkey-unregister",
+  SpyCaptureTrigger: "spy-capture-trigger",
 } as const;
 
 // ---- 载荷接口 -----------------------------------------------------------------
@@ -33,4 +36,11 @@ export interface ApaDesktopBridge {
   stopSpyOverlay: () => void;
   spyBounds: (bounds: Bounds, label: string) => void;
   spyEnded: () => void;
+  /** 注册全局捕获快捷键；返回实际生效的键位（冲突时降级），失败返回 null。 */
+  registerSpyHotkey: () => Promise<string | null>;
+  unregisterSpyHotkey: () => void;
+  /** 全局快捷键按下通知（main → renderer）。返回解绑函数。 */
+  onSpyCaptureTrigger: (cb: () => void) => () => void;
+  /** 系统默认方式打开外部链接（系统设置深链 / 浏览器）。 */
+  openExternal: (url: string) => void;
 }

@@ -1,8 +1,13 @@
 import { useState } from "react";
-import { api } from "../../api/client";
+import { studioRpc } from "../../api/studio";
 
 /** 沙盒试运行面板 —— 职责单一：输入事件+数据 → 展示步骤轨迹。 */
-export function TestRunPanel({ yaml }: { yaml: string }) {
+export function TestRunPanel({ yaml, sessionId, draftId }: {
+  yaml: string;
+  /** H2 溯源凭证：来自工作台草稿时携带，服务端校验批准事件。 */
+  sessionId?: string;
+  draftId?: string;
+}) {
   const [ev, setEv] = useState("");
   const [data, setData] = useState("{}");
   interface TestStep { id?: string; action?: string; status?: string; result?: Record<string, unknown> }
@@ -11,6 +16,7 @@ export function TestRunPanel({ yaml }: { yaml: string }) {
     gateway_state: string;
     steps: TestStep[];
     error?: string;
+    spilled_results?: number;
   }
   const [result, setResult] = useState<TestResult | null>(null);
   const [running, setRunning] = useState(false);
@@ -18,9 +24,10 @@ export function TestRunPanel({ yaml }: { yaml: string }) {
   async function run() {
     setRunning(true);
     try {
-      const d = await api<TestResult>("/api/processes/test", {
-        method: "POST",
-        body: JSON.stringify({ yaml, event: ev, data: JSON.parse(data || "{}") }),
+      const d = await studioRpc<TestResult>("process.test", {
+        yaml, event: ev, data: JSON.parse(data || "{}"),
+        ...(sessionId && draftId
+          ? { session_id: sessionId, draft_id: draftId } : {}),
       });
       setResult(d);
     } catch (e) {

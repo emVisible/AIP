@@ -1,16 +1,64 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import {
+  Bell,
+  Binary,
+  Braces,
+  Building2,
+  CalendarClock,
+  ClipboardList,
+  Cog,
+  Database,
+  FileText,
+  FolderOpen,
+  Globe,
+  Hash,
+  Layers,
+  Mail,
+  Monitor,
+  PlayCircle,
+  ScanText,
+  Sheet,
+  Sparkles,
+  Terminal,
+  Type,
+  UserCheck,
+  Webhook,
+  Workflow,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import type { ActionMeta } from "../../api/types";
 import { cn } from "../../lib/utils";
-import { getLanguage } from "../../hooks/useLanguage";
+import { FLOW_NODES, actionSub, actionTitle } from "../../lib/actionDisplay";
+import { useActionCatalog } from "../../hooks/useActionCatalog";
 
-/** 流程控制特殊节点（非 registry 动作，由 ProcessEngine 内建解释）。 */
-export const FLOW_NODES: [string, string][] = [
-  ["flow.foreach", "循环：遍历数组逐项执行 body_action"],
-  ["flow.sub_process", "子流程：调用另一个 process.yaml"],
-  ["flow.ai_decision", "AI 决策：LLM 从候选动作中选择 outcome"],
-];
+/** 域 → 图标映射（目录分组标题）。 */
+const DOMAIN_ICONS: Record<string, LucideIcon> = {
+  browser: Globe,
+  excel: Sheet,
+  data: Database,
+  string: Type,
+  desktop: Monitor,
+  ocr: ScanText,
+  email: Mail,
+  file: FolderOpen,
+  api: Webhook,
+  encode: Binary,
+  json: Braces,
+  dt: CalendarClock,
+  hash: Hash,
+  doc: FileText,
+  llm: Sparkles,
+  notify: Bell,
+  db: Database,
+  shell: Terminal,
+  core: Cog,
+  context: Layers,
+  erp: Building2,
+  human: UserCheck,
+  clipboard: ClipboardList,
+  session: PlayCircle,
+};
 
 /** 域 → 显示名映射（目录分组标题）。 */
 const DOMAIN_LABELS: Record<string, string> = {
@@ -50,21 +98,7 @@ export function CatalogPanel({ onInsert, filter, onFilterChange }: {
   const filter_ = filter ?? inner;
   const setFilter = onFilterChange ?? setInner;
 
-  const {
-    data: catalog = {},
-    isLoading,
-    isError,
-    refetch,
-  } = useQuery({
-    queryKey: ["registry", "actions"],
-    queryFn: () =>
-      fetch("/api/registry/actions").then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      }),
-    retry: 2,
-    staleTime: 60_000,
-  });
+  const { catalog, isLoading, isError, refetch } = useActionCatalog();
 
   const flowItems = useMemo(() => {
     const q = filter_.toLowerCase();
@@ -80,23 +114,22 @@ export function CatalogPanel({ onInsert, filter, onFilterChange }: {
     for (const [name, meta] of Object.entries(
       catalog as Record<string, ActionMeta>,
     )) {
-      if (
-        q &&
-        !name.toLowerCase().includes(q) &&
-        !(meta.description ?? "").toLowerCase().includes(q)
-      ) {
-        continue;
-      }
+      const haystack = name + " " + (meta.label_cn ?? "") + " " +
+        (meta.description ?? "");
+      if (q && !haystack.toLowerCase().includes(q)) continue;
       const domain = name.split(".")[0] ?? "other";
       (byDomain[domain] ??= []).push([name, meta]);
     }
     return byDomain;
   }, [catalog]);
 
-  const totalCount = Object.keys(catalog as Record<string, unknown>).length;
+  const totalCount = Object.keys(catalog as Record<string, unknown>).length +
+    FLOW_NODES.length;
 
   function renderAction(name: string, meta: ActionMeta,
                          tone?: "violet") {
+    const title = actionTitle(name, { [name]: meta });
+    const sub = actionSub(name, { [name]: meta });
     return (
       <div
         key={name}
@@ -108,32 +141,37 @@ export function CatalogPanel({ onInsert, filter, onFilterChange }: {
         }}
         onClick={() => onInsert(name)}
         className={cn(
-          "px-2 py-1 cursor-grab active:cursor-grabbing rounded text-xs",
-          "flex justify-between items-center transition-colors",
-          tone === "violet"
-            ? "hover:bg-violet-50"
-            : "hover:bg-blue-50",
+          "px-2 py-1 cursor-grab active:cursor-grabbing rounded",
+          "transition-colors group",
+          tone === "violet" ? "hover:bg-violet-50" : "hover:bg-blue-50",
         )}
         title={(meta.description ?? "") +
                ` [${meta.risk} · ${meta.executor_domain}]`}
       >
-        <span className="truncate">
-          {getLanguage() === "zh" && meta.label_cn
-            ? meta.label_cn : name}
-        </span>
-        <span
-          className={`text-[10px] rounded px-1 shrink-0 ml-1 ${
-            tone === "violet"
-              ? "bg-violet-100 text-violet-600"
-              : meta.risk.startsWith("L0")
-                ? "text-slate-300"
-                : meta.risk.startsWith("L1")
-                  ? "text-amber-400"
-                  : "text-red-400"
-          }`}
-        >
-          {tone === "violet" ? "CTL" : meta.risk}
-        </span>
+        <div className="flex justify-between items-center gap-1">
+          <span className="truncate text-xs font-medium text-slate-700">
+            {title}
+          </span>
+          <span
+            className={`text-[10px] rounded px-1 shrink-0 ${
+              tone === "violet"
+                ? "bg-violet-100 text-violet-600"
+                : meta.risk.startsWith("L0")
+                  ? "text-slate-300"
+                  : meta.risk.startsWith("L1")
+                    ? "text-amber-400"
+                    : "text-red-400"
+            }`}
+          >
+            {tone === "violet" ? "CTL" : meta.risk}
+          </span>
+        </div>
+        {sub && (
+          <p className="truncate text-[10px] font-mono text-slate-300
+                        group-hover:text-slate-400 leading-tight">
+            {sub}
+          </p>
+        )}
       </div>
     );
   }
@@ -156,13 +194,13 @@ export function CatalogPanel({ onInsert, filter, onFilterChange }: {
         )}
       </div>
 
-      <div className="max-h-[400px] overflow-y-auto">
+      <div className="overflow-y-auto">
         {/* 加载骨架 */}
         {isLoading && (
           <div className="space-y-1 p-1 animate-pulse">
             {[...Array(8)].map((_, i) => (
               <div key={i}
-                   className="h-5 bg-slate-100 rounded"
+                   className="h-7 bg-slate-100 rounded"
                    style={{ width: `${85 - i * 6}%` }} />
             ))}
           </div>
@@ -184,9 +222,9 @@ export function CatalogPanel({ onInsert, filter, onFilterChange }: {
         {/* 流程控制节点 */}
         {!isLoading && !isError && flowItems.length > 0 && (
           <div>
-            <p className="text-[10px] font-semibold text-slate-300
-                          uppercase tracking-wide px-1 pt-2">
-              流程控制
+            <p className="flex items-center gap-1 text-[10px] font-semibold
+                          text-slate-400 uppercase tracking-wide px-1 pt-2">
+              <Workflow size={11} /> 流程控制
             </p>
             {flowItems.map(([name, desc]) =>
               renderAction(name, { description: desc,
@@ -201,16 +239,23 @@ export function CatalogPanel({ onInsert, filter, onFilterChange }: {
 
         {/* Registry 动作（按域分组） */}
         {!isLoading && !isError &&
-          Object.entries(groups).map(([domain, items]) => (
-            <div key={domain}>
-              <p className="text-[10px] font-semibold text-slate-300
-                            uppercase tracking-wide px-1 pt-2">
-                {DOMAIN_LABELS[domain] ?? domain}
-                <span className="ml-0.5 font-normal">({items.length})</span>
-              </p>
-              {items.map(([name, meta]) => renderAction(name, meta))}
-            </div>
-          ))}
+          Object.entries(groups).map(([domain, items]) => {
+            const Icon = DOMAIN_ICONS[domain];
+            return (
+              <div key={domain}>
+                <p className="flex items-center gap-1 text-[10px]
+                              font-semibold text-slate-400 uppercase
+                              tracking-wide px-1 pt-2">
+                  {Icon && <Icon size={11} />}
+                  {DOMAIN_LABELS[domain] ?? domain}
+                  <span className="ml-0.5 font-normal">
+                    ({items.length})
+                  </span>
+                </p>
+                {items.map(([name, meta]) => renderAction(name, meta))}
+              </div>
+            );
+          })}
 
         {/* 空搜索结果 */}
         {!isLoading && !isError &&

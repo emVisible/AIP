@@ -27,6 +27,36 @@ class SpyError(RuntimeError):
     pass
 
 
+def _ax_module():
+    """惰性获取 ax_engine；缺失返回 None（非 darwin/未装框架）。"""
+    try:
+        from apa_executors import ax_engine as _ax
+        return _ax
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def ensure_accessibility() -> None:
+    """辅助功能权限预检（H3 自 api.py 下沉至服务层）。
+
+    未授权时触发系统原生授权弹窗并抛 SpyError（HTTP 层映射 409）。
+    """
+    ax = _ax_module()
+    if ax is None or ax.ax_trusted():
+        return
+    hint = str(getattr(ax, "PERMISSION_HINTS", {}).get(
+        "accessibility", "系统设置 → 隐私与安全性 → 辅助功能"))
+    try:
+        import ApplicationServices as _AS
+
+        _AS.AXIsProcessTrustedWithOptions(
+            {_AS.kAXTrustedCheckOptionPrompt: True})
+    except Exception:  # noqa: BLE001
+        pass
+    raise SpyError(
+        f"缺少 macOS「辅助功能」权限：{hint}。授权后重启 APA 生效。")
+
+
 class SpyService:
     """桌面元素拾取会话。进程内单例由 API 层持有。"""
 
@@ -197,10 +227,17 @@ def spy_stream_frames(spy: SpyService, *,
     import json
 
     last_seen = -1
+    last_err: Optional[str] = None
     ticks = 0
     deadline = time.monotonic() + max_seconds
     while time.monotonic() < deadline:
         st = spy.status()
+        # 错误帧：EventTap 线程失败等场景推给前端，避免假死
+        err = st.get("error")
+        if err and err != last_err:
+            last_err = err
+            yield json.dumps({"type": "error", "message": err},
+                             ensure_ascii=False) + "\n"
         if st["version"] != last_seen:
             last_seen = st["version"]
             frame = {

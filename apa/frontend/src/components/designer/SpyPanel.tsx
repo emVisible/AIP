@@ -1,115 +1,27 @@
-import { useEffect, useRef, useState } from "react";
-
-import { post } from "../../api/client";
-
-/** SpyService hover 帧。 */
-interface HoverFrame {
-  type: string;
-  version?: number;
-  element?: {
-    role: string;
-    title: string;
-    value: string | null;
-    app_name: string;
-    pid: number;
-    bounds: { x: number; y: number; w: number; h: number } | null;
-  } | null;
-}
-
-export interface CapturedElement {
-  role: string;
-  title: string;
-  value: string | null;
-  app_name: string;
-  pid: number;
-  bounds: { x: number; y: number; w: number; h: number } | null;
-  ax_path: unknown[];
-}
-
 /**
- * 桌面拾取面板（影刀 Ctrl 悬停体验）。
- * start → SSE hover 流（Electron overlay 高亮跟随）→ capture 存为步骤。
- * 纯浏览器环境（无 Electron）也能用：只是没有高亮框。
+ * 桌面拾取面板（纯展示）—— 会话状态由 useDesktopSpy 提供。
+ * 展示 hover 元素实时信息；开始/捕获/停止按钮直连 hook 动作。
  */
-export function SpyPanel({ onCapture }: {
-  onCapture: (el: CapturedElement) => void;
+import type { CapturedElement, SpyElement,
+              useDesktopSpy } from "../../hooks/useDesktopSpy";
+
+type Spy = ReturnType<typeof useDesktopSpy>;
+
+export type { CapturedElement };
+
+export function SpyPanel({ spy, targetHint }: {
+  spy: Spy;
+  /** 填充模式提示：正在为哪个步骤拾取。 */
+  targetHint?: string | null;
 }) {
-  const [spying, setSpying] = useState(false);
-  const [live, setLive] = useState<HoverFrame["element"]>(null);
-  const [error, setError] = useState("");
-  const esRef = useRef<EventSource | null>(null);
-  const liveRef = useRef<HoverFrame["element"]>(null);
-  liveRef.current = live;
-
-  function cleanup() {
-    esRef.current?.close();
-    esRef.current = null;
-    window.apaDesktop?.stopSpyOverlay?.();
-  }
-
-  useEffect(() => () => {
-    if (esRef.current) {
-      esRef.current.close();
-      void post("/api/spy/stop", {});
-    }
-  }, []);
-
-  async function start() {
-    setError("");
-    try {
-      await post("/api/spy/start", {});
-      setSpying(true);
-      setLive(null);
-      window.apaDesktop?.startSpyOverlay?.();
-
-      const es = new EventSource("/api/spy/stream");
-      esRef.current = es;
-      es.onmessage = (ev) => {
-        try {
-          const frame: HoverFrame = JSON.parse(ev.data);
-          if (frame.type === "hover") {
-            setLive(frame.element ?? null);
-            const b = frame.element?.bounds;
-            if (b && b.w > 0) {
-              const el = frame.element!;
-              window.apaDesktop?.spyBounds?.(b,
-                `${el.app_name} · ${el.role}` +
-                (el.title ? ` · ${el.title.slice(0, 30)}` : ""));
-            }
-          } else if (frame.type === "ended" || frame.type === "timeout") {
-            stop();
-          }
-        } catch { /* 忽略坏帧 */ }
-      };
-      es.onerror = () => { /* 断线由 stop 兜底 */ };
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  function stop() {
-    cleanup();
-    setSpying(false);
-    void post("/api/spy/stop", {});
-  }
-
-  async function capture() {
-    try {
-      const r = await post<{ element?: CapturedElement }>("/api/spy/capture", {});
-      if (r.element) onCapture(r.element);
-      else setError("光标下无可拾取元素");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
+  const { spying, live, error, start, stop, capture } = spy;
   return (
     <div className="mt-3 border rounded-lg p-2 bg-violet-50/40">
       <div className="flex items-center gap-2">
         <p className="text-xs font-semibold text-violet-700">桌面拾取</p>
         <div className="ml-auto flex gap-1">
           {!spying ? (
-            <button onClick={() => void start()}
+            <button onClick={start}
               className="px-2 py-0.5 text-xs font-medium text-white
                          bg-violet-600 rounded hover:bg-violet-700">
               开始
@@ -130,6 +42,19 @@ export function SpyPanel({ onCapture }: {
           )}
         </div>
       </div>
+
+      {spying && (
+        <p className="mt-1 text-[10px] text-violet-500">
+          {targetHint
+            ? `填充模式：捕获结果将写入 ${targetHint}`
+            : "移动鼠标到目标元素，捕获后插入点击步骤"}
+          {spy.hotkey && (
+            <span className="ml-1 font-semibold">
+              （按 {spy.hotkey} 快速捕获）
+            </span>
+          )}
+        </p>
+      )}
 
       {spying && (
         <div className="mt-1 text-[10px] leading-4 font-mono
@@ -155,7 +80,25 @@ export function SpyPanel({ onCapture }: {
           )}
         </div>
       )}
-      {error && <p className="mt-1 text-[10px] text-red-500">{error}</p>}
+      {error && (
+        <div className="mt-1 text-[10px] leading-4 rounded p-1.5
+                        bg-red-50 border border-red-100">
+          <p className="text-red-600">{error}</p>
+          {/辅助功能|权限/.test(error) && (
+            <button
+              onClick={() => window.apaDesktop?.openExternal?.(
+                "x-apple.systempreferences:" +
+                "com.apple.preference.security?Privacy_Accessibility")}
+              className="mt-1 px-2 py-0.5 text-[10px] font-medium
+                         text-white bg-red-500 rounded hover:bg-red-600">
+              打开系统设置 · 辅助功能
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
+
+/** 兼容旧引用（DesignerPage 类型标注用）。 */
+export type SpyLiveElement = SpyElement;

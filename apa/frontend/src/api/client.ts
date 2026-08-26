@@ -15,7 +15,10 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(`/api${path}`, {
+  // 路径归一化：调用方可能传入已带 /api 的路径（历史书写不一），
+  // 统一剥离后重拼，杜绝 /api/api/* 双前缀 404（桌面拾取/试运行/保存等曾全部中招）
+  const p = path.startsWith("/api/") ? path.slice(4) : path;
+  const r = await fetch(`/api${p}`, {
     headers: { "Content-Type": "application/json", ...init?.headers },
     ...init,
   });

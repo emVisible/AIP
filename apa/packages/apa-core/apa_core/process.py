@@ -302,6 +302,7 @@ class ProcessEngine:
         complete_fn: Optional[Callable[[str], None]] = None,
         process_loader: Optional[Callable[[str], "ProcessDef"]] = None,
         loop_depth: int = 0,
+        step_observer: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> None:
         self.proc = proc
         self.send_fn = send_fn
@@ -310,7 +311,24 @@ class ProcessEngine:
         self.process_loader = process_loader
         # 循环嵌套深度：loop.break/continue 合法性判定（Phase A）
         self.loop_depth = int(loop_depth)
+        # H3 三期：item 粒度步骤观察者（DI 注入，引擎不知传输层）
+        self.step_observer = step_observer
         self.run = ProcessRun(proc)
+
+    def _emit_step(self, step_id: str, action: str, status: str,
+                   spilled: bool = False) -> None:
+        if self.step_observer is None:
+            return
+        import time as _t
+
+        try:
+            self.step_observer({
+                "step_id": step_id, "action": action or "",
+                "status": status, "spilled": spilled,
+                "ts": round(_t.time(), 3),
+            })
+        except Exception:  # noqa: BLE001
+            pass  # 观察者异常绝不影响执行
 
     # --- 入口 ---------------------------------------------------------------
     def on_trigger(self, event_name: str, event_data: dict) -> None:
@@ -452,24 +470,42 @@ class ProcessEngine:
 
         params = render(step.params, run.scopes)
         target = render(step.target, run.scopes) if step.target else None
-        # 预算守卫：先判断后计数（§10.2 max_actions 必填防无限循环）
-        if run.actions_sent + 1 > self.proc.max_actions:
-            run.done, run.outcome = True, "max_actions_exceeded"
-            return False
-        run.actions_sent += 1
-        ok, data = self.send_fn(step.action or "", params or {})
+
+        # H1 §4.3 引擎内置：spill 回读（本地文件读，不经 gateway、不计动作预算）
+        if step.action == "context.spill_read":
+            from .spill import default_store, SpillCorrupt
+            ref = str((params or {}).get("ref") or "")
+            try:
+                ok, data = True, default_store().read_spill(ref)
+            except SpillCorrupt as e:
+                ok, data = False, {"code": "spill_error", "error": str(e)}
+        else:
+            # 预算守卫：先判断后计数（§10.2 max_actions 必填防无限循环）
+            if run.actions_sent + 1 > self.proc.max_actions:
+                run.done, run.outcome = True, "max_actions_exceeded"
+                return False
+            run.actions_sent += 1
+            ok, data = self.send_fn(step.action or "", params or {})
         if ok:
             key = step.output_as or step.id
             # context.get 结果解包：{ref, data:{...}} → 直接暴露字段（CoD）
             if (step.action == "context.get" and isinstance(data, dict)
                     and isinstance(data.get("data"), dict)):
                 data = data["data"]
+            # H1 §4.3 参数化 spill：步骤显式声明 spill:true 时，
+            # 超阈值白名单结果落盘为引用（消费方经 context.spill_read 回读）
+            if params and params.get("spill"):
+                from .spill import maybe_spill
+                data, _did = maybe_spill(str(step.action or ""), data)
             run.scopes.setdefault("steps", {})[key] = data or {}
             run.steps.append({"step": step.id, "action": step.action,
                               "status": "ok"})
+            self._emit_step(step.id, step.action, "ok",
+                            spilled=bool(params and params.get("spill")))
             return True
         run.steps.append({"step": step.id, "action": step.action,
                           "status": "failed", "result": data})
+        self._emit_step(step.id, step.action, "failed")
         return self._goto_handler(step, reason=(data or {}).get("code", "failed"))
 
     def _exec_while(self, step: StepDef) -> bool:

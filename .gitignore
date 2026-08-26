@@ -15,3 +15,12 @@ apa/examples/human-approval/.session.jsonl
 apa/tests/_p6b.jsonl
 desktop/node_modules/
 codex/
+
+# harness 参考仓库（本地调研用，不入产品库）
+harness-codex/
+harness-deepseek/
+
+# 运行时产物（沙箱 profile 渲染缓存 / 会话与溢出数据）
+apa/data/sandbox/
+apa/data/spills/
+apa/data/sessions/

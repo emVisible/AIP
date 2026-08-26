@@ -493,7 +493,28 @@ def build_parser() -> argparse.ArgumentParser:
     p_lat.add_argument("--n", type=int, default=200)
     p_lat.set_defaults(fn=_cmd_latency)
 
+    p_mcp = sub.add_parser("mcp-serve",
+                           help="把 Action Registry 暴露为 MCP stdio server")
+    p_mcp.add_argument("--registries", nargs="*", default=None,
+                       help="registry 路径（缺省内置全集）")
+    p_mcp.add_argument("--allow-high-risk", action="store_true",
+                       help="放行 L2/L3 动作（需自行确保人工审批策略）")
+    p_mcp.set_defaults(fn=_cmd_mcp_serve)
+
     return parser
+
+
+def _cmd_mcp_serve(args) -> int:
+    """H5：把 Action Registry 暴露为 MCP stdio server。"""
+    from .mcp_server import build_default_server
+
+    server = build_default_server(
+        registries=args.registries or None,
+        allow_high_risk=args.allow_high_risk,
+    )
+    print(f"==> apa-mcp ready ({'HIGH-RISK ALLOWED' if args.allow_high_risk else 'risk>=L2 refused'})",
+          file=sys.stderr)
+    return server.serve_stdio()
 
 
 def main() -> int:

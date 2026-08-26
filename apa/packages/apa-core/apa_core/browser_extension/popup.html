@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  body { width: 280px; margin: 0; padding: 12px;
+         font: 12px/1.5 -apple-system, "PingFang SC", sans-serif;
+         color: #1e293b; }
+  h1 { font-size: 13px; margin: 0 0 8px; }
+  label { display: block; font-size: 11px; color: #64748b; margin: 8px 0 3px; }
+  input { width: 100%; box-sizing: border-box; padding: 5px 7px;
+          border: 1px solid #cbd5e1; border-radius: 6px; font-size: 11px; }
+  button { width: 100%; margin-top: 10px; padding: 7px 0; border: 0;
+           border-radius: 6px; background: #7c3aed; color: #fff;
+           font-size: 12px; font-weight: 600; cursor: pointer; }
+  button:hover { background: #6d28d9; }
+  .hint { margin-top: 8px; font-size: 10px; color: #94a3b8; }
+  .ok { color: #059669; }
+</style>
+</head>
+<body>
+  <h1>APA 元素拾取器</h1>
+  <label>APA 服务地址（设计器面板可一键复制）</label>
+  <input id="base" placeholder="http://127.0.0.1:8000 或 http://localhost:5173">
+  <button id="pick">开始拾取（当前标签页）</button>
+  <button id="save" style="background:#475569">保存地址</button>
+  <p class="hint" id="status">地址保存后，在目标网页点击元素即可回传设计器。</p>
+  <script src="popup.js"></script>
+</body>
+</html>

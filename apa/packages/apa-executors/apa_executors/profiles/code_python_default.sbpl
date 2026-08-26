@@ -1,0 +1,84 @@
+(version 1)
+
+; ============================================================
+; APA code.python 默认沙箱策略（macOS Seatbelt）
+;
+; Adapted from OpenAI Codex `codex-rs/sandboxing/src/`
+;   seatbelt_base_policy.sbpl
+;   restricted_read_only_platform_defaults.sbpl
+;   (Apache-2.0, Copyright 2025 OpenAI) — see NOTICE.apa.md
+;
+; 模板占位符（渲染由 apa_executors/sandbox.py 完成）：
+;   {workspace}  可写工作区根（默认进程 cwd）
+;   {tmpdir}     用户临时目录（Darlyn TMPDIR）
+;   {cwd}        进程当前目录字面量
+;
+; 策略要点：读放开（RPA 本地工具，写才是边界）；
+;           写仅限 工作区/系统临时目录；网络默认拒绝（deny default）。
+; ============================================================
+
+(deny default)
+
+; 子进程继承父沙箱策略
+(allow process-exec)
+(allow process-fork)
+(allow signal (target same-sandbox))
+(allow process-info* (target same-sandbox))
+
+; 读放开：系统库、venv site-packages、用户数据均为只读面
+(allow file-read*)
+(allow file-map-executable)
+
+; /dev/null 特殊设备写
+(allow file-write-data
+  (require-all
+    (path "/dev/null")
+    (vnode-type CHARACTER-DEVICE)))
+
+; 写边界：工作区 + 系统临时目录
+(allow file-write*
+  (subpath "{workspace}")
+  (subpath "{cwd}")
+  (subpath "/private/var/tmp")
+  (subpath "/var/tmp")
+  (subpath "/tmp")
+  (subpath "{tmpdir}"))
+
+; Python 解释器启动所需 sysctl（截取自 codex 基础策略）
+(allow sysctl-read
+  (sysctl-name "hw.activecpu")
+  (sysctl-name "hw.byteorder")
+  (sysctl-name "hw.cacheconfig")
+  (sysctl-name "hw.cachelinesize_compat")
+  (sysctl-name "hw.cpufamily")
+  (sysctl-name "hw.cputype")
+  (sysctl-name "hw.l1dcachesize_compat")
+  (sysctl-name "hw.l2cachesize_compat")
+  (sysctl-name "hw.l3cachesize_compat")
+  (sysctl-name "hw.logicalcpu_max")
+  (sysctl-name "hw.machine")
+  (sysctl-name "hw.memsize")
+  (sysctl-name "hw.ncpu")
+  (sysctl-name "hw.nperflevels")
+  (sysctl-name-prefix "hw.optional.arm.")
+  (sysctl-name-prefix "hw.optional.armv8_")
+  (sysctl-name "hw.pagesize")
+  (sysctl-name "hw.physicalcpu")
+  (sysctl-name "hw.tbfrequency_compat")
+  (sysctl-name "machdep.cpu.brand_string")
+  (sysctl-name "kern.argmax")
+  (sysctl-name "kern.hostname")
+  (sysctl-name "kern.osrelease")
+  (sysctl-name "kern.ostype")
+  (sysctl-name "kern.version"))
+
+; 平台辅助服务（用户目录解析等，Python 启动可能触达）
+(allow mach-lookup
+  (global-name "com.apple.bsd.dirhelper")
+  (global-name "com.apple.system.opendirectoryd.membership"))
+
+; 仅本地平台服务的安全 AF_SYSTEM socket
+(allow system-socket
+  (require-all
+    (socket-domain AF_SYSTEM)
+    (socket-protocol 2)))

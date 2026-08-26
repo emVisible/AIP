@@ -1,5 +1,6 @@
 desktop.window.activate:
   executor_domain: desktop
+  label_cn: 激活窗口
   description: 激活指定窗口
   params:
     type: object
@@ -19,6 +20,7 @@ desktop.window.activate:
   - title
 desktop.window.close:
   executor_domain: desktop
+  label_cn: 关闭窗口
   description: 关闭窗口
   params:
     type: object
@@ -37,6 +39,7 @@ desktop.window.close:
   - app_name
 desktop.keyboard.input:
   executor_domain: desktop
+  label_cn: 键盘输入
   description: 键盘输入
   params:
     type: object
@@ -58,6 +61,7 @@ desktop.keyboard.input:
   - text
 desktop.file.copy:
   executor_domain: desktop
+  label_cn: 复制文件
   description: 复制文件
   params:
     type: object
@@ -78,6 +82,7 @@ desktop.file.copy:
   - dest
 desktop.process.launch:
   executor_domain: desktop
+  label_cn: 启动进程
   description: 启动进程
   params:
     type: object
@@ -97,6 +102,7 @@ desktop.process.launch:
   - args_hash
 desktop.file.move:
   executor_domain: desktop
+  label_cn: 移动文件
   description: 移动文件
   params:
     type: object
@@ -117,6 +123,7 @@ desktop.file.move:
   - dest
 desktop.file.delete:
   executor_domain: desktop
+  label_cn: 删除文件
   description: 删除文件（高风险，需人工确认）
   params:
     type: object
@@ -134,6 +141,7 @@ desktop.file.delete:
   - path
 desktop.ui.read_element:
   executor_domain: desktop
+  label_cn: 读取界面元素
   description: 读取元素：屏幕坐标命中测试 或 按描述符 ax_path 重定位
   params:
     type: object
@@ -154,6 +162,7 @@ desktop.ui.read_element:
   retries: 2
 desktop.ui.read_tree:
   executor_domain: desktop
+  label_cn: 读取元素树
   description: 限深遍历元素树（pid 缺省用全系统根）
   params:
     type: object
@@ -178,6 +187,7 @@ desktop.ui.read_tree:
   retries: 1
 desktop.ui.click_element:
   executor_domain: desktop
+  label_cn: 点击界面元素
   description: 双路径点击：AXPress 优先，坐标单击兜底
   params:
     type: object
@@ -195,6 +205,7 @@ desktop.ui.click_element:
   retries: 0
 desktop.ui.wait_element:
   executor_domain: desktop
+  label_cn: 等待界面元素
   description: 轮询等待元素（按描述符重定位）出现
   params:
     type: object
@@ -222,6 +233,7 @@ desktop.ui.wait_element:
   retries: 0
 desktop.click_text:
   executor_domain: desktop
+  label_cn: 点击屏幕文字
   description: Vision OCR 定位屏幕文字 → 坐标点击
   params:
     type: object
@@ -284,6 +296,7 @@ desktop.screenshot:
 
 desktop.process.list:
   executor_domain: desktop
+  label_cn: 列出系统进程
   description: "列出系统进程（可按名称过滤，按 CPU 降序）"
   params:
     type: object
@@ -297,6 +310,7 @@ desktop.process.list:
 
 desktop.window.resize:
   executor_domain: desktop
+  label_cn: 调整窗口大小
   description: "调整应用窗口尺寸（AppleScript）"
   params:
     type: object
@@ -312,6 +326,7 @@ desktop.window.resize:
 
 desktop.window.minimize:
   executor_domain: desktop
+  label_cn: 最小化窗口
   description: "最小化应用窗口"
   params:
     type: object
@@ -324,6 +339,7 @@ desktop.window.minimize:
 
 desktop.window.maximize:
   executor_domain: desktop
+  label_cn: 最大化窗口
   description: "全屏切换（Cmd+Ctrl+F 模拟）"
   params: { type: object, properties: {} }
   idempotency: none

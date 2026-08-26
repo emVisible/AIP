@@ -3,6 +3,7 @@
 # ============================================================
 api.http.get:
   executor_domain: api
+  label_cn: 发起 GET 请求
   description: "HTTP GET"
   params:
     type: object
@@ -26,6 +27,7 @@ api.http.get:
 
 api.http.post:
   executor_domain: api
+  label_cn: 发起 POST 请求
   description: "HTTP POST（默认不幂等）"
   params:
     type: object
@@ -49,6 +51,7 @@ api.http.post:
 
 api.http.put:
   executor_domain: api
+  label_cn: 发起 PUT 请求
   description: "HTTP PUT"
   params:
     type: object
@@ -72,6 +75,7 @@ api.http.put:
 
 api.http.delete:
   executor_domain: api
+  label_cn: 发起 DELETE 请求
   description: "HTTP DELETE（高风险）"
   params:
     type: object
@@ -95,6 +99,7 @@ api.http.delete:
 
 api.http.patch:
   executor_domain: api
+  label_cn: 发起 PATCH 请求
   description: "HTTP PATCH"
   params:
     type: object
@@ -119,6 +124,7 @@ api.http.patch:
 # ERP 业务域 — 推荐规范，POC 演示用（hello-rpa 订单审批）
 erp.order.approve:
   executor_domain: api
+  label_cn: 批准采购订单
   description: "批准 ERP 采购订单"
   params:
     type: object
@@ -134,6 +140,7 @@ erp.order.approve:
 
 erp.order.reject:
   executor_domain: api
+  label_cn: 驳回采购订单
   description: "驳回 ERP 采购订单"
   params:
     type: object
@@ -150,6 +157,7 @@ erp.order.reject:
 # 会话控制（Gateway 处理，不转发 Executor）
 session.complete:
   executor_domain: any
+  label_cn: 完成会话
   description: "完成会话"
   params:
     type: object

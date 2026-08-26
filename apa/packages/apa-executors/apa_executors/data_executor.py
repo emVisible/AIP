@@ -832,7 +832,8 @@ class DataExecutor(AIPExecutor):
     def _code_python(self, p):
         """独立 subprocess 执行 Python 片段。
 
-        安全形态：进程隔离 + timeout SIGKILL + 完整代码入审计
+        安全形态：进程隔离 + Seatbelt 沙箱（H4，darwin 默认开启，
+        params.sandbox=false 显式关闭）+ timeout SIGKILL + 完整代码入审计
         （risk=L3 → PolicyConfig 默认策略强制人工审批后才到达此处）。
         """
         import subprocess
@@ -841,8 +842,19 @@ class DataExecutor(AIPExecutor):
         if not code.strip():
             return False, {"code": "missing_param", "detail": "code"}
         timeout_s = min(float(p.get("timeout_s", 30)), 600)
+        argv = [sys.executable, "-c", code]
+        sandboxed = False
+        sandbox_requested = p.get("sandbox", True)
+        if sandbox_requested:
+            try:
+                from apa_executors.sandbox import build_command, is_available
+                if is_available():
+                    argv = build_command(argv)
+                    sandboxed = True
+            except Exception:  # noqa: BLE001
+                pass  # 沙箱装配失败回退直跑（保持可用性；审计字段可见）
         try:
-            r = subprocess.run([sys.executable, "-c", code],
+            r = subprocess.run(argv,
                                capture_output=True, text=True,
                                timeout=timeout_s)
             return True, {
@@ -850,10 +862,12 @@ class DataExecutor(AIPExecutor):
                 "stdout": (r.stdout or "")[-20000:],
                 "stderr": (r.stderr or "")[-5000:],
                 "timed_out": False,
+                "sandboxed": sandboxed,
             }
         except subprocess.TimeoutExpired:
             return True, {"exit_code": None, "stdout": "", "stderr": "",
                           "timed_out": True,
+                          "sandboxed": sandboxed,
                           "detail": f"killed after {timeout_s}s"}
         except Exception as e:  # noqa: BLE001
             return False, {"code": type(e).__name__, "detail": str(e)[:120]}

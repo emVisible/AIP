@@ -399,7 +399,8 @@ class StudioServer:
                 "process_id": proc.process_id, "steps": len(proc.steps)}
 
     def test_run_process(self, yaml_text: str, event_name: str,
-                         event_data: dict) -> dict:
+                         event_data: dict,
+                         step_observer=None) -> dict:
         """沙盒试运行：MockERP + API 复合执行器，返回步骤轨迹。
 
         沙盒覆盖 api./erp. 域；browser./desktop. 域需真实执行器，
@@ -432,6 +433,7 @@ class StudioServer:
                 executors=make_executors(),
                 session_prefix="s_sandbox",
                 timeout_s=10.0,
+                step_observer=step_observer,
             )
             steps = [dict(st) for st in result["steps"]]
             return {"outcome": result["outcome"],

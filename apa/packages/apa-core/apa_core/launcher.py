@@ -42,6 +42,7 @@ class ProcessRunner:
         journal=None,
         tenant_id: Optional[str] = None,
         decision_fn=None,
+        step_observer=None,
     ) -> None:
         """decision_fn：ai_decision 节点的决策插槽（C1）。
 
@@ -94,7 +95,8 @@ class ProcessRunner:
             return False, {"code": payload.get("code")}
 
         self.engine = ProcessEngine(proc, send_and_wait,
-                                    decision_fn=decision_fn)
+                                    decision_fn=decision_fn,
+                                    step_observer=step_observer)
 
         def _complete(outcome: str) -> None:
             # escalated：已挂起等人工，不在此收尾（§4.3）
@@ -183,6 +185,7 @@ def run_process(
     journal_dir: Optional[str | Path] = None,
     seed_contexts: Optional[Dict[str, dict]] = None,
     timeout_s: float = 15.0,
+    step_observer=None,
 ) -> dict:
     """一步式启动：加载 process.yaml → 运行至终态。返回摘要。
 
@@ -200,6 +203,7 @@ def run_process(
         executors=executors,
         session=f"{session_prefix}_{proc.process_id}",
         journal=journal,
+        step_observer=step_observer,
     )
     # CoD 预置：事件只带引用，数据先落入执行器 ContextStore（C5）
     for name, payload in (seed_contexts or []):

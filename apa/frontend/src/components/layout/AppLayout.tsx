@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router";
+import { NavLink, Outlet, useLocation } from "react-router";
 import {
   Activity,
   Bot,
@@ -19,6 +19,10 @@ const NAV = [
 
 /** 应用布局壳：Sidebar + 主内容 Outlet + Statusbar（职责单一：仅布局）。 */
 export function AppLayout() {
+  const { pathname } = useLocation();
+  // 设计器是 IDE 型全出血布局：自带工具栏与状态栏，外壳不再加 padding/页脚
+  const fullBleed = pathname.startsWith("/designer");
+
   return (
     <div className="flex h-full">
       <aside className="w-56 shrink-0 bg-sidebar text-sidebar-fg flex flex-col">
@@ -53,14 +57,18 @@ export function AppLayout() {
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className={`flex-1 min-h-0 ${
+          fullBleed ? "overflow-hidden" : "overflow-y-auto p-6"
+        }`}>
           <Outlet />
         </main>
-        <footer className="border-t border-slate-200 px-4 py-1.5 text-xs
-                           text-slate-400 bg-white flex justify-between">
-          <span>APA Studio</span>
-          <span>v0.13 · poc</span>
-        </footer>
+        {!fullBleed && (
+          <footer className="border-t border-slate-200 px-4 py-1.5 text-xs
+                             text-slate-400 bg-white flex justify-between">
+            <span>APA Studio</span>
+            <span>v0.13 · poc</span>
+          </footer>
+        )}
       </div>
     </div>
   );

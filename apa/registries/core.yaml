@@ -4,6 +4,7 @@
 # ============================================================
 context.get:
   executor_domain: any
+  label_cn: 读取上下文变量
   description: "按需获取 ContextStore 中特定字段（CoD-2，禁止 fields: [\"*\"]）"
   params:
     type: object
@@ -22,8 +23,66 @@ context.get:
   retries: 3
   audit_fields: [ref, fields]
 
+mcp.tools_list:
+  executor_domain: mcp
+  label_cn: 列出外部 MCP 工具
+  description: 枚举已配置外部 MCP 服务器的全部工具（APA_MCP_SERVERS 配置）
+  params:
+    type: object
+    required: [server]
+    properties:
+      server:
+        type: string
+        description: APA_MCP_SERVERS 中的服务器名
+  idempotency: required
+  risk: L0
+  timeout_ms: 60000
+  retries: 1
+
+mcp.tool_call:
+  executor_domain: mcp
+  label_cn: 调用外部 MCP 工具
+  description: 调用外部 MCP 服务器的指定工具并取回文本结果
+  params:
+    type: object
+    required: [server, tool]
+    properties:
+      server:
+        type: string
+        description: APA_MCP_SERVERS 中的服务器名
+      tool:
+        type: string
+        description: 外部工具名（先经 mcp.tools_list 发现）
+      arguments:
+        type: object
+        description: 工具入参（结构见该工具 inputSchema）
+  idempotency: none
+  risk: L2
+  timeout_ms: 120000
+  retries: 0
+  audit_fields: [server, tool]
+
+context.spill_read:
+  executor_domain: any
+  label_cn: 回读落盘结果
+  description: 按 spill_ref 回读超大动作结果原文（H1 spill 中间件）
+  when_to_use: 上游步骤声明 spill:true 后，需要完整数据时的取数通道
+  params:
+    type: object
+    required: [ref]
+    properties:
+      ref:
+        type: string
+        description: 上游步骤输出中的 __spill__.spill_ref
+  idempotency: required
+  risk: L0
+  timeout_ms: 5000
+  retries: 1
+  audit_fields: [ref]
+
 context.update:
   executor_domain: any
+  label_cn: 写入上下文变量
   description: "更新 ContextStore 中的字段"
   params:
     type: object
@@ -42,6 +101,7 @@ context.update:
 # ============================================================
 human.task.create:
   executor_domain: any
+  label_cn: 创建人工任务
   description: "创建人工审批/复核/异常任务（Session 挂起）"
   params:
     type: object
@@ -61,6 +121,7 @@ human.task.create:
 
 human.task.cancel:
   executor_domain: any
+  label_cn: 取消人工任务
   description: "取消人工任务并恢复/结束挂起的 Session"
   params:
     type: object
@@ -76,6 +137,7 @@ human.task.cancel:
 
 human.task.reassign:
   executor_domain: any
+  label_cn: 转派人工任务
   description: "将人工任务转派给其他角色"
   params:
     type: object
@@ -95,6 +157,7 @@ human.task.reassign:
 # ============================================================
 ui.confirm:
   executor_domain: core
+  label_cn: 人工确认
   description: "阻塞式人工确认卡（复用 HITL：前端渲染确认按钮，超时默认 cancel）"
   params:
     type: object
@@ -112,13 +175,18 @@ ui.confirm:
 
 code.python:
   executor_domain: data
-  description: "独立 subprocess 执行 Python 片段；timeout 强杀；risk=L3 默认策略强制人工审批"
+  label_cn: 执行 Python 代码
+  description: "独立 subprocess 执行 Python 片段；macOS Seatbelt 沙箱默认开启（写限工作区、网络拒绝）；timeout 强杀；risk=L3 默认策略强制人工审批"
   params:
     type: object
     required: [code]
     properties:
       code: { type: string, description: "完整 Python 脚本文本" }
       timeout_s: { type: number, minimum: 1, maximum: 600, default: 30 }
+      sandbox:
+        type: boolean
+        default: true
+        description: "Seatbelt 沙箱（darwin）：写限工作区/临时目录，网络拒绝"
   idempotency: none
   risk: L3
   timeout_ms: 620000

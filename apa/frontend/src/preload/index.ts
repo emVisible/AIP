@@ -17,6 +17,22 @@ const bridge: ApaDesktopBridge = {
     ipcRenderer.send(IpcChannels.SpyBounds, { bounds, label }),
 
   spyEnded: () => ipcRenderer.send(IpcChannels.SpyOverlayHide),
+
+  registerSpyHotkey: () =>
+    ipcRenderer.invoke(IpcChannels.SpyHotkeyRegister) as Promise<string | null>,
+
+  unregisterSpyHotkey: () => ipcRenderer.send(IpcChannels.SpyHotkeyUnregister),
+
+  onSpyCaptureTrigger: (cb) => {
+    const listener = () => cb();
+    ipcRenderer.on(IpcChannels.SpyCaptureTrigger, listener);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.SpyCaptureTrigger, listener);
+    };
+  },
+
+  openExternal: (url: string) =>
+    ipcRenderer.send("os:open-external", url),
 };
 
 contextBridge.exposeInMainWorld("apaDesktop", bridge);

@@ -111,3 +111,52 @@ def test_gate_refusal_emits_approval_elicitation(client, core_services):
         assert elicits[0]["payload"]["draft_id"] == "d9"
     finally:
         core_services.notifications.unsubscribe(q)
+
+
+def test_settings_get_update_roundtrip(client, core_services):
+    """H7b：get 视图结构 / update 热应用 / env-owned 拒写映射。"""
+    r = client.post("/api/studio/rpc", json={
+        "id": "s1", "method": "settings.get", "params": {}})
+    body = r.json()
+    assert body["ok"], f"get 失败: {json.dumps(body, ensure_ascii=False)}"
+    assert body["result"]["version"] == 1
+    assert isinstance(body["result"]["env_owned"], list)
+    assert "llm" in body["result"]["settings"]
+
+    # 热应用：改 model 后容器内即时生效
+    r = client.post("/api/studio/rpc", json={
+        "id": "s2", "method": "settings.update",
+        "params": {"patch": {"llm": {"model": "hot-switched"}}}})
+    assert r.json()["ok"] is True
+    assert core_services.settings.current.llm.model == "hot-switched"
+
+    # 用户层文件已双写
+    user_yaml = core_services.settings.user_path.read_text()
+    assert "hot-switched" in user_yaml
+
+
+def test_settings_update_rejects_unknown_and_env_owned(
+        client, legacy_env):
+    r = client.post("/api/studio/rpc", json={
+        "id": "a", "method": "settings.update",
+        "params": {"patch": {"nope": 1}}})
+    err = r.json()["error"]
+    assert err["code"] == "invalid_params" and "未知/禁写键" in err["message"]
+
+    # env-owned 路径拒绝写回（提示改环境变量）
+    r = client.post("/api/studio/rpc", json={
+        "id": "c", "method": "settings.update",
+        "params": {"patch": {"data": {"root": "zzz"}}}})
+    err = r.json()["error"]
+    assert err["code"] == "invalid_params"
+    assert "APA_DATA_DIR" in err["message"]
+
+
+def test_usage_summary_zero_state(client):
+    r = client.post("/api/studio/rpc", json={
+        "id": "u", "method": "usage.summary",
+        "params": {"session_id": "nonexistent"}})
+    body = r.json()
+    assert body["ok"] is True
+    assert body["result"]["calls"] == 0
+    assert body["result"]["total_tokens"] == 0

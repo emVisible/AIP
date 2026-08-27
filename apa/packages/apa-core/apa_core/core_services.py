@@ -19,6 +19,7 @@ from typing import Any, Optional
 from .jobs import JobManager
 from . import paths as app_paths
 from .sessions import SessionStore
+from .settings import SettingsManager
 from .spill import SpillStore
 
 
@@ -69,6 +70,7 @@ class CoreServices:
     jobs: JobManager = field(default_factory=JobManager)
     sessions: SessionStore = None          # type: ignore[assignment]
     spills: SpillStore = None              # type: ignore[assignment]
+    settings: SettingsManager | None = None  # 惰性：__post_init__ 构建
 
     # ---- 惰性槽位（API 层赋值；容器不构造） ---------------------------------
     spy: Any = None                        # SpyService | None
@@ -76,6 +78,19 @@ class CoreServices:
     recorder: Any = None                   # RecorderService | None
     scrape: Any = None                     # ScrapeWizardService | None
     notifications: NotificationHub = field(default_factory=NotificationHub)
+
+    def __post_init__(self) -> None:
+        # 防御式收敛：允许传路径字符串，统一转为存储实例
+        if isinstance(self.sessions, (str, Path)):
+            self.sessions = SessionStore(self.sessions)
+        elif self.sessions is None:
+            self.sessions = SessionStore(app_paths.sessions_dir())
+        if isinstance(self.spills, (str, Path)):
+            self.spills = SpillStore(self.spills)
+        elif self.spills is None:
+            self.spills = SpillStore(app_paths.spills_dir())
+        if self.settings is None:
+            self.settings = SettingsManager()
 
     def notify(self, method: str, payload: dict) -> None:
         """Studio notification 发布入口（engine/service 层调用）。"""
@@ -131,17 +146,6 @@ class CoreServices:
                     active_only=bool(p.get("active_only")))]},
             "bgjobs.cancel": bgjobs_cancel,
         }
-
-    def __post_init__(self) -> None:
-        # 防御式收敛：允许传路径字符串，统一转为存储实例
-        if isinstance(self.sessions, (str, Path)):
-            self.sessions = SessionStore(self.sessions)
-        elif self.sessions is None:
-            self.sessions = SessionStore(app_paths.sessions_dir())
-        if isinstance(self.spills, (str, Path)):
-            self.spills = SpillStore(self.spills)
-        elif self.spills is None:
-            self.spills = SpillStore(app_paths.spills_dir())
 
 
 def resolve_services(

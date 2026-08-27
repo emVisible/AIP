@@ -4,6 +4,19 @@
 
 ## [Unreleased]
 
+### Harness 融合 H7 · AI 配置子系统（后端一期）
+- **`settings.py` 分层设置树**：defaults < user(~/.apa) < project(apa.config.yaml)
+  < env(兼容映射标记 owned) < active_profile；deep_merge 嵌套合并；
+  原子写回用户层；坏项目层 YAML 容忍降级
+- **结构化脱敏（C4 对齐）**：树中无 api_key 字段——仅 auth_spec 引用
+  `{"vault"| "env"}`，运行时经 VaultManager 解析；schema 递归拒绝未知键，
+  开放字典（auth_spec/profiles）显式豁免
+- **LLM 缝升级**：chat_metered 带 usage 解析 + 429/5xx/传输错误指数退避；
+  env_owned 路径写回拒绝（提示改环境变量）；rpc `settings.get/update`、
+  `usage.summary`；codegen 再生成 TS 类型
+- 新增 pytest ×14（分层矩阵/脱敏/双写/profiles/开放字典豁免），全量
+  **517 passed**；Studio 设置页 UI 与 vault 写入粘合为 H7b 下轮
+
 ### 收尾轮 · H6 渐进迁移 + 审批引出闭环
 - **RPC 方法扩容**：processes.list / templates.list / yaml.from_form /
   yaml.to_form（api 层编排，模板载荷 REST/RPC 共用）；ValueError 统一映射
@@ -14,6 +27,18 @@
   UI ticker `⏸ 待审批` 数据源打通；测试锁定
 - 架构宪法 §七「脚本编辑安全」从事故候选转正；融合文档 H3 三期/H6
   首批标记更新
+
+### Harness 融合 H7b · Studio 设置页（UI 双写）
+- **`useSettings` hook + 四张设置卡**：AI 模型（provider/model/base_url/
+  auth_spec 引用类型+名称/temperature）、审批策略（风险级选择）、沙箱
+  （Seatbelt/MCP 高风险开关）、外部 MCP 服务器列表编辑器——全部经
+  `settings.update` 热应用并原子写回用户层；env-owned 字段自动只读并
+  标注 🔒 来源；密钥仅编辑引用规格，明文永不经过 UI（C4）
+- **跨测试 env 泄漏修复**：ServeApp 经 .env 向全局 environ 注入
+  APA_LLM_MODEL 等遗留变量且不清理，破坏下游设置类测试 owned 语义——
+  conftest 新增全局 autouse 守卫（快照/恢复 LEGACY_ENV_MAP）
+- 新增 pytest ×3（settings rpc 往返/双写/owned 拒写映射、usage 零态、
+  elicit 发射），全量 **520 passed, 0 失败**
 
 ### Harness 融合 H5 二期 · 外部 MCP 反向接入
 - **`mcp_client.py` 零依赖 stdio 客户端**：握手/list/call，select 超时

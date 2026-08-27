@@ -59,3 +59,29 @@ def client(tmp_path, core_services, stub_serve, monkeypatch):
                      services=core_services,
                      serve_app=stub_serve)
     return TestClient(app)
+
+
+@pytest.fixture()
+def legacy_env(client, core_services, monkeypatch):
+    """在应用构建后设置遗留 env，并 reload 使 owned 标记生效。"""
+    monkeypatch.setenv("APA_LLM_MODEL", "env-wins")
+    monkeypatch.setenv("APA_DATA_DIR", "/custom-data")
+    core_services.settings.reload()
+
+
+@pytest.fixture(autouse=True)
+def _legacy_llm_env_guard():
+    """跨测试隔离：ServeApp 等会经 .env 向全局 environ 注入遗留变量，
+    泄漏会破坏下游设置类测试的 owned 语义（H7 事故固化）。"""
+    import os
+
+    from apa_core.settings import LEGACY_ENV_MAP
+
+    keys = list(LEGACY_ENV_MAP)
+    saved = {k: os.environ.get(k) for k in keys}
+    yield
+    for k, v in saved.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v

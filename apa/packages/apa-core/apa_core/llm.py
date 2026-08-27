@@ -64,16 +64,56 @@ class LLMClient:
 
     # --- 低层 -----------------------------------------------------------------
     def chat(self, messages: List[dict], *, temperature: float = 0.0) -> str:
+        """兼容旧签名：返回 content 文本。"""
+        return self.chat_metered(messages,
+                                 temperature=temperature)["content"]
+
+    def chat_metered(self, messages: List[dict], *,
+                     temperature: float = 0.0) -> Dict[str, Any]:
+        """H7：带用量计量与退避重试的调用。
+
+        返回 {"content", "usage": {prompt,completion,total}|None,
+              "model", "attempts"}。
+        """
         import httpx
-        resp = httpx.post(
-            f"{self.base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {self.api_key}"},
-            json={"model": self.model, "messages": messages,
-                  "temperature": temperature},
-            timeout=self.timeout_s,
-        )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
+
+        delays = [0.5, 1.5, 4.0]
+        attempts = 0
+        last_exc: Optional[Exception] = None
+        while attempts <= len(delays):
+            if attempts:
+                import time as _t
+                _t.sleep(delays[attempts - 1])
+            attempts += 1
+            try:
+                resp = httpx.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    json={"model": self.model, "messages": messages,
+                          "temperature": temperature},
+                    timeout=self.timeout_s,
+                )
+                if resp.status_code in (429, 500, 502, 503, 504):
+                    last_exc = LLMError(f"HTTP {resp.status_code}")
+                    continue
+                resp.raise_for_status()
+                payload = resp.json()
+                usage_src = payload.get("usage") or {}
+                return {
+                    "content": payload["choices"][0]["message"]["content"],
+                    "usage": {
+                        "prompt_tokens": usage_src.get("prompt_tokens"),
+                        "completion_tokens":
+                            usage_src.get("completion_tokens"),
+                        "total_tokens": usage_src.get("total_tokens"),
+                    },
+                    "model": payload.get("model", self.model),
+                    "attempts": attempts,
+                }
+            except (httpx.TransportError,) as e:
+                last_exc = e
+                continue
+        raise LLMError(f"LLM 调用失败（{attempts} 次）: {last_exc}")
 
     # --- 决策 -------------------------------------------------------------------
     def decide(

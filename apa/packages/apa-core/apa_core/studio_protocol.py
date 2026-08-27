@@ -114,6 +114,29 @@ class ApprovalElicitation(BaseModel):
     prompt: str
 
 
+
+class LlmSettings(BaseModel):
+    provider: str = "deepseek"
+    model: str
+    base_url: str
+    api_key_spec: Dict[str, str] = Field(default_factory=dict)
+    temperature: float = 0.0
+    max_tokens: Optional[int] = None
+
+
+class SettingsView(BaseModel):
+    """redacted 设置视图：env-owned 路径带 _source 标注。"""
+    version: int
+    settings: Dict[str, Any]
+    env_owned: List[str]
+
+
+class UsageSummary(BaseModel):
+    total_prompt_tokens: int = 0
+    total_completion_tokens: int = 0
+    total_tokens: int = 0
+    calls: int = 0
+
 NOTIFICATION_METHODS = {
     "run.step": RunStepNotification,
     "run.outcome": RunOutcomeNotification,

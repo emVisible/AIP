@@ -626,6 +626,29 @@ def create_app(
     # 三态分类学见 studio_protocol.py；方法注册表在 CoreServices.rpc_table
     # （H3 二期：api 层只做分发与错误映射，宪法 §一）。
 
+    def _apply_settings_patch(patch: dict, write_back: bool):
+        try:
+            svc.settings.update(patch, write_back=write_back)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+
+    def _rpc_usage_summary(p: dict) -> dict:
+        """按会话聚合 llm.usage 事件（H7 计量出口）。"""
+        sid = str(p.get("session_id") or "")
+        events = svc.sessions.read(sid) if sid else []
+        summary = {"total_prompt_tokens": 0, "total_completion_tokens": 0,
+                   "total_tokens": 0, "calls": 0}
+        for e in events:
+            if e.get("kind") != "llm.usage":
+                continue
+            u = (e.get("payload") or {}).get("usage") or {}
+            for k in ("prompt_tokens", "completion_tokens", "total_tokens"):
+                v = u.get(k) or 0
+                if isinstance(v, (int, float)):
+                    summary[f"total_{k}"] += int(v)
+            summary["calls"] += 1
+        return summary
+
     def _rpc_process_save(p: dict):
         svc.require_draft_approved(str(p.get("session_id", "")),
                                    str(p.get("draft_id", "")))
@@ -679,6 +702,15 @@ def create_app(
                     "yaml": server.process_from_form(p.get("form") or {})},
                 "yaml.to_form": lambda p: server.process_to_form(
                     str(p.get("yaml", ""))),
+                "settings.get": lambda p: {
+                    "version": svc.settings.current.version,
+                    "settings": svc.settings.get(),
+                    "env_owned": svc.settings.env_owned_paths()},
+                "settings.update": lambda p: (
+                    _apply_settings_patch(p.get("patch") or {},
+                                          bool(p.get("write_back", True))),
+                    {"ok": True, "settings": svc.settings.get()})[1],
+                "usage.summary": _rpc_usage_summary,
             })
             if method not in table:
                 raise KeyError(method)

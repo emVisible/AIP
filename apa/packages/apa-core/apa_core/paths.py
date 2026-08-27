@@ -9,12 +9,22 @@ import os
 from pathlib import Path
 
 __all__ = ["data_root", "sessions_dir", "spills_dir", "sandbox_dir",
-           "processes_dir"]
+           "processes_dir", "user_config_dir", "project_config_path"]
 
 
 def data_root() -> Path:
     env = os.environ.get("APA_DATA_DIR")
     return Path(env) if env else Path("data")
+
+
+def user_config_dir() -> Path:
+    """用户层配置目录（H7 双写的写回目标）。"""
+    return Path.home() / ".apa"
+
+
+def project_config_path() -> Path:
+    """项目层配置文件（当前工作目录）。"""
+    return Path.cwd() / "apa.config.yaml"
 
 
 def sessions_dir() -> Path:

@@ -15,7 +15,7 @@
 | D-1 | 首攻 **H1 底座**（会话溯源 + jobs 生命周期 + spill），后续按序推进 |
 | D-2 | Codex Rust 资产**仅取设计与数据文件**（协议分类学、.sbpl、JSONL schema），不引入 cargo 组件/sidecar |
 | D-3 | 本轮交付=本文档；实施自下一轮 H1 起 |
-| D-4 | Cordis 插件体系**不引入**（对 Python 栈是整体重写）；仅借鉴 Service Definition 三角色概念于文档层 |
+| D-4(v1.1) | Cordis **字面引入冻结**（本体仅 ~2.7k 行 TS，成本在语义迁移而非体量）；三支柱语义待触发条件满足后经原生迷你内核落地（宪法 §八）。触发：①第二常驻表面立项 ②Pack 热插需求 ③手写清理补丁再现≥2次 |
 | D-5 | dsh workflow（模型写 JS 跑 vm）**不采纳**——与 ProcessEngine 确定性哲学冲突；仅偷其取消/并发限额/force-terminate 设计 |
 
 ## §1 许可义务
@@ -153,6 +153,7 @@ params 声明 `spill: true`（四个白名单动作 schema 已加该开关）才
 | H3 Studio 协议 v1 ✅（三期） | request/response/notification 三态 + item 粒度运行事件 + elicitation；TS 类型由 Python 单源生成 | codex app-server-protocol（含 91 行 transport 分层示范） | 三端共用一份类型定义，旧 REST/SSE 经适配层过渡。落地：`apa_core/studio_protocol.py` 单源 + `studio_codegen.py`→`frontend/src/shared/studioProtocol.ts`（漂移门禁）+ `/api/studio/rpc` 统一通道（错误语义五态）；Workbench 为首个消费方；notification SSE 已接线；run.step 经引擎观察者真实发射；process.save/test、yaml.*、templates/processes.list 已迁入；剩余长尾 REST 渐进迁移 |
 | H4 沙箱 code.python ✅ | `.sbpl` 四份策略文件直接落地 + sandbox-exec spawn wrapper；L3 默认沙箱、白名单逃逸需审批 | codex sandboxing | 沙箱内进程无网络/越界写，策略文件可独立审计。落地：`apa_executors/sandbox.py` + `profiles/code_python_default.sbpl`（单工作区模板替代 codex 参数机），`code.python` 默认沙箱、params.sandbox 可关、结果带 sandboxed 标注 |
 | H5 MCP 互通 ✅ | registry 包装为 MCP server；外部 MCP 工具经发现协议注册为新动作（risk 标注继承） | codex mcp-server 思路 + dsh mcp-client | 双向落地：出口=`mcp_server.py` 零依赖 stdio 服务（187 工具，risk≥L2 门禁）；反向=`mcp_client.py`+`McpBridgeExecutor`——env `APA_MCP_SERVERS` 声明外部服务器，两稳定动作 `mcp.tools_list`/`mcp.tool_call` 消费任意外部工具（狗粮闭环测试：自家 server 作外部端） |
+| H7 AI 配置子系统 ✅（后端+RPC；UI 下轮） | 分层设置树 defaults<user<project<env<override，双写用户层；LLM 适配缝+token meter+retry；auth_spec 走 vault/env 引用（C4） | codex config profiles + dsh settings(redact)/llm-retry/token-meter | 五层优先级矩阵/redact 门禁/双写回读/profiles 热切换 全部测试锁定；旧 env 兼容并标记 owned 拒写 |
 | H6 前端连接层 ✅（首批） | ws/SSE 下行 + RPC 上行统一数据层 | dsh client/connection + runtime | 设计器核心读写（sessions/process.save·test/yaml.*/templates/processes.list）已全覆盖 studioRpc；剩余长尾渐进迁移 |
 
 ## §6 非目标与边界

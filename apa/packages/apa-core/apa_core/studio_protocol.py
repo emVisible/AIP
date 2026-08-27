@@ -115,15 +115,6 @@ class ApprovalElicitation(BaseModel):
 
 
 
-class LlmSettings(BaseModel):
-    provider: str = "deepseek"
-    model: str
-    base_url: str
-    api_key_spec: Dict[str, str] = Field(default_factory=dict)
-    temperature: float = 0.0
-    max_tokens: Optional[int] = None
-
-
 class SettingsView(BaseModel):
     """redacted 设置视图：env-owned 路径带 _source 标注。"""
     version: int

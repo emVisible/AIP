@@ -24,15 +24,6 @@ export interface JobRecord {
   result_ref?: string | null;
 }
 
-export interface LlmSettings {
-  provider?: string;
-  model: string;
-  base_url: string;
-  api_key_spec?: Record<string, string>;
-  temperature?: number;
-  max_tokens?: number | null;
-}
-
 export interface RpcErrorBody {
   code: "method_not_found" | "invalid_params" | "not_found" | "conflict" | "internal_error";
   message: string;

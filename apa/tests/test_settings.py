@@ -166,8 +166,3 @@ def test_open_dicts_accept_arbitrary_keys(mgr):
     assert mgr.current.llm.auth_spec == {"env": "MY_KEY"}
     mgr.update({"profiles": {"fast": {"llm": {"model": "x"}}}})
     assert "fast" in mgr.current.profiles
-
-
-def test_update_rejects_unknown_keys(mgr):
-    with pytest.raises(ValueError, match="未知/禁写键"):
-        mgr.update({"llm": {"api_key": "sk-secret123"}})

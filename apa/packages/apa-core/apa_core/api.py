@@ -409,10 +409,12 @@ def create_app(
         from dataclasses import asdict
         return {"ok": True, "job": asdict(rec)}
 
-    # ---- 会话事件溯源（H1）----
+    # ---- 会话总览（journal 会话，供 Runs/Hitl 轮询）----
     @app.get("/api/sessions")
     async def sessions_list():
-        return {"sessions": svc.sessions.list_sessions()}
+        return server.sessions()
+
+    # ---- 会话事件溯源（H1，供 Workbench；REST 仅保留 append/read，list 走 RPC session.list）----
 
     @app.post("/api/sessions/{sid}/append")
     async def sessions_append(sid: str, body: dict):

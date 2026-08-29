@@ -234,12 +234,11 @@ def create_app(
 
         def _emit(evt: dict) -> None:
             svc.notify("run.step", {"session": "sandbox", **evt})
-        _require_draft_approved(req.session_id, req.draft_id)
         try:
             result = server.test_run_process(req.yaml, req.event, req.data,
                                              step_observer=_emit)
         except Exception as e:
-            return {"outcome": "error", "error": str(e)}
+            raise HTTPException(500, str(e))
         from .spill import spill_test_response
         spill_test_response(result)
 

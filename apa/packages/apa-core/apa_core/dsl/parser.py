@@ -351,6 +351,32 @@ def _valid_ident(name: str) -> bool:
     return bool(name) and all(c in _IDENT for c in name)
 
 
+def _is_verb(word: str) -> bool:
+    """动词位判定：关键字或带点动作名。"""
+    return word in ("for", "while", "ask", "run", "script", "log",
+                    "handler", "flow", "on") or "." in word
+
+
+def _split_id(words: List[str], lineno: int, raw: str) -> tuple:
+    """[@id | id] 动词 … → (id|None, 动词下标)。
+    DWIM：首词非动词位、次词是动词位 ⇒ 首词为 id（须合法）。
+    `@id` 显式写法并存（同一语义）。"""
+    if not words:
+        raise DslError("空步骤", line=lineno, text=raw)
+    if words[0].startswith("@"):
+        node_id = words[0][1:]
+        if not _valid_ident(node_id):
+            raise DslError("@id 须为字母数字下划线", line=lineno,
+                           text=raw)
+        return node_id, 1
+    if len(words) > 1 and not _is_verb(words[0]) and _is_verb(words[1]):
+        if not _valid_ident(words[0]):
+            raise DslError(f"步骤 id 非法：{words[0]!r}", line=lineno,
+                           text=raw)
+        return words[0], 1
+    return None, 0
+
+
 # ---- 解析器 ------------------------------------------------------------------
 
 class _Parser:
@@ -480,14 +506,7 @@ class _Parser:
         stripped = text.strip()[:-1].rstrip()   # 去结尾冒号
         toks = _scan(stripped, lineno, text)
         words = [t.text for t in toks]
-        i = 0
-        node_id = None
-        if words and words[0].startswith("@"):
-            node_id = words[0][1:]
-            if not _valid_ident(node_id):
-                raise DslError("@id 须为字母数字下划线", line=lineno,
-                               text=text)
-            i = 1
+        node_id, i = _split_id(words, lineno, text)
         if i >= len(words):
             raise DslError("块头缺关键字", line=lineno, text=text)
         kw = words[i]
@@ -622,18 +641,10 @@ class _Parser:
             raise DslError("独占步不能以 : 结尾（: 只属于 for/while/handler）",
                            line=lineno, text=raw)
         toks = _scan(stripped, lineno, raw)
-        words = [t.text for t in toks]
-        i = 0
-        node_id = None
-        if words and words[0].startswith("@"):
-            node_id = words[0][1:]
-            if not _valid_ident(node_id):
-                raise DslError("@id 须为字母数字下划线", line=lineno,
-                               text=raw)
-            i = 1
-        if i >= len(words):
+        node_id, i = _split_id([t.text for t in toks], lineno, raw)
+        if i >= len(toks):
             raise DslError("空步骤", line=lineno, text=raw)
-        verb = words[i]
+        verb = toks[i].text
         i += 1
         if verb == "ask":
             return self._parse_ask(node_id, toks, i, lineno, raw)
@@ -908,13 +919,16 @@ class _Parser:
 
     def _take_fence(self) -> str:
         """script 头之后紧跟 \"\"\" 代码块（原文收录，去公共缩进）。
-        调用契约：self.pos 仍指着 script 头行，先跨过它。"""
-        self.pos += 1
-        while self.pos < len(self.lines):
+        调用契约：self.pos 仍指着 script 头行。
+        结束契约：pos 停在闭合 fence 行，调用方的 +=1 负责消费它
+        （与 _parse_simple“不推进 pos”一致，否则 fence 后一行被吞）。"""
+        self.pos += 1  # 跨过头行
+        n = len(self.lines)
+        while self.pos < n:
             lineno, text = self.lines[self.pos]
             s = text.strip()
-            self.pos += 1
             if not s or s.startswith("#"):
+                self.pos += 1
                 continue
             if s != '"""':
                 raise DslError("script 头之后须紧跟 \"\"\" 代码块",
@@ -922,13 +936,14 @@ class _Parser:
             break
         else:
             raise DslError("script 缺 \"\"\" 代码块")
+        self.pos += 1  # 消费 opening fence
         buf: List[tuple] = []
-        while self.pos < len(self.lines):
+        while self.pos < n:
             lineno, text = self.lines[self.pos]
-            self.pos += 1
             if text.strip() == '"""':
-                break
+                break  # 停在闭合行：调用方推进
             buf.append((lineno, text.rstrip("\n")))
+            self.pos += 1
         else:
             raise DslError("代码块缺闭合 \"\"\"")
         # 去公共缩进（空行不参与）

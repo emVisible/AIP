@@ -160,3 +160,34 @@ def test_errors_with_lines(src, msg):
     if src.strip():
         assert "第" in str(e.value) and "行" in str(e.value)
     # 空文件无行号：只有消息断言（首个 assert 已覆盖）
+
+
+def test_spec_ok_blocks_compile_and_validate():
+    """docs/afl-spec.md 里所有 afl-ok 块必须编译＋过引擎校验。
+    文档与实现单一真相：文档例烂了，测试先红。"""
+    import re
+    from pathlib import Path
+    from apa_core.process import build_process
+    src = (Path(__file__).parent.parent / "docs" / "afl-spec.md"
+           ).read_text(encoding="utf-8")
+    blocks = re.findall(r"```afl-ok\n(.*?)```", src, re.DOTALL)
+    assert len(blocks) >= 2
+    for b in blocks:
+        build_process(compile_text(b))
+
+
+def test_bare_id_dwim():
+    # 裸 id（次词动词位）与 @ 显式同义
+    a = steps_of('flow m\ns1 browser.click target=#a\n')[0]
+    b = steps_of('flow m\n@s1 browser.click target=#a\n')[0]
+    assert a["id"] == b["id"] == "s1"
+    assert a == b
+    # 动词位首词不是 id：无点非关键字作动词仍报错
+    with pytest.raises(DslError):
+        compile_text('flow m\nclick target=#a\n')
+
+
+def test_script_colon_optional():
+    a = steps_of('flow m\n@s script python as x:\n    """\n    return 1\n    """\n')[0]
+    b = steps_of('flow m\n@s script python as x\n    """\n    return 1\n    """\n')[0]
+    assert a["params"]["code"] == b["params"]["code"] == "return 1"

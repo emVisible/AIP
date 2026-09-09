@@ -45,12 +45,15 @@ CREDENTIAL_PATTERNS = [
     re.compile(r"(?:secret|token|apikey)[\"']?\s*[:=]", re.IGNORECASE),
 ]
 
-# APA-Profile 事件域（§4.1）
+# APA-Profile 事件域（§4.1）＋ 内核 fixtures 通用域（C 阶段实证：
+# task.started / button.appeared 是再普通不过的自动化事件，拒收它们
+# 是互操作 bug 而非严格——AIP 内核本无域白名单）。
 ALLOWED_EVENT_DOMAINS = {
     "browser", "desktop", "document", "erp", "crm", "form",
     "bot", "human", "page", "order", "session", "context",
+    "task", "button",
 }
-EVENT_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){2,}$")
+EVENT_NAME_RE = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
 # 命令式事件名禁止（§4.1 禁止项）
 FORBIDDEN_EVENT_SEGMENTS = {"please", "do", "make", "execute", "click", "go"}
 
@@ -302,6 +305,16 @@ class APAGateway:
         name = msg.payload.get("name", "")
         data = msg.payload.get("data") or {}
 
+        # 凭据扫描先于路由规则（与 reference 顺序一致；action 路径见第⑤步。
+        # result/error 不扫：返回凭据值是合法行为，扫了是误杀）。
+        if self._scan(msg):
+            self.rejections.append(("C4", msg.id, name))
+            self.rejections.append(("I10", msg.id, name))
+            self.audit.log_error(self.session_id, "credential_in_payload",
+                                 name)
+            return self._fail(side, msg, "INVALID_MESSAGE",
+                              "credential-like content in payload")
+
         # 事件命名空间校验（§4.1）
         if not self._validate_event_name(name):
             self.rejections.append(("EVENT_NS", side, name))
@@ -411,6 +424,7 @@ class APAGateway:
         # ⑤ 凭据扫描（C4/I10）
         if self._scan(msg):
             self.rejections.append(("C4", msg.id, name))
+            self.rejections.append(("I10", msg.id, name))
             self.audit.log_error(self.session_id, "credential_in_payload", name)
             return [make_result(self.session_id, "gateway", "rejected",
                                 msg.id, code="credential_in_payload")]
@@ -629,6 +643,10 @@ class APAGateway:
     def hello(self) -> dict:
         return {"session": self.session_id, "cursors": self.session.cursors(),
                 "state": self.sm.state}
+
+    def pong(self) -> dict:
+        """绑定层心跳应答（D4）：心跳不占应用 seq（无 seq 字段）。"""
+        return {"type": "pong", "session": self.session_id}
 
     def tick(self) -> None:
         self.retry_scheduler.tick()

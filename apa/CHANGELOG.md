@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### AIP 内核一致性（C 阶段 · 22/22）
+- `tests/test_aip_conformance.py`：conformance 行为夹具跑 `APAGateway`
+- 修 4 真问题：事件命名空间误杀通用名／补 `pong`／event 凭据扫描＋I10
+  双码／首条即审批的状态机起步；`docs/aip-conformance.md` 落 verdict
+- 全量 572 passed, 0 failed
+
 ### AFL P4 · 动词打标（Occam 第二刀）
 - registry 默认实验态（`stable: true` 加冕 7 个：navigate/click/input/
   extract_table/filter/email.send/code.python）；新动作默认不上前台

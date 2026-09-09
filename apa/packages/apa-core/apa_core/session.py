@@ -131,6 +131,11 @@ class SessionStateMachine:
     # --- 人工干预 ---------------------------------------------------------------
     def suspend_for_human(self, task_id: str) -> None:
         self.record.human_tasks.append(task_id)
+        # 首条消息即触发审批时会话还在 INITIALIZING：先合法起步再挂起
+        # （INITIALIZING→RUNNING→SUSPENDED，两步都合状态图）。
+        # C 阶段实证：K4 首条 action 即 REQUIRE_HUMAN，不起步就崩。
+        if self.state == "INITIALIZING":
+            self.transition("RUNNING")
         self.transition("SUSPENDED")
 
     def resume_after_human(self, task_id: Optional[str] = None) -> None:

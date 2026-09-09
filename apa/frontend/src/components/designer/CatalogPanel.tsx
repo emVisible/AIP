@@ -97,6 +97,25 @@ export function CatalogPanel({ onInsert, filter, onFilterChange }: {
   const [inner, setInner] = useState("");
   const filter_ = filter ?? inner;
   const setFilter = onFilterChange ?? setInner;
+  // S3-T4：域折叠（localStorage 持久；搜索时强制全展）。
+  const [collapsed, setCollapsed] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("apa-catalog-collapsed");
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr.filter(x => typeof x === "string") : [];
+    } catch { return []; }
+  });
+  function toggleDomain(domain: string) {
+    setCollapsed(prev => {
+      const next = prev.includes(domain)
+        ? prev.filter(d => d !== domain)
+        : [...prev, domain];
+      try {
+        localStorage.setItem("apa-catalog-collapsed", JSON.stringify(next));
+      } catch { /* 隐私模式忽略 */ }
+      return next;
+    });
+  }
 
   const { catalog, isLoading, isError, refetch } = useActionCatalog();
 
@@ -237,22 +256,32 @@ export function CatalogPanel({ onInsert, filter, onFilterChange }: {
           </div>
         )}
 
-        {/* Registry 动作（按域分组） */}
+        {/* Registry 动作（按域分组，可折叠） */}
         {!isLoading && !isError &&
           Object.entries(groups).map(([domain, items]) => {
             const Icon = DOMAIN_ICONS[domain];
+            // 搜索时强制全展；平时按记忆折叠。
+            const isCollapsed = !!filter_?.trim()
+              ? false : collapsed.includes(domain);
             return (
               <div key={domain}>
-                <p className="flex items-center gap-1 text-[10px]
-                              font-semibold text-slate-400 uppercase
-                              tracking-wide px-1 pt-2">
+                <button onClick={() => toggleDomain(domain)}
+                  className="w-full flex items-center gap-1 text-[10px]
+                             font-semibold text-slate-400 uppercase
+                             tracking-wide px-1 pt-2 pb-0.5 rounded
+                             hover:bg-slate-50 transition-colors
+                             duration-150">
+                  <span className={`inline-block transition-transform
+                                    duration-200 ${isCollapsed
+                                      ? "-rotate-90" : ""}`}>▾</span>
                   {Icon && <Icon size={11} />}
                   {DOMAIN_LABELS[domain] ?? domain}
                   <span className="ml-0.5 font-normal">
                     ({items.length})
                   </span>
-                </p>
-                {items.map(([name, meta]) => renderAction(name, meta))}
+                </button>
+                {!isCollapsed && items.map(([name, meta]) =>
+                  renderAction(name, meta))}
               </div>
             );
           })}

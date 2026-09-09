@@ -22,7 +22,7 @@ import {
   useNodesState,
   useReactFlow,
 } from "@xyflow/react";
-import { AlignVerticalSpaceAround, Code2, Copy, FolderOpen,
+import { AlignVerticalSpaceAround, Code2, Copy, Crosshair, FolderOpen,
          ListTree, Maximize, PanelLeftClose, PanelLeftOpen, Plus,
          Save, SquareDot, Terminal, Trash2, Workflow } from "lucide-react";
 
@@ -38,12 +38,11 @@ import { studioRpc } from "../../api/studio";
 import type { ActionMeta, ProcessInfo } from "../../api/types";
 import { CatalogPanel } from "../../components/designer/CatalogPanel";
 import { StepInspector } from "../../components/designer/StepInspector";
-import { BrowserPickPanel,
-         type PickPayload, type ScrapeSpec }
+import { type PickPayload, type ScrapeSpec }
   from "../../components/designer/BrowserPickPanel";
 import { TestRunPanel } from "../../components/designer/TestRunPanel";
-import { SpyPanel } from "../../components/designer/SpyPanel";
-import { ScrapePanel } from "../../components/designer/ScrapePanel";
+import { ToolFloatPanel, type FloatKind }
+  from "../../components/designer/ToolFloatPanel";
 import { Badge, Button, Drawer, IconButton } from "../../components/ui";
 import { availableVariables } from "../../hooks/useVariableRegistry";
 import { useActionCatalog } from "../../hooks/useActionCatalog";
@@ -155,9 +154,8 @@ function DesignerInner() {
   /** 试运行 / YAML 底部抽屉。 */
   const [runOpen, setRunOpen] = useState(false);
   const [yamlOpen, setYamlOpen] = useState(false);
-  /** 左栏工具面板 Tab。 */
-  const [toolTab, setToolTab] = useState<
-    "" | "spy" | "scrape" | "web">("");
+  /** 上下文工具浮层（P3：替代左栏 Tab；null=关闭）。 */
+  const [floatKind, setFloatKind] = useState<FloatKind | null>(null);
   /** 中央视图 Tab：流程图为主编辑面，步骤列表为快速浏览面。 */
   const [viewTab, setViewTab] = useState<"list" | "graph">("graph");
   /** 目录搜索词（跨 Tab 保留）。 */
@@ -370,6 +368,16 @@ function DesignerInner() {
     if (!spy.spying && pick?.kind === "desktop") setPick(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spy.spying]);
+
+  // 拾取解武装（回填成功 / 会话结束 / 手动停止）→ 自动关闭浮层。
+  // 注意只响应 armed→disarmed 边沿：工具栏开浮层时 pick 本来就为 null，
+  // 朴素的 !pick 判断会在挂载瞬间误关。
+  const prevArmedRef = useRef(false);
+  useEffect(() => {
+    const armed = pick !== null;
+    if (prevArmedRef.current && !armed) setFloatKind(null);
+    prevArmedRef.current = armed;
+  }, [pick]);
 
   function captureSpyElement(el: CapturedElement) {
     setSteps(prev => {
@@ -799,45 +807,22 @@ function DesignerInner() {
             <>
               <nav className="flex items-center gap-1 px-2 pt-2 pb-1
                               border-b border-slate-100">
-                {([["", "动作"], ["spy", "拾取"], ["web", "网页"],
-                   ["scrape", "抓取"]] as const).map(([k, label]) => (
-                  <button key={k} onClick={() => setToolTab(k)}
-                    className={`h-6 px-2 rounded text-[11px] font-medium
-                                transition-colors ${toolTab === k
-                      ? "bg-zinc-900 text-white"
-                      : "text-slate-500 hover:bg-slate-100"}`}>
-                    {label}
-                  </button>
-                ))}
+                <span className="h-6 px-2 inline-flex items-center
+                                 text-[11px] font-semibold text-slate-700">
+                  动作
+                </span>
                 <IconButton label="收起侧栏" className="ml-auto"
                             onClick={() => setLeftOpen(false)}>
                   <PanelLeftClose size={13} />
                 </IconButton>
               </nav>
               <div className="flex-1 overflow-y-auto p-2 min-h-0">
-                {toolTab === "" && (
-                  <CatalogPanel
-                    filter={catalogFilter}
-                    onFilterChange={setCatalogFilter}
-                    onInsert={(action: string) =>
-                      insertStep(steps.length,
-                        stepFromAction(action, steps.length, catalog))} />
-                )}
-                {toolTab === "spy" && (
-                  <SpyPanel spy={spy}
-                    targetHint={pick?.kind === "desktop"
-                      ? `步骤 ${pick.idx + 1}`
-                      : null} />
-                )}
-                {toolTab === "web" && (
-                  <BrowserPickPanel onPick={handleBrowserPick}
-                    onScrapeGenerate={handleScrapeGenerate}
-                    targetHint={pick?.kind === "web"
-                      ? `步骤 ${pick.idx + 1}`
-                      : null} />
-                )}
-                {toolTab === "scrape" &&
-                  <ScrapePanel onGenerate={addGeneratedSteps} />}
+                <CatalogPanel
+                  filter={catalogFilter}
+                  onFilterChange={setCatalogFilter}
+                  onInsert={(action: string) =>
+                    insertStep(steps.length,
+                      stepFromAction(action, steps.length, catalog))} />
               </div>
               <div className="border-t border-slate-100 max-h-[32%]
                               overflow-y-auto shrink-0">
@@ -917,10 +902,14 @@ function DesignerInner() {
               onDragLeave={handleCanvasDragLeave}
               onDrop={handleCanvasDrop}>
 
-              {/* 画布控件：整理布局 / 适配视图 */}
+              {/* 画布控件：拾取工具 / 整理布局 / 适配视图 */}
               {viewTab === "graph" && steps.length > 0 && (
                 <div className="absolute top-2 right-2 z-10 flex gap-1
                                 bg-white/90 rounded-md p-0.5">
+                  <IconButton label="拾取工具（桌面/网页/抓取）"
+                    onClick={() => setFloatKind("spy")}>
+                    <Crosshair size={13} />
+                  </IconButton>
                   <IconButton label="整理布局"
                     onClick={() => {
                       setRfNodes(prev => prev.map((n, i) => ({
@@ -1141,14 +1130,12 @@ function DesignerInner() {
             availableVars={availableVariables(steps, selectedIdx)}
             onChange={(patch) => updateStepAt(selectedIdx, patch)}
             onPickFromScreen={() => {
-              setToolTab("spy");
-              setLeftOpen(true);
+              setFloatKind("spy");
               setPick({ idx: selectedIdx, kind: "desktop" });
               if (!spy.spying) spy.start();
             }}
             onPickFromPage={() => {
-              setToolTab("web");
-              setLeftOpen(true);
+              setFloatKind("web");
               setPick({ idx: selectedIdx, kind: "web" });
             }}
             onDuplicate={() => duplicateStep(selectedIdx)}
@@ -1195,6 +1182,33 @@ function DesignerInner() {
         <StudioEventTicker />
         <span>{currentFile}</span>
       </footer>
+
+      {/* ===== 上下文工具浮层（P3：拾取/网页/抓取的新家）===== */}
+      {floatKind && (
+        <ToolFloatPanel
+          kind={floatKind}
+          onKindChange={setFloatKind}
+          onClose={() => {
+            setFloatKind(null);
+            // 关浮层即解除填充武装（与会话结束行为一致）
+            setPick(null);
+          }}
+          hint={pick
+            ? `正在为步骤 ${pick.idx + 1} 拾取` +
+              `（${pick.kind === "desktop" ? "桌面" : "页面"}）`
+            : null}
+          spy={spy}
+          targetHint={pick ? `步骤 ${pick.idx + 1}` : null}
+          onPick={handleBrowserPick}
+          onScrapeGenerate={(spec) => {
+            handleScrapeGenerate(spec);
+            setFloatKind(null);
+          }}
+          onGenerate={(genSteps, label) => {
+            addGeneratedSteps(genSteps, label);
+            setFloatKind(null);
+          }} />
+      )}
 
       {/* ===== 步骤右键菜单 ===== */}
       {menu && (

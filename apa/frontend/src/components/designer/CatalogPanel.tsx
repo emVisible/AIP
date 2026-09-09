@@ -141,8 +141,8 @@ export function CatalogPanel({ onInsert, filter, onFilterChange }: {
         }}
         onClick={() => onInsert(name)}
         className={cn(
-          "px-2 py-1 cursor-grab active:cursor-grabbing rounded",
-          "transition-colors group",
+          "px-2 py-1 cursor-grab active:cursor-grabbing rounded group",
+          "transition-all duration-150 hover:translate-x-[1px] active:scale-[.99]",
           tone === "violet" ? "hover:bg-violet-50" : "hover:bg-blue-50",
         )}
         title={(meta.description ?? "") +

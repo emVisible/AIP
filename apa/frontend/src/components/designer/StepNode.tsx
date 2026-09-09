@@ -60,7 +60,9 @@ export function StepNodeView({ data }: { data: StepNodeData }) {
     <div className={`relative rounded-lg border bg-white px-3 py-2
                      min-w-[180px] max-w-[240px]
                      shadow-[0_1px_3px_rgba(0,0,0,0.08)]
-                     transition-shadow hover:shadow-[0_2px_8px_rgba(0,0,0,0.10)]
+                     transition-[box-shadow,border-color] duration-150
+                     cursor-grab active:cursor-grabbing
+                     hover:shadow-[0_2px_8px_rgba(0,0,0,0.10)]
                      ${data.tone}`}>
       <span className={`absolute left-0 top-2 bottom-2 w-[3px] rounded-full
                         ${accent}`} />
@@ -101,7 +103,7 @@ export function StepNodeView({ data }: { data: StepNodeData }) {
         </p>
       )}
       {(data.hasCondition || data.hasGoto || (data.loopCount ?? 0) > 0) && (
-        <div className="mt-1 flex items-center gap-1">
+        <div className="mt-1 flex items-center gap-1 animate-fade-in">
           {data.hasCondition && (
             <span title="条件跳过：condition 非空"
               className="text-[9px] leading-none rounded bg-amber-50

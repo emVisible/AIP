@@ -1042,7 +1042,8 @@ function DesignerInner() {
                           }}
                           className={`group cursor-grab active:cursor-grabbing
                                       rounded-lg border px-3 py-2
-                                      transition-colors ${
+                                      transition-[border-color,box-shadow,background-color]
+                                      duration-150 ${
                             selectedIdx === i
                               ? "ring-1 ring-blue-300 border-blue-300 bg-blue-50"
                               : dragOverIdx === i

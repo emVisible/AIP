@@ -76,6 +76,7 @@ export function IconButton({
       className={cn(
         "inline-flex items-center justify-center w-7 h-7 rounded-md",
         "text-slate-500 hover:text-slate-800 hover:bg-slate-100",
+        "transition-all duration-150 active:scale-90",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40",
         className,
       )}

@@ -17,6 +17,12 @@ export type StepNodeData = {
   tone: string;
   index?: number;
   kind?: "" | "foreach" | "sub_process" | "ai_decision" | "while" | "log";
+  /** 条件跳过（condition 非空）。P1-T3：徽标与数据一一对应。 */
+  hasCondition?: boolean;
+  /** 失败跳转（on_failure_goto 指向现存步骤）。 */
+  hasGoto?: boolean;
+  /** 循环体内步骤数（body_steps.length，无则不显示）。P1-T5。 */
+  loopCount?: number;
 };
 
 const KIND_ACCENT: Record<string, string> = {
@@ -93,6 +99,31 @@ export function StepNodeView({ data }: { data: StepNodeData }) {
                       leading-tight">
           {data.summary}
         </p>
+      )}
+      {(data.hasCondition || data.hasGoto || (data.loopCount ?? 0) > 0) && (
+        <div className="mt-1 flex items-center gap-1">
+          {data.hasCondition && (
+            <span title="条件跳过：condition 非空"
+              className="text-[9px] leading-none rounded bg-amber-50
+                         text-amber-600 px-1 py-0.5 font-medium">
+              ⏭ 条件
+            </span>
+          )}
+          {data.hasGoto && (
+            <span title="失败跳转：on_failure_goto"
+              className="text-[9px] leading-none rounded bg-rose-50
+                         text-rose-600 px-1 py-0.5 font-medium">
+              ⚠ 跳转
+            </span>
+          )}
+          {(data.loopCount ?? 0) > 0 && (
+            <span title="循环体内步骤数"
+              className="text-[9px] leading-none rounded bg-violet-50
+                         text-violet-600 px-1 py-0.5 font-medium">
+              ↻ 体内×{data.loopCount}
+            </span>
+          )}
+        </div>
       )}
       <Handle type="target" position={Position.Top} className="!w-1.5 !h-1.5" />
       <Handle type="source" position={Position.Bottom} className="!w-1.5 !h-1.5" />

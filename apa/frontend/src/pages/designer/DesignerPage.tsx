@@ -133,6 +133,8 @@ function DesignerInner() {
   const [maxActions, setMaxActions] = useState(50);
   const [steps, setSteps] = useState<DStep[]>([blankStep(0)]);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  /** 选中的失败跳转边 id（goto-*）；Delete 键删除它=清空源步骤字段。 */
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [yamlText, setYamlText] = useState("");
   const [statusMsg, setStatusMsg] = useState("就绪");
   const [processList, setProcessList] = useState<ProcessInfo[]>([]);
@@ -190,14 +192,26 @@ function DesignerInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewTab]);
 
-  // 删除键删除选中步骤（输入控件聚焦时不拦截；RF 内建删除已禁用）
+  // 删除键：优先删除选中的失败跳转边（=清空源步骤 on_failure_goto），
+  // 其次删除选中步骤（输入控件聚焦时不拦截；RF 内建删除已禁用）
   useEffect(() => {
     function h(e: KeyboardEvent) {
       if (e.key !== "Delete") return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" ||
                 t.tagName === "SELECT" || t.isContentEditable)) return;
-      if (menu || recording || selectedIdx == null) return;
+      if (menu || recording) return;
+      if (selectedEdgeId?.startsWith("goto-")) {
+        const edge = rfEdges.find((eg) => eg.id === selectedEdgeId);
+        if (edge) {
+          const srcIdx = steps.findIndex(
+            (s, i) => (s.id || `n${i}`) === edge.source);
+          if (srcIdx >= 0) updateStepAt(srcIdx, { on_failure_goto: "" });
+        }
+        setSelectedEdgeId(null);
+        return;
+      }
+      if (selectedIdx == null) return;
       deleteStepAt(selectedIdx);
     }
     window.addEventListener("keydown", h);
@@ -212,22 +226,46 @@ function DesignerInner() {
   }, [steps.length, selectedIdx]);
 
   // steps → RF graph sync（保留用户拖动过的节点位置）
+  // 边语义（P1：诚实边）：
+  //   ①顺序骨干：按索引派生，不可删（deletable:false），灰色虚线；
+  //   ②失败跳转：仅当 on_failure_goto 指向现存步骤 id 才画，红色实线，
+  //     可选中；Delete 键删除选中边=清空源步骤字段（见 Delete 处理）。
+  // 悬空 goto（目标不存在）不画边——不画不存在的东西。
   useEffect(() => {
+    const idOf = (s: DStep, i: number) => s.id || `n${i}`;
+    const liveIds = new Set(steps.map(idOf));
     const edges: Edge[] = [];
     for (let i = 0; i < steps.length - 1; i++) {
       edges.push({
-        id: `e${i}`,
-        source: steps[i]?.id ?? `n${i}`,
-        target: steps[i + 1]?.id ?? `n${i + 1}`,
+        id: `seq-${i}`,
+        source: idOf(steps[i]!, i),
+        target: idOf(steps[i + 1]!, i + 1),
         type: "smoothstep",
-        animated: true,
+        animated: false,
+        deletable: false,
+        selectable: false,
+        style: { stroke: "#cbd5e1", strokeDasharray: "5 4" },
       });
     }
+    steps.forEach((s, i) => {
+      const target = (s.on_failure_goto || "").trim();
+      if (!target || !liveIds.has(target)) return;
+      edges.push({
+        id: `goto-${idOf(s, i)}`,
+        source: idOf(s, i),
+        target,
+        type: "smoothstep",
+        animated: true,
+        deletable: true,
+        style: { stroke: "#f43f5e" },
+      });
+    });
     setRfNodes((prev) => {
       const prevPos = new Map(prev.map((n) => [n.id, n.position]));
       const droppedPos = dropPosRef.current;
       return steps.map((s2, i) => {
         const id = s2.id || `n${i}`;
+        const gotoTarget = (s2.on_failure_goto || "").trim();
         return {
           id,
           type: "step" as const,
@@ -242,6 +280,9 @@ function DesignerInner() {
             tone: selectedIdx === i
               ? "border-blue-500 ring-2 ring-blue-100"
               : "border-slate-200",
+            hasCondition: (s2.condition || "").trim().length > 0,
+            hasGoto: gotoTarget.length > 0 && liveIds.has(gotoTarget),
+            loopCount: s2.body_steps?.length ?? 0,
           } satisfies StepNodeData,
         };
       });
@@ -909,8 +950,48 @@ function DesignerInner() {
                   onNodeClick={(_, node) => {
                     const idx = (node.data as StepNodeData).index;
                     if (idx != null) setSelectedIdx(idx);
+                    setSelectedEdgeId(null);
                   }}
-                  onPaneClick={() => setSelectedIdx(null)}
+                  onPaneClick={() => {
+                    setSelectedIdx(null);
+                    setSelectedEdgeId(null);
+                  }}
+                  onEdgeClick={(_, edge) => {
+                    // 只有失败跳转边可选中；骨干边 selectable:false 点不中。
+                    if (edge.id.startsWith("goto-")) {
+                      setSelectedEdgeId(edge.id);
+                    }
+                  }}
+                  onConnect={(params) => {
+                    // P1-T4：约束连线——只允许创建失败跳转边。
+                    // 守卫：①拒自连；②源/目标步骤必须有真实 id
+                    // （回退 n{i} 无意义，排序后即失效）；③目标必须存在。
+                    // 通过则写源步骤 on_failure_goto=目标 id（覆盖旧值，
+                    // 一步骤至多一条跳转边，与引擎语义一致）。
+                    const { source, target } = params;
+                    if (!source || !target || source === target) return;
+                    const srcIdx = steps.findIndex(
+                      (s, i) => (s.id || `n${i}`) === source);
+                    const tgt = steps.find(
+                      (s, i) => (s.id || `n${i}`) === target);
+                    if (srcIdx < 0 || !tgt || !tgt.id) return;
+                    updateStepAt(srcIdx, { on_failure_goto: tgt.id });
+                    setSelectedIdx(srcIdx);
+                    setStatusMsg(`已设置失败跳转 → ${tgt.id} ✓`);
+                  }}
+                  onNodeDragStop={(_, node, nodes) => {
+                    // P1-T2：画布拖拽=排序。按 y（同行按 x）换算新索引，
+                    // 回写 steps；顺序不变则 no-op。
+                    const oldIdx = (node.data as StepNodeData).index;
+                    if (oldIdx == null) return;
+                    const order = [...nodes].sort((a, b) =>
+                      a.position.y - b.position.y ||
+                      a.position.x - b.position.x);
+                    const newIdx = order.findIndex((n) => n.id === node.id);
+                    if (newIdx >= 0 && newIdx !== oldIdx) {
+                      moveStep(oldIdx, newIdx);
+                    }
+                  }}
                 >
                   <Background variant={BackgroundVariant.Dots}
                               gap={20} size={1.5} color="#cbd5e1" />

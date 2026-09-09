@@ -62,6 +62,7 @@ def test_webhook_triggers_process_e2e(tmp_path, notify_server):
 
     serve_app = ServeApp(
         journals=[str(tmp_path / "*.jsonl")],
+        port=0,  # B2：临时端口，勿与用户 dev 会话（8686）冲突
         processes_dir=str(procs),
         registry=load_registries(
             APA_ROOT + "/registries/core.yaml",

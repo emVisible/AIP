@@ -14,6 +14,30 @@ from apa_core.api import create_app
 from apa_core.core_services import CoreServices
 
 
+@pytest.fixture(autouse=True)
+def _loopback_proxy_guard():
+    """回环代理隔离（B2）：Clash 等系统代理会劫持 httpx 的回环请求
+    （127.0.0.1 → 502，curl 直连正常；python 经系统代理配置）。
+    为回环强制 NO_PROXY；无代理机器上零影响（仅补 localhost 条目）。"""
+    import os
+
+    keys = ("NO_PROXY", "no_proxy")
+    addition = "127.0.0.1,localhost"
+    saved = {k: os.environ.get(k) for k in keys}
+    for k in keys:
+        cur = saved[k]
+        if cur is None:
+            os.environ[k] = addition
+        elif "127.0.0.1" not in cur:
+            os.environ[k] = cur + "," + addition
+    yield
+    for k, v in saved.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+
 @pytest.fixture()
 def core_services(tmp_path):
     return CoreServices(

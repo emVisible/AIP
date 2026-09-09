@@ -176,6 +176,7 @@ ui.confirm:
 code.python:
   executor_domain: data
   label_cn: 执行 Python 代码
+  stable: true
   description: "独立 subprocess 执行 Python 片段；macOS Seatbelt 沙箱默认开启（写限工作区、网络拒绝）；timeout 强杀；risk=L3 默认策略强制人工审批"
   params:
     type: object

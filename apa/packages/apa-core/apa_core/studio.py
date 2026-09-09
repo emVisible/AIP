@@ -583,6 +583,7 @@ class StudioServer:
                 "idempotency": getattr(e, "idempotency", ""),
                 "params": getattr(e, "params", None),
                 "deprecated": getattr(e, "deprecated", False),
+                "experimental": getattr(e, "experimental", True),
             }
         return out
 

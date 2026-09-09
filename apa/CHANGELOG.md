@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### AFL P4 · 动词打标（Occam 第二刀）
+- registry 默认实验态（`stable: true` 加冕 7 个：navigate/click/input/
+  extract_table/filter/email.send/code.python）；新动作默认不上前台
+- 目录默认隐藏实验性（182 个），一键展开；搜索穿透
+- 修 golden 幻影：`context.set` 从无实现，体改真实 `dict.set`
+- `tests/test_dsl.py` 28 passed；typecheck＋build ✓
+
 ### AFL P2 · 存量迁移＋模板库删除（Occam）
 - `tests/fixtures_dsl/` 新增 `data-scrape-report.afl`（等价测试锁定）；
   `apa/templates/*.yaml` 删除（内容已迁 goldens）

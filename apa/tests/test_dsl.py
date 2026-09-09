@@ -191,3 +191,19 @@ def test_script_colon_optional():
     a = steps_of('flow m\n@s script python as x:\n    """\n    return 1\n    """\n')[0]
     b = steps_of('flow m\n@s script python as x\n    """\n    return 1\n    """\n')[0]
     assert a["params"]["code"] == b["params"]["code"] == "return 1"
+
+
+def test_registry_experimental_triage():
+    """P4：189 动作默认实验态，仅 stable 名单前台展示。"""
+    from apa_core.registry import load_registries
+    from pathlib import Path
+    R = Path(__file__).parent.parent / "registries"
+    reg = load_registries(*[R / f for f in (
+        "core.yaml", "browser.yaml", "desktop.yaml", "api.yaml",
+        "dataops.yaml", "document.yaml", "excel.yaml", "ocr.yaml")])
+    names = reg.names()
+    stable = sorted(n for n in names if not reg.get(n).experimental)
+    assert len(names) == 189
+    assert stable == ["browser.click", "browser.extract_table",
+                      "browser.input", "browser.navigate", "code.python",
+                      "data.filter", "email.send"]

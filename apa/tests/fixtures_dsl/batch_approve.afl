@@ -5,6 +5,6 @@ on event erp.batch.ready
 max_actions 100
 
 @loop_orders for oid in {{event.order_ids}}:
-    context.set key="last_approved" value={{oid}}
+    dict.set k="last_approved" v={{oid}}
 
 @done email.send to="ops@example.com" subject="批量审批完成" body="共处理 {{steps.loop_orders.count}} 笔订单。"

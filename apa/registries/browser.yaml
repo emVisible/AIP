@@ -1,6 +1,7 @@
 browser.navigate:
   executor_domain: browser
   label_cn: 打开网页
+  stable: true
   description: 导航到 URL
   when_to_use: 打开指定页面；流程起点或跳转
   params:
@@ -27,6 +28,7 @@ browser.navigate:
 browser.click:
   executor_domain: browser
   label_cn: 点击元素
+  stable: true
   description: 点击目标元素
   when_to_use: 点击页面元素——按钮/链接/标签页切换
   params:
@@ -47,6 +49,7 @@ browser.click:
 browser.input:
   executor_domain: browser
   label_cn: 填写输入框
+  stable: true
   description: 向输入框填充值（clear+fill 幂等）
   when_to_use: 向输入框填写文本（搜索框/表单）
   params:
@@ -237,6 +240,7 @@ browser.take_screenshot:
 browser.extract_table:
   executor_domain: browser
   label_cn: 抓取表格
+  stable: true
   description: 结构化表格抓取：按行选择器+列选择器提取多行数据（只读）
   when_to_use: 抓取整张结构化表格为数据，配合 data.filter/foreach 使用
   params:

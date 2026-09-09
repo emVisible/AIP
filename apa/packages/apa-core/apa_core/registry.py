@@ -41,6 +41,9 @@ class RegistryEntry:
     allowed_principals: Optional[List[str]] = None
     executor_domain: str = "any"
     deprecated: bool = False
+    # P4（Occam）：默认实验态，新动作须靠调用赚前台。
+    # YAML 用 `stable: true` 加冕（约 10 个核心动词）。
+    experimental: bool = True
 
     def validate_params(self, params: Any) -> List[str]:
         """校验 params 是否满足 schema。返回错误列表（空 = 通过）。"""
@@ -114,6 +117,7 @@ class ActionRegistry:
             allowed_principals=raw.get("allowed_principals"),
             executor_domain=raw.get("executor_domain", "any"),
             deprecated=raw.get("deprecated", False),
+            experimental=not raw.get("stable", False),
         )
         self._entries[name] = entry
 

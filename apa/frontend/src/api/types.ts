@@ -60,6 +60,8 @@ export interface ActionMeta {
   idempotency: string;
   params: Record<string, unknown> | null;
   deprecated: boolean;
+  /** P4：默认实验态；目录默认隐藏（stable 7 个除外）。 */
+  experimental?: boolean;
 }
 
 // ---- journal 实时流（SSE）----

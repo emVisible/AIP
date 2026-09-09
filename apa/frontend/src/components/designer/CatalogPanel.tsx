@@ -88,7 +88,7 @@ const DOMAIN_LABELS: Record<string, string> = {
   session: "会话",
 };
 
-/** 动作目录侧栏 —— 加载态 / 错误重试 / 搜索 / 拖拽源。 */
+/** 动作目录侧栏 —— 加载态 / 错误重试 / 搜索 / 拖拽源 / 实验性过滤（P4）。 */
 export function CatalogPanel({ onInsert, filter, onFilterChange }: {
   onInsert: (action: string) => void;
   filter?: string;
@@ -97,6 +97,8 @@ export function CatalogPanel({ onInsert, filter, onFilterChange }: {
   const [inner, setInner] = useState("");
   const filter_ = filter ?? inner;
   const setFilter = onFilterChange ?? setInner;
+  // P4：实验性动作默认隐藏（前台只剩 stable），一键展开。
+  const [showExp, setShowExp] = useState(false);
   // S3-T4：域折叠（localStorage 持久；搜索时强制全展）。
   const [collapsed, setCollapsed] = useState<string[]>(() => {
     try {
@@ -118,6 +120,9 @@ export function CatalogPanel({ onInsert, filter, onFilterChange }: {
   }
 
   const { catalog, isLoading, isError, refetch } = useActionCatalog();
+  const expCount = useMemo(() => Object.values(
+    catalog as Record<string, ActionMeta>,
+  ).filter(m => m.experimental).length, [catalog]);
 
   const flowItems = useMemo(() => {
     const q = filter_.toLowerCase();
@@ -133,6 +138,8 @@ export function CatalogPanel({ onInsert, filter, onFilterChange }: {
     for (const [name, meta] of Object.entries(
       catalog as Record<string, ActionMeta>,
     )) {
+      // P4：实验态默认隐藏；搜索时穿透（找得到比看不见重要）。
+      if (meta.experimental && !showExp && !q) continue;
       const haystack = name + " " + (meta.label_cn ?? "") + " " +
         (meta.description ?? "");
       if (q && !haystack.toLowerCase().includes(q)) continue;
@@ -140,7 +147,7 @@ export function CatalogPanel({ onInsert, filter, onFilterChange }: {
       (byDomain[domain] ??= []).push([name, meta]);
     }
     return byDomain;
-  }, [catalog]);
+  }, [catalog, showExp, filter_]);
 
   const totalCount = Object.keys(catalog as Record<string, unknown>).length +
     FLOW_NODES.length;
@@ -212,6 +219,15 @@ export function CatalogPanel({ onInsert, filter, onFilterChange }: {
           </span>
         )}
       </div>
+      {/* P4：实验性开关（默认隐藏，搜索穿透） */}
+      {expCount > 0 && (
+        <button onClick={() => setShowExp(v => !v)}
+          className="w-full text-left text-[10px] px-1 py-0.5 rounded
+                     text-slate-400 hover:text-slate-600 hover:bg-slate-50
+                     transition-colors duration-150">
+          {showExp ? "✓ 已显示实验性动作" : `显示实验性动作（${expCount}）`}
+        </button>
+      )}
 
       <div className="overflow-y-auto">
         {/* 加载骨架 */}

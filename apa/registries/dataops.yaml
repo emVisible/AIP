@@ -26,6 +26,7 @@ data.create:
 data.filter:
   executor_domain: data
   label_cn: 过滤表格
+  stable: true
   description: 按列条件过滤表格行
   when_to_use: 按条件过滤表格行（金额>阈值/状态=待审）
   params:
@@ -174,6 +175,7 @@ string.split:
 email.send:
   executor_domain: email
   label_cn: 发送邮件
+  stable: true
   description: SMTP 发送邮件（TLS，支持附件/CC）；C4：password 走凭据注入
   when_to_use: 发送通知/报表邮件，支持附件与抄送
   params:

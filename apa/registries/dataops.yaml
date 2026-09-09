@@ -50,6 +50,7 @@ data.filter:
         - <=
         - contains
         - startswith
+        default: '=='
       value: {}
       output_key:
         type: string
@@ -187,6 +188,7 @@ email.send:
         type: integer
         minimum: 1
         maximum: 65535
+        default: 587
       username:
         type: string
       password:

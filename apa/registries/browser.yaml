@@ -16,6 +16,7 @@ browser.navigate:
         - load
         - domcontentloaded
         - networkidle
+        default: load
   idempotency: required
   risk: L0
   timeout_ms: 30000
@@ -126,6 +127,7 @@ browser.wait_element:
         type: string
       timeout_ms:
         type: number
+        default: 5000
   idempotency: required
   risk: L0
   timeout_ms: 30000
@@ -147,6 +149,7 @@ browser.scroll:
         - down
         - to_top
         - to_bottom
+        default: down
   idempotency: optional
   risk: L0
   timeout_ms: 3000
@@ -254,6 +257,7 @@ browser.extract_table:
         type: integer
         minimum: 1
         maximum: 1000
+        default: 100
       spill:
         type: boolean
         default: false
@@ -283,6 +287,7 @@ browser.tab_new:
         - load
         - domcontentloaded
         - networkidle
+        default: load
   idempotency: none
   risk: L1
   timeout_ms: 60000

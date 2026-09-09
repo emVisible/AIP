@@ -12,6 +12,7 @@ ocr.extract:
         enum:
         - mock
         - http_ocr
+        default: mock
         description: 后端策略
       endpoint:
         type: string

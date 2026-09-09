@@ -18,7 +18,7 @@ api.http.get:
           vault: { type: string }
           env: { type: string }
         additionalProperties: false
-      timeout_ms: { type: number }
+      timeout_ms: { type: number, default: 30000 }
   idempotency: required
   risk: L0
   timeout_ms: 30000
@@ -162,7 +162,7 @@ session.complete:
   params:
     type: object
     properties:
-      outcome: { enum: [success, failure, cancelled] }
+      outcome: { enum: [success, failure, cancelled], default: success }
       summary: { type: string }
   idempotency: required
   risk: L0

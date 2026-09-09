@@ -1,0 +1,10 @@
+# 模板：批量订单审批 —— foreach 循环（AFL 版，与 batch-approve.yaml 同义）
+flow batch_approve "批量订单审批"
+
+on event erp.batch.ready
+max_actions 100
+
+@loop_orders for oid in {{event.order_ids}}:
+    context.set key="last_approved" value={{oid}}
+
+@done email.send to="ops@example.com" subject="批量审批完成" body="共处理 {{steps.loop_orders.count}} 笔订单。"

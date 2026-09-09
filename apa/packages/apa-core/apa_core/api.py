@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import json
 
-import yaml
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -165,50 +164,6 @@ def create_app(
     async def list_processes():
         return server.list_processes()
 
-    def list_templates_payload():
-        """模板载荷（REST 与 Studio RPC 共用）。"""
-        import os
-        import pathlib
-
-        candidates = []
-        if os.environ.get("APA_TEMPLATES_DIR"):
-            candidates.append(pathlib.Path(os.environ["APA_TEMPLATES_DIR"]))
-        import sys
-        if getattr(sys, "frozen", False):
-            base = Path(getattr(sys, "_MEIPASS", ".")) / "templates"
-            candidates.append(base)
-        candidates.append(Path(__file__).resolve().parents[2] / "templates")
-        seen = set()
-        out = []
-        for c in candidates:
-            if not c.is_dir() or c in seen:
-                continue
-            seen.add(c)
-            for f in sorted(c.glob("*.yaml")):
-                try:
-                    meta = {"id": f.stem,
-                            "name": f.stem,
-                            "description": "",
-                            "yaml": f.read_text(encoding="utf-8")}
-                    try:
-                        head = yaml.safe_load(f.read_text(
-                            encoding="utf-8")) or {}
-                        proc_meta = (head or {}).get("process", {})
-                        if proc_meta.get("name"):
-                            meta["name"] = proc_meta["name"]
-                        if proc_meta.get("description"):
-                            meta["description"] = proc_meta["description"]
-                    except Exception:  # noqa: BLE001
-                        pass
-                    out.append(meta)
-                except OSError:
-                    continue
-        return {"templates": out}
-
-    @app.get("/api/templates")
-    async def list_templates():
-        """内置场景模板库（只读，供设计器一键导入）。"""
-        return list_templates_payload()
 
     @app.get("/api/processes/get/{proc_id}")
     async def get_process(proc_id: str):
@@ -506,7 +461,6 @@ def create_app(
                 "process.save": _rpc_process_save,
                 "process.test": _rpc_process_test,
                 "processes.list": lambda p: server.list_processes(),
-                "templates.list": lambda p: list_templates_payload(),
                 "registry.actions": lambda p: server.registry_actions(),
                 "yaml.from_form": lambda p: {
                     "yaml": server.process_from_form(p.get("form") or {})},

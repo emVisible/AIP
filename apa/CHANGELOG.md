@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+### AFL P2 · 存量迁移＋模板库删除（Occam）
+- `tests/fixtures_dsl/` 新增 `data-scrape-report.afl`（等价测试锁定）；
+  `apa/templates/*.yaml` 删除（内容已迁 goldens）
+- 设计器 `TemplateLibrary`＋`importTemplate` 删除（整图覆盖导入下线；
+  模板概念并入 golden 示例库）；后端 `GET /api/templates`＋
+  `templates.list` RPC＋`list_templates_payload`＋`yaml` import 一并删除
+- `tests/test_dsl.py` 24 passed；typecheck＋build ✓
+
 ### Harness 融合 H7 · AI 配置子系统（后端一期）
 - **`settings.py` 分层设置树**：defaults < user(~/.apa) < project(apa.config.yaml)
   < env(兼容映射标记 owned) < active_profile；deep_merge 嵌套合并；

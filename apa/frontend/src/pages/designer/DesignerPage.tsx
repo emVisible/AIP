@@ -52,11 +52,6 @@ import { useStudioEvents } from "../../hooks/useStudioEvents";
 import type { DStep } from "../../types/designer";
 import "../../types/desktop";
 
-/** 模板信息（/api/templates 返回结构）。 */
-interface TemplateInfo {
-  id: string; name: string; description: string; yaml: string;
-}
-
 /** 录制会话状态（DesignerPage 内联模态使用）。 */
 interface RecordingState {
   sid: string;
@@ -705,18 +700,6 @@ function DesignerInner() {
       .catch(() => {});
   }
 
-  async function importTemplate(t: TemplateInfo) {
-    try {
-      setYamlText(t.yaml);
-      await loadFromYaml();
-      setMetaId(`${t.id}_${Date.now().toString(36).slice(-4)}`);
-      setCurrentFile("");
-      setStatusMsg(`已从模板导入 ${t.name} ✓（记得另存）`);
-    } catch (e) {
-      setStatusMsg(`模板导入失败: ${e instanceof Error ? e.message : e}`);
-    }
-  }
-
   function addGeneratedSteps(genSteps: unknown[], label: string) {
     setSteps(prev => {
       const converted: DStep[] = (genSteps as Record<string, unknown>[]).map(
@@ -826,7 +809,6 @@ function DesignerInner() {
               </div>
               <div className="border-t border-slate-100 max-h-[32%]
                               overflow-y-auto shrink-0">
-                <TemplateLibrary onPick={importTemplate} />
                 <details className="mt-1 px-2 pb-2">
                   <summary className="text-xs text-slate-400 cursor-pointer
                                       py-0.5">
@@ -1310,41 +1292,4 @@ function StudioEventTicker() {
   });
   if (!note) return null;
   return <span className="text-slate-500 font-mono">{note}</span>;
-}
-
-/** 模板库侧栏：从 /api/templates 拉取，点击导入画布。 */
-function TemplateLibrary({ onPick }: { onPick: (t: TemplateInfo) => void }) {
-  const [open, setOpen] = useState(false);
-  const [items, setItems] = useState<TemplateInfo[]>([]);
-
-  function toggle() {
-    const next = !open;
-    setOpen(next);
-    if (next && !items.length) {
-      studioRpc<{ templates: TemplateInfo[] }>("templates.list")
-        .then(d => setItems(d.templates ?? []))
-        .catch(() => {});
-    }
-  }
-
-  return (
-    <details className="mt-3" open={open} onToggle={(e) => {
-      if ((e.target as HTMLDetailsElement).open !== open) toggle();
-    }}>
-      <summary className="text-xs text-slate-400 cursor-pointer">模板库</summary>
-      <div className="mt-1 space-y-0.5">
-        {items.map(t => (
-          <div key={t.id}
-               onClick={() => void onPick(t)}
-               className="px-2 py-1 text-xs hover:bg-violet-50 rounded
-                          cursor-pointer text-violet-700">
-            {t.name}
-          </div>
-        ))}
-        {!items.length && (
-          <p className="text-xs text-slate-300">（加载中…）</p>
-        )}
-      </div>
-    </details>
-  );
 }

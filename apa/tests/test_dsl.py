@@ -3,10 +3,8 @@
 快模式门禁：只跑本文件＋process 回归子集。
 """
 import pytest
-import yaml
 
 from apa_core.dsl import DslError, compile_text, load_afl
-from apa_core.process import build_process
 
 
 def steps_of(src):
@@ -96,16 +94,31 @@ def test_handler_single_step():
     assert d["process"]["error_handlers"]["quota"]["type"] == "log"
 
 
+def test_golden_data_scrape_report_equivalence():
+    from pathlib import Path
+    afl = load_afl(str(Path(__file__).parent /
+                       "fixtures_dsl" / "data_scrape_report.afl"))
+    # P2：YAML 原件已删，此测试锁定 .afl 编译语义（字段级）
+    assert afl.process_id == "data_scrape_report"
+    assert [s.id for s in afl.steps] == ["open_page", "scrape_table",
+                                        "big_orders", "report"]
+    by = {s.id: s for s in afl.steps}
+    assert by["scrape_table"].params["columns"] == {
+        "order_id": ".order-id", "customer": ".customer",
+        "amount": ".amount"}
+    assert by["scrape_table"].params["max_rows"] == 200
+    assert by["big_orders"].params == {"column": "amount", "op": ">",
+                                      "value": 1000}
+    assert by["report"].params["body_type"] == "html"
+
+
 def test_golden_batch_approve_equivalence():
     from pathlib import Path
     afl = load_afl(str(Path(__file__).parent /
                        "fixtures_dsl" / "batch_approve.afl"))
-    y = yaml.safe_load(open(Path(__file__).parent.parent /
-                            "templates" / "batch-approve.yaml",
-                            encoding="utf-8"))
-    ref = build_process(y)
-    assert afl.process_id == ref.process_id == "batch_approve"
-    assert [s.id for s in afl.steps] == [s.id for s in ref.steps]
+    # P2：YAML 原件已删，此测试锁定 .afl 编译语义（字段级）
+    assert afl.process_id == "batch_approve"
+    assert [s.id for s in afl.steps] == ["loop_orders", "done"]
     a_loop = afl.steps[0]
     assert a_loop.type == "foreach"
     assert a_loop.params["item_var"] == "oid"

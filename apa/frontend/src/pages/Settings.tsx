@@ -2,11 +2,12 @@
  * 设置页 —— AI 配置子系统（H7b）+ Registry 浏览 + 租户占位。
  *
  * 数据流全部经 Studio RPC：settings.get/update、ai/status、
- * registry/actions（长尾 REST，渐进迁移）。
+ * registry.actions（B1 已迁入 RPC）。
  */
 import { useEffect, useState } from "react";
 
 import type { ActionMeta } from "../api/types";
+import { studioRpc } from "../api/studio";
 import { Badge, Card, CardHeader } from "../components/ui";
 import { LlmCard, PolicyCards } from "../components/settings/AiConfigCards";
 import { McpServersCard }
@@ -19,8 +20,7 @@ export function Settings() {
   const settings = useSettings();
 
   useEffect(() => {
-    fetch("/api/registry/actions")
-      .then(r => r.json())
+    studioRpc<Record<string, ActionMeta>>("registry.actions")
       .then(setActions)
       .catch(() => {});
   }, []);

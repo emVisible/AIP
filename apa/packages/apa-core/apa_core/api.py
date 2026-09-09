@@ -507,6 +507,7 @@ def create_app(
                 "process.test": _rpc_process_test,
                 "processes.list": lambda p: server.list_processes(),
                 "templates.list": lambda p: list_templates_payload(),
+                "registry.actions": lambda p: server.registry_actions(),
                 "yaml.from_form": lambda p: {
                     "yaml": server.process_from_form(p.get("form") or {})},
                 "yaml.to_form": lambda p: server.process_to_form(

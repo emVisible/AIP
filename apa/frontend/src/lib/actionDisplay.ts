@@ -2,7 +2,7 @@
  * 动作显示规则 —— 中文功能名优先的单一出口。
  *
  * 真相源分层：
- *   registry 动作 → registries/*.yaml 的 label_cn（后端 /api/registry/actions 下发）
+ *   registry 动作 → registries/*.yaml 的 label_cn（后端经 studioRpc registry.actions 下发）
  *   流程控制节点  → 本文件 FLOW_LABELS（前端内建节点，不在 registry）
  *
  * 所有展示面（动作目录 / 步骤列表 / 画布节点 / 属性面板）统一经此取标题，

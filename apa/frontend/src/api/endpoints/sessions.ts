@@ -1,6 +1,5 @@
 import { api, post } from "../client";
 import type {
-  ActionMeta,
   AnalyticsSummary,
   ProcessInfo,
   SessionSummary,
@@ -12,9 +11,6 @@ export const getSessions = () =>
 export const getAnalytics = () => api<AnalyticsSummary>("/analytics");
 
 export const getProcesses = () => api<ProcessInfo[]>("/processes");
-
-export const getRegistryActions = () =>
-  api<Record<string, ActionMeta>>("/registry/actions");
 
 export interface EventDispatchResult {
   dispatched: number;

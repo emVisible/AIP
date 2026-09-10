@@ -60,13 +60,27 @@ class ActionStep:
     line: int
 
 
+def _split_trailing_goto(words: List[str], lineno: int,
+                         raw: str) -> tuple:
+    """块头尾部 `on_fail -> T` 剥离 → (剩余词, goto|None)。
+    仅识别未加引号位的字面三元组——调用方保证 words 来自已分词；
+    `"on_fail"` 作值用的病态 corner（如源名恰为该串）请改名，文档注明。"""
+    if len(words) >= 3 and words[-3] == "on_fail" and words[-2] == "->":
+        tgt = words[-1]
+        if not _valid_ident(tgt):
+            raise DslError(f"跳转目标非法：{tgt!r}", line=lineno, text=raw)
+        return words[:-3], tgt
+    return words, None
+
+
 @dataclass
 class ForStep:
     id: Optional[str]
     var: str
     source: Any
     output_as: Optional[str]
-    body: List[Any]            # Step union
+    goto: Optional[str]
+    body: List[Any]
     line: int
 
 
@@ -76,6 +90,7 @@ class WhileStep:
     expr: str
     max_iter: int
     output_as: Optional[str]
+    goto: Optional[str]
     body: List[Any]
     line: int
 
@@ -140,6 +155,7 @@ class RepeatStep:
     count: Any
     start: Any
     output_as: Optional[str]
+    goto: Optional[str]
     body: List[Any]
     line: int
 
@@ -149,6 +165,7 @@ class ForeverStep:
     id: Optional[str]
     max_iter: Optional[int]
     output_as: Optional[str]
+    goto: Optional[str]
     body: List[Any]
     line: int
 
@@ -628,9 +645,10 @@ class _Parser:
 
     def _parse_for(self, node_id: Optional[str], words: List[str],
                    lineno: int, raw: str) -> ForStep:
-        # var in REF [as NAME]
+        # var in REF [as NAME] [on_fail -> T]
+        words, goto = _split_trailing_goto(words, lineno, raw)
         if len(words) < 3 or words[1] != "in":
-            raise DslError("for 写法：`for <var> in <ref> [as <名>]:`",
+            raise DslError("for 写法：`for <var> in <ref> [as <名>] [on_fail -> T]:`",
                            line=lineno, text=raw)
         var = words[0]
         if not _valid_ident(var):
@@ -641,7 +659,7 @@ class _Parser:
         if "as" in rest:
             ai = rest.index("as")
             if ai != len(rest) - 2:
-                raise DslError("as 须在 for 头末尾：`for x in R as n:`",
+                raise DslError("as 在 on_fail 之前：`for x in R as n on_fail -> h:`",
                                line=lineno, text=raw)
             output_as = rest[ai + 1]
             rest = rest[:ai]
@@ -649,11 +667,14 @@ class _Parser:
             raise DslError("for 源须为单个引用（如 {{event.ids}}）",
                            line=lineno, text=raw)
         return ForStep(id=node_id, var=var, source=rest[0],
-                       output_as=output_as, body=[], line=lineno)
+                       output_as=output_as, goto=goto, body=[],
+                       line=lineno)
 
     def _parse_repeat(self, node_id: Optional[str], words: List[str],
                       lineno: int, raw: str) -> RepeatStep:
-        # repeat <count> [from <start>] [as <var>]  (count 可为 {{ref}})
+        # repeat <count> [from <start>] [as <var>] [on_fail -> T]
+        # (count 可为 {{ref}})
+        words, goto = _split_trailing_goto(words, lineno, raw)
         if not words:
             raise DslError("repeat 写法：`repeat <次数> [from <起>] "
                            "[as <var>]:`", line=lineno, text=raw)
@@ -677,11 +698,13 @@ class _Parser:
             raise DslError(f"repeat 行多余片段 {rest[0]!r}", line=lineno,
                            text=raw)
         return RepeatStep(id=node_id, count=count, start=start,
-                          output_as=output_as, body=[], line=lineno)
+                          output_as=output_as, goto=goto, body=[],
+                          line=lineno)
 
     def _parse_forever(self, node_id: Optional[str], words: List[str],
                        lineno: int, raw: str) -> ForeverStep:
-        # forever [max_iter=N] [as <var>]
+        # forever [max_iter=N] [as <var>] [on_fail -> T]
+        words, goto = _split_trailing_goto(words, lineno, raw)
         max_iter = None
         output_as = None
         rest = list(words)
@@ -706,11 +729,13 @@ class _Parser:
             raise DslError(f"forever 行多余片段 {rest[0]!r}（只要 "
                            f"max_iter/as）", line=lineno, text=raw)
         return ForeverStep(id=node_id, max_iter=max_iter,
-                           output_as=output_as, body=[], line=lineno)
+                           output_as=output_as, goto=goto, body=[],
+                           line=lineno)
 
     def _parse_while(self, node_id: Optional[str], words: List[str],
                      lineno: int, raw: str) -> WhileStep:
-        # EXPR... max_iter=N [as NAME]
+        # EXPR... max_iter=N [as NAME] [on_fail -> T]
+        words, goto = _split_trailing_goto(words, lineno, raw)
         mi = [i for i, w in enumerate(words)
               if w.startswith("max_iter=")]
         if len(mi) != 1:
@@ -736,7 +761,7 @@ class _Parser:
             raise DslError("while 缺条件表达式", line=lineno, text=raw)
         return WhileStep(id=node_id, expr=" ".join(expr_toks),
                          max_iter=max_iter, output_as=output_as,
-                         body=[], line=lineno)
+                         goto=goto, body=[], line=lineno)
 
     # -- 独占步 --
 

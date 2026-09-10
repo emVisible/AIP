@@ -58,10 +58,10 @@ timeout_minutes <正整数>   # 缺省 60（引擎默认）
 ## 4. 循环
 
 ```afl
-[@id] for <var> in <ref> [as 名]:
+[id] for <var> in <ref> [as 名] [on_fail -> T]:
     <缩进体（4 空格，一次一级，可嵌套）>
 
-[@id] while <表达式> max_iter=<N> [as 名]:
+[id] while <表达式> max_iter=<N> [as 名] [on_fail -> T]:
     <缩进体>
 ```
 
@@ -77,7 +77,7 @@ timeout_minutes <正整数>   # 缺省 60（引擎默认）
 ## 5. 问 AI（`ask`）
 
 ```afl
-[@id] ask "问题" [with r1, r2] options=[a, b] [as 名]
+[id] ask "问题" [with r1, r2] options=[a, b] [as 名]
 ```
 
 → `type=ai_decision`。**问题文本进 `context` 首位**（引擎只读
@@ -88,8 +88,8 @@ timeout_minutes <正整数>   # 缺省 60（引擎默认）
 ## 6. 子流程（`run`）与日志（`log`）
 
 ```afl
-[@id] run <流程id> [in={...}] [as 名]      # → type=sub_process
-[@id] log "消息" [as/when/on_fail]          # → type=log
+[id] run <流程id> [in={...}] [as 名]      # → type=sub_process
+[id] log "消息" [as/when/on_fail]          # → type=log
 ```
 
 ## 7. 错误处理
@@ -106,7 +106,7 @@ handler quota_exceeded:      # 体必须恰一个步骤
 ## 8. 兜底脚本（语言的一等公民）
 
 ```afl
-[@id] script python [timeout=<秒>] [nosandbox] [as 名]:
+[id] script python [timeout=<秒>] [nosandbox] [as 名]:
     """
     <原文收录，去公共缩进；# 是 Python 注释>
     """

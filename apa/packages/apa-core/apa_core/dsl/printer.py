@@ -1,16 +1,15 @@
-"""AFL 打印机：process-dict → 规范 .afl 文本（D1 融合地基）。
+"""AFL 打印机：process-dict → .afl 文本（D1-T3）。
 
-输入 shape＝compiler 输出 shape（＝build_process 输入 shape），
-即 {"process": {...}} 或裸 process  dict。用途：
-  · 画布编辑 → 回写 AFL 文本（显式“从画布更新”，见 D2）
-  · YAML 存量 → AFL 迁移（老式 body_action 自动升级为 body_steps）
+输入 shape＝编译器输出 shape（build_process 输入形），于是
+AFL→dict→AFL round-trip 可测。输出为 canonical 形式（稳定、可 diff）。
 
-诚实清单（宁可报错不丢语义）：
-  · title 不在 dict 里 → 不打印（注释提醒一句，不伪造）
-  · 未知 type → DslError（静默丢 type 等于改语义）
-  · 老式 body_action（无 body_steps）→ 就地升级为单步 body（等价，引擎同路径）
-  · for_times 缺 count / sub_process 缺 process_id → DslError
-  · 空流程 → DslError
+诚实清单（有损/受限处绝不静默）：
+  - title：dict 里没有 → 不打出（AFL→画布→AFL 会丢标题/注释，属已知；
+    D2 前端以显式同步按钮＋提示处理，不搞静默覆盖）。
+  - 未知 type → DslError 大声报错，不丢语义。
+  - 引擎缺省显式化：foreach 缺 item_var 打 `item`；while 缺 condition
+    打 `True`（行为一致，文本更直白）。
+  - id 非法字符（空格等）→ 报错，引擎侧虽能存但 AFL 写不出。
 """
 from __future__ import annotations
 
@@ -18,28 +17,39 @@ import json
 import re
 from typing import Any, Dict, List
 
-from .parser import DslError
+from .parser import DslError, _valid_ident
 
 _IND = "    "
-_BARE_OK = re.compile(r"^[A-Za-z0-9_\-#./:@{}]+$")
-_NEEDS_QUOTE_HINT = ("->",)
+_RESERVED_BARE = {"true", "false", "null", "as", "when", "on_fail"}
+_SPECIAL_CHARS = set(',[]{}"\'=\\')
 
 
-def _q(s: str) -> str:
-    """标量转 AFL 字面量。含空格/引号/括号/等号/`->`/行尾冒号则加引号。"""
-    if s == "":
-        return '""'
-    if (
-        _BARE_OK.match(s)
-        and not any(h in s for h in _NEEDS_QUOTE_HINT)
-        and not s.endswith(":")
-    ):
-        return s
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+def _needs_quote(s: str) -> bool:
+    if not s:
+        return True
+    if s in _RESERVED_BARE:
+        return True
+    if "->" in s or s.endswith(":"):
+        return True
+    if any(c.isspace() for c in s):
+        return True
+    if any(c in _SPECIAL_CHARS for c in s):
+        return True
+    try:
+        int(s)
+        return True
+    except ValueError:
+        pass
+    try:
+        float(s)
+        return True
+    except ValueError:
+        pass
+    return False
 
 
-def _v(v: Any) -> str:
-    """值 → AFL 字面量。None→null；dict→JSON（重解析走宽容分支）。"""
+def _val(v: Any) -> str:
+    """Python 值 → AFL 值语法。"""
     if v is None:
         return "null"
     if v is True:
@@ -49,195 +59,170 @@ def _v(v: Any) -> str:
     if isinstance(v, (int, float)):
         return str(v)
     if isinstance(v, str):
-        return _q(v)
+        if "\n" in v:
+            raise DslError(
+                f"printer：多行字符串写不出单行 kv（{v[:30]!r}…），"
+                f"请改用 script 块或附件")
+        if re.fullmatch(r"\{\{.*\}\}", v):
+            return v  # 纯模板引用裸写：for 源等高频位可读性
+        return f'"{v}"' if _needs_quote(v) else v
     if isinstance(v, list):
-        return "[" + ", ".join(_v(x) for x in v) + "]"
+        return "[" + ", ".join(_val(x) for x in v) + "]"
     if isinstance(v, dict):
         return json.dumps(v, ensure_ascii=False)
-    return _q(str(v))
+    return f'"{str(v)}"'
 
 
-def _mods(d: Dict[str, Any]) -> str:
-    """as/when/on_fail 修饰尾（固定顺序）。"""
+def _modifiers(step: Dict[str, Any]) -> str:
+    """as / when / on_fail 后缀（固定顺序，与 parser 同构）。"""
     out = ""
-    if d.get("output_as"):
-        out += f" as {d['output_as']}"
-    cond = (d.get("condition") or "").strip()
+    if step.get("output_as"):
+        out += f" as {step['output_as']}"
+    cond = (step.get("condition") or "").strip()
     if cond:
         out += f" when {cond}"
-    goto = (d.get("on_failure") or {}).get("goto")
+    goto = (step.get("on_failure") or {}).get("goto")
     if goto:
         out += f" on_fail -> {goto}"
     return out
 
 
-def _upgrade_legacy_body(typ: str, params: Dict[str, Any],
-                         sid: str) -> List[Dict[str, Any]]:
-    """老式 body_action/body_params → 单步 body_steps（语义等价升级）。"""
-    act = params.get("body_action") or ""
-    if not act:
-        return []
-    bp = params.get("body_params") or {}
-    if not isinstance(bp, dict):
-        bp = {}
-    return [{"id": f"{sid}_body", "action": act, "params": dict(bp)}]
+def _check_id(sid: Any, where: str) -> str:
+    s = str(sid or "")
+    if not _valid_ident(s):
+        raise DslError(f"printer：步骤 id 写不出 AFL：{s!r}（{where}）")
+    return s
 
 
-def _steps(lines: List[str], steps: List[Dict[str, Any]], level: int) -> None:
-    for s in steps:
-        _step(lines, s, level)
+def _emit_step(step: Dict[str, Any], level: int) -> List[str]:
+    p = step.get("params") or {}
+    pad = _IND * level
+    sid = _check_id(step.get("id"), "顶层" if level == 0 else "循环体")
+    typ = step.get("type") or ""
+    mod = _modifiers(step)
 
-
-def _step(lines: List[str], s: Dict[str, Any], level: int) -> None:
-    p = s.get("params") or {}
-    typ = s.get("type") or ""
-    pre = _IND * level + s.get("id", "")
-    mods = _mods(s)
-
-    def body(dst_level: int, nested: List[Dict[str, Any]]) -> None:
-        if not nested:
-            raise DslError(f"循环体不能为空：{s.get('id', '?')}")
-        _steps(lines, nested, dst_level)
+    def body() -> List[str]:
+        subs = step.get("body_steps") or []
+        if not subs and p.get("body_action"):
+            #  legacy 升级：老式 body_action/body_params 提升为现代体内步；
+            #  id 派生确定（`{sid}_body`），params 原样搬运。
+            subs = [{"id": f"{sid}_body", "action": p["body_action"],
+                     "params": p.get("body_params") or {}}]
+        if not subs:
+            raise DslError(f"printer：循环体为空：{sid}")
+        return [ln for b in subs for ln in _emit_step(b, level + 1)]
 
     if typ == "foreach":
-        src = _v(p.get("source", ""))
         var = p.get("item_var", "item")
-        lines.append(f"{pre} for {var} in {src}"
-                     f"{' as ' + s['output_as'] if s.get('output_as') else ''}:")
-        nested = s.get("body_steps") or []
-        if not nested:
-            nested = _upgrade_legacy_body(typ, p, s.get("id", "s"))
-        body(level + 1, nested)
-        return
+        lines = [f"{pad}{sid} for {var} in {_val(p.get('source'))}"
+                 f"{mod}:"]
+        return lines + body()
     if typ == "while":
-        cond = str(p.get("condition", "")).strip()
+        cond = str(p.get("condition") or "True")
         mi = p.get("max_iterations")
         if mi is None:
-            raise DslError(f"while 缺 max_iterations：{s.get('id', '?')} "
-                           f"（引擎强制，打印机不编造）")
-        lines.append(f"{pre} while {cond} max_iter={mi}"
-                     f"{' as ' + s['output_as'] if s.get('output_as') else ''}:")
-        nested = s.get("body_steps") or []
-        if not nested:
-            nested = _upgrade_legacy_body(typ, p, s.get("id", "s"))
-        body(level + 1, nested)
-        return
+            raise DslError(f"printer：while 缺 max_iterations：{sid}")
+        lines = [f"{pad}{sid} while {cond} max_iter={mi}{mod}:"]
+        return lines + body()
     if typ == "for_times":
         count = p.get("count")
         if count is None:
-            raise DslError(f"for_times 缺 count：{s.get('id', '?')}")
-        line = f"{pre} repeat {_v(count)}"
-        if p.get("start") not in (None, 0):
-            line += f" from {_v(p['start'])}"
-        var = p.get("item_var")
+            raise DslError(f"printer：for_times 缺 count：{sid}")
+        head = f"{pad}{sid} repeat {_val(count)}"
+        if p.get("start", 0):
+            head += f" from {_val(p['start'])}"
+        ivar, oas = p.get("item_var"), step.get("output_as")
+        if ivar and oas and ivar != oas:
+            raise DslError(
+                f"printer：repeat 的 item_var 与 output_as 打架 "
+                f"({ivar!r} vs {oas!r})：{sid}，手动二选一")
+        var = ivar or oas
         if var:
-            line += f" as {var}"
-        elif s.get("output_as"):
-            line += f" as {s['output_as']}"
-        lines.append(line + ":")
-        nested = s.get("body_steps") or []
-        if not nested:
-            nested = _upgrade_legacy_body(typ, p, s.get("id", "s"))
-        body(level + 1, nested)
-        return
+            head += f" as {var}"
+        # as 已落定：mod 去掉 as 避免 `as x as x`（重解析取末者，虽收敛但丑）
+        return [head + _modifiers({**step, "output_as": None}) + ":"] + body()
     if typ == "loop.infinite":
-        line = f"{pre} forever"
+        head = f"{pad}{sid} forever"
         if p.get("max_iterations") is not None:
-            line += f" max_iter={p['max_iterations']}"
-        if s.get("output_as"):
-            line += f" as {s['output_as']}"
-        lines.append(line + ":")
-        body(level + 1, s.get("body_steps") or [])
-        return
+            head += f" max_iter={p['max_iterations']}"
+        if step.get("output_as"):
+            head += f" as {step['output_as']}"
+        return [head + _modifiers({**step, "output_as": None}) + ":"] + body()
+    if typ == "loop.break":
+        return [f"{pad}{sid} break" + (f" when {step['condition']}"
+                if (step.get("condition") or "").strip() else "")]
+    if typ == "loop.continue":
+        return [f"{pad}{sid} continue" + (f" when {step['condition']}"
+                if (step.get("condition") or "").strip() else "")]
     if typ == "ai_decision":
-        ctx = p.get("context") or []
+        ctx = list(p.get("context") or [])
         if not ctx:
-            raise DslError(f"ask 缺 context（问题文本）:{s.get('id', '?')}")
-        # prompt 恒加引号：问题文本天然是句子，裸写必有空格
-        line = f"{pre} ask {_q(str(ctx[0]))}"
-        if len(ctx) > 1:
-            line += " with " + ", ".join(
-                _v(x) if not isinstance(x, str) or " " in x or not x
-                else x for x in ctx[1:])
-        line += f" options={_v(p.get('available_actions', []))}"
-        if s.get("output_as"):
-            line += f" as {s['output_as']}"
-        lines.append(line)
-        return
+            raise DslError(f"printer：ai_decision 缺 context：{sid}")
+        prompt, rest = ctx[0], ctx[1:]
+        if not isinstance(prompt, str):
+            raise DslError(f"printer：ai_decision 首 context 须为问题文本："
+                           f"{sid}")
+        head = f'{pad}{sid} ask "{prompt}"'
+        if rest:
+            head += " with " + ", ".join(_val(r) for r in rest)
+        head += f" options={_val(list(p.get('available_actions') or []))}"
+        return [head + mod]
     if typ == "sub_process":
-        pid = p.get("process_id")
-        if not pid:
-            raise DslError(f"sub_process 缺 process_id：{s.get('id', '?')}")
-        line = f"{pre} run {pid}"
+        head = f"{pad}{sid} run {p.get('process_id', '')}"
         if p.get("input"):
-            line += f" in={_v(p['input'])}"
-        if s.get("output_as"):
-            line += f" as {s['output_as']}"
-        lines.append(line)
-        return
+            head += f" in={_val(p['input'])}"
+        return [head + mod]
     if typ == "log":
-        line = f"{pre} log {_q(str(p.get('message', '')))}" + mods
-        lines.append(line)
-        return
-    if typ in ("loop.break", "loop.continue"):
-        kw = "break" if typ == "loop.break" else "continue"
-        cond = (s.get("condition") or "").strip()
-        lines.append(f"{pre} {kw}" + (f" when {cond}" if cond else ""))
-        return
+        return [f'{pad}{sid} log "{p.get("message", "")}"' + mod]
     if typ:
-        raise DslError(f"printer 未知类型 {typ!r}（步骤 {s.get('id', '?')}）："
-                       f"手动迁移，不静默丢 type")
-    # 普通动作
-    action = s.get("action") or ""
-    if not action:
-        raise DslError(f"步骤 {s.get('id', '?')} 无 action 又无 type")
-    if action == "code.python" and isinstance(p.get("code"), str) and \
-            set(p) <= {"code", "timeout_s", "sandbox"}:
-        # 脚本糖：多行代码块可读性碾压单行 kv
-        line = f"{pre} script python"
+        raise DslError(f"printer：未知类型 {typ!r}（{sid}），手动迁移")
+    # 普通动作；code.python 多行 code 走 script 块
+    action = step.get("action") or ""
+    if not action or "." not in action:
+        raise DslError(f"printer：动作名非法：{action!r}（{sid}）")
+    if action == "code.python" and isinstance(p.get("code"), str):
+        head = f"{pad}{sid} script python"
         if p.get("timeout_s") is not None:
-            line += f" timeout={p['timeout_s']}"
+            head += f" timeout={p['timeout_s']}"
         if p.get("sandbox") is False:
-            line += " nosandbox"
-        if s.get("output_as"):
-            line += f" as {s['output_as']}"
-        lines.append(line + ":")
-        lines.append(_IND * (level + 1) + '"""')
+            head += " nosandbox"
+        if step.get("output_as"):
+            head += f" as {step['output_as']}"
+        lines = [head + ":"]
+        lines.append(f"{pad}{_IND}\"\"\"")
         for cl in str(p["code"]).splitlines() or [""]:
-            lines.append(_IND * (level + 1) + cl if cl.strip() else "")
-        lines.append(_IND * (level + 1) + '"""')
-        return
-    parts = [f"{pre} {action}"]
-    if s.get("target"):
-        parts.append(f"target={_v(s['target'])}")
-    for k in sorted(p):
-        parts.append(f"{k}={_v(p[k])}")
-    lines.append(" ".join(parts) + mods)
+            lines.append(f"{pad}{_IND}{cl}" if cl.strip() else "")
+        lines.append(f"{pad}{_IND}\"\"\"")
+        return lines
+    parts = [f"{pad}{sid} {action}"]
+    if step.get("target"):
+        parts.append(f"target={_val(step['target'])}")
+    for k in sorted(p.keys()):
+        parts.append(f"{k}={_val(p[k])}")
+    return [" ".join(parts) + mod]
 
 
 def print_text(data: dict) -> str:
-    """process-dict → 规范 .afl 文本。"""
-    proc = data.get("process", data)
+    """process-dict → .afl 文本。data 形如 {"process": {...}}。"""
+    proc = data.get("process") if isinstance(data, dict) else None
     if not isinstance(proc, dict) or not proc.get("id"):
-        raise DslError("printer 输入须为 process dict（含 id）")
-    lines = [f"flow {proc['id']}"]
+        raise DslError("printer：缺 process.id")
+    out = [f"flow {proc['id']}"]
     trig = proc.get("trigger") or {}
-    if trig.get("type") == "event" and trig.get("name"):
-        lines.append(f"on event {trig['name']}")
+    if trig.get("name"):
+        out.append(f"on event {trig['name']}")
     else:
-        lines.append("on manual")
-    # 头默认值恒显式（compiler 同值落盘）：文本即运行真相
-    lines.append(f"max_actions {proc.get('max_actions', 100)}")
-    lines.append(f"timeout_minutes {proc.get('timeout_minutes', 60)}")
-    lines.append("")
-    steps = proc.get("steps") or []
-    if not steps:
-        raise DslError("空流程无可打印")
-    _steps(lines, steps, 0)
-    handlers = proc.get("error_handlers") or {}
-    if handlers:
-        lines.append("")
-        for name, h in handlers.items():
-            lines.append(f"handler {name}:")
-            _step(lines, h, 1)
-    return "\n".join(lines) + "\n"
+        out.append("on manual")
+    if proc.get("max_actions") not in (None, 100):
+        out.append(f"max_actions {proc['max_actions']}")
+    if proc.get("timeout_minutes") not in (None, 60):
+        out.append(f"timeout_minutes {proc['timeout_minutes']}")
+    out.append("")
+    for s in proc.get("steps") or []:
+        out.extend(_emit_step(s, 0))
+        out.append("")
+    for name, h in (proc.get("error_handlers") or {}).items():
+        out.append(f"handler {name}:")
+        out.extend(_emit_step(h, 1))
+        out.append("")
+    return "\n".join(out).rstrip() + "\n"

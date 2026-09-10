@@ -302,3 +302,48 @@ def test_rpc_afl_print(client):
     assert body["ok"], body
     assert "browser.click" in body["result"]["afl"]
     assert "target=#x" in body["result"]["afl"]
+
+
+def test_loop_header_on_fail():
+    # 循环头 on_fail：解析＋发射＋悬空拦截，与独占步同权
+    d = compile_text('flow m\n@l for o in {{e}} on_fail -> h:\n'
+                     '    log "x"\n'
+                     '@w while ok max_iter=2 on_fail -> h:\n'
+                     '    log "y"\n'
+                     '@r repeat 2 on_fail -> h:\n'
+                     '    log "z"\n'
+                     '@f forever on_fail -> h:\n'
+                     '    log "w"\n'
+                     'handler h:\n'
+                     '    log "esc"\n')
+    steps = {s["id"]: s for s in d["process"]["steps"]}
+    for sid in ("l", "w", "r", "f"):
+        assert steps[sid]["on_failure"] == {"goto": "h"}, sid
+    with pytest.raises(DslError, match="跳转目标不存在"):
+        compile_text('flow m\n@l for o in {{e}} on_fail -> nope:\n'
+                     '    log "x"\n')
+
+
+def test_printer_loop_on_fail_roundtrip():
+    from apa_core.dsl import print_text
+    src = ('flow m\n@l for o in {{e}} on_fail -> h:\n'
+           '    log "x"\n'
+           'handler h:\n'
+           '    log "esc"\n')
+    d1 = compile_text(src)
+    out = print_text(d1)
+    assert "on_fail -> h" in out
+    assert compile_text(out) == d1
+
+
+def test_printer_bare_hash_value():
+    from apa_core.dsl import print_text
+    d = {"process": {"id": "o", "steps": [
+        {"id": "a", "action": "browser.click",
+         "params": {"target": "#x"}}]}}
+    out = print_text(d)
+    assert "target=#x" in out
+    d2 = compile_text(out)
+    assert d2["process"]["steps"][0]["params"] == {"target": "#x"}
+    # 自稳定：再打一次不再变
+    assert print_text(d2) == out

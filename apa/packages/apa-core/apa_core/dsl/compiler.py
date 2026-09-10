@@ -29,6 +29,10 @@ class _Compiler:
         for h in self.prog.handlers:
             self._claim(h.name, h.line, what="handler")
             self.goto_targets.add(h.name)
+            for b in h.body:
+                # handler 体也要编号（printer 往返需要 id）；
+                # top=False：体内 id 不可被 goto（与循环体同规则）
+                self._number(b, top=False)
         for s in self.prog.steps:
             self._number(s, top=True)
         for s in self.prog.steps:
@@ -102,6 +106,12 @@ class _Compiler:
             d["output_as"] = out
         return d
 
+    @staticmethod
+    def _goto_emit(d: Dict[str, Any], node: Any) -> None:
+        g = getattr(node, "goto", None)
+        if g:
+            d["on_failure"] = {"goto": g}
+
     def _emit(self, node: Any) -> Dict[str, Any]:
         if isinstance(node, ActionStep):
             d = self._base(node)
@@ -120,6 +130,7 @@ class _Compiler:
             d["params"] = {"source": node.source,
                            "item_var": node.var}
             d["body_steps"] = [self._emit(b) for b in node.body]
+            self._goto_emit(d, node)
             return d
         if isinstance(node, WhileStep):
             d = self._base(node)
@@ -127,6 +138,7 @@ class _Compiler:
             d["params"] = {"condition": node.expr,
                            "max_iterations": node.max_iter}
             d["body_steps"] = [self._emit(b) for b in node.body]
+            self._goto_emit(d, node)
             return d
         if isinstance(node, AskStep):
             d = self._base(node)
@@ -183,6 +195,7 @@ class _Compiler:
                 params["item_var"] = node.output_as
             d["params"] = params
             d["body_steps"] = [self._emit(b) for b in node.body]
+            self._goto_emit(d, node)
             return d
         if isinstance(node, ForeverStep):
             d = self._base(node)
@@ -192,6 +205,7 @@ class _Compiler:
                 params["max_iterations"] = node.max_iter
             d["params"] = params
             d["body_steps"] = [self._emit(b) for b in node.body]
+            self._goto_emit(d, node)
             return d
         raise DslError(f"未知节点：{type(node).__name__}")
 

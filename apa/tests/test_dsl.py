@@ -207,3 +207,98 @@ def test_registry_experimental_triage():
     assert stable == ["browser.click", "browser.extract_table",
                       "browser.input", "browser.navigate", "code.python",
                       "data.filter", "email.send"]
+
+
+def test_script_bare_id_with_colon():
+    # 裸 id＋冒号与 @ 显式同义（曾经报“独占步关键字”误导错）
+    a = steps_of('flow m\ns script python as x:\n    """\n    return 1\n    """\n')[0]
+    assert a["action"] == "code.python"
+    assert a["id"] == "s"
+
+
+def test_printer_control_flow_roundtrip():
+    from apa_core.dsl import print_text
+    src = ('flow t "T"\non manual\nmax_actions 10\n'
+           '@l for o in {{e}}:\n'
+           '    @w while x > 1 max_iter=2:\n'
+           '        log "in"\n'
+           '        break when o == null\n'
+           '    @r repeat 3 from 1 as i:\n'
+           '        log "n"\n'
+           '    @f forever max_iter=5:\n'
+           '        log "tick"\n'
+           '        continue\n')
+    d1 = compile_text(src)
+    d2 = compile_text(print_text(d1))
+    assert d1 == d2
+
+
+def test_printer_break_outside_loop_errors():
+    with pytest.raises(DslError, match="循环体"):
+        compile_text('flow m\nstop break\n')
+
+
+def test_printer_legacy_body_action_upgrades():
+    from apa_core.dsl import print_text
+    old = {"process": {"id": "o", "mode": "process", "trigger": {},
+                       "steps": [{"id": "w", "type": "while",
+                                  "params": {"condition": "x",
+                                             "max_iterations": 2,
+                                             "body_action": "api.ping",
+                                             "body_params": {"u": 1}}}]}}
+    out = print_text(old)
+    assert "while x max_iter=2:" in out
+    d2 = compile_text(out)
+    body = d2["process"]["steps"][0]["body_steps"]
+    assert body[0]["action"] == "api.ping"
+    assert body[0]["params"] == {"u": 1}
+
+
+def test_printer_unknown_type_errors():
+    from apa_core.dsl import print_text
+    with pytest.raises(DslError, match="未知类型"):
+        print_text({"process": {"id": "o", "steps": [
+            {"id": "x", "type": "teleport", "params": {}}]}})
+
+
+def test_printer_null_and_script_sugar():
+    from apa_core.dsl import print_text
+    d = {"process": {"id": "o", "steps": [
+        {"id": "n", "action": "api.thing", "params": {"x": None}},
+        {"id": "c", "action": "code.python",
+         "params": {"code": "return 1", "timeout_s": 5},
+         "output_as": "out"}]}}
+    out = print_text(d)
+    assert "x=null" in out
+    assert "script python timeout=5 as out:" in out
+    d2 = compile_text(out)
+    assert d2["process"]["steps"][0]["params"] == {"x": None}
+
+
+def test_rpc_afl_compile_print_roundtrip(client):
+    afl = ('flow t "T"\non manual\n'
+           '@a browser.click target=#x as clicked\n'
+           '@b log "hi {{clicked}}" when {{clicked != null}}\n')
+    r = client.post("/api/studio/rpc", json={
+        "id": "c1", "method": "afl.compile", "params": {"afl": afl}})
+    body = r.json()
+    assert body["ok"], body
+    assert [s["id"] for s in body["result"]["steps"]] == ["a", "b"]
+    r = client.post("/api/studio/rpc", json={
+        "id": "c2", "method": "afl.compile",
+        "params": {"afl": "flow m\nbrowser.click target=#a on_fail -> nope\n"}})
+    body = r.json()
+    assert body["ok"] is False
+    assert body["error"]["code"] == "invalid_params"
+
+
+def test_rpc_afl_print(client):
+    y = ("process:\n  id: t\n  mode: process\n  trigger: {}\n"
+         "  steps:\n    - id: a\n      action: browser.click\n"
+         "      params: {target: '#x'}\n")
+    r = client.post("/api/studio/rpc", json={
+        "id": "p1", "method": "afl.print", "params": {"yaml": y}})
+    body = r.json()
+    assert body["ok"], body
+    assert "browser.click" in body["result"]["afl"]
+    assert "target=#x" in body["result"]["afl"]

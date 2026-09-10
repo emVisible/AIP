@@ -6,5 +6,6 @@
 """
 from .compiler import compile_text, load_afl
 from .parser import DslError
+from .printer import print_text
 
-__all__ = ["compile_text", "load_afl", "DslError"]
+__all__ = ["compile_text", "load_afl", "print_text", "DslError"]

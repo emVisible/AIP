@@ -51,6 +51,7 @@ timeout_minutes <正整数>   # 缺省 60（引擎默认）
 | `k=[a, b]` | 列表 | `options=[approve, reject]` |
 | `k={"a": 1}` | JSON 字典 | `in={"oid": "{{oid}}"}` 也可（宽容解析） |
 | `{{path}}` | 模板引用，原样透传统计引擎渲染 | `value={{oid}}`、`{{steps.e.rows}}` |
+| `null` | 空值（YAML null 对等体，round-trip 用） | `x=null` |
 
 保留键：`expect`（v1 未开放，写了就报）；禁 C3 键（`idempotency`/`risk`）。
 
@@ -66,6 +67,11 @@ timeout_minutes <正整数>   # 缺省 60（引擎默认）
 
 - `for` → `type=foreach`（`source`/`item_var`＋`body_steps`）。
 - `while` → `type=while`；`max_iter` **强制**（引擎防死循环要求）。
+- `repeat <次数> [from <起>] [as <var>]:` → `type=for_times`
+  （次数可为 `{{ref}}`；`as` 绑循环变量，缺省引擎默认 `item`）。
+- `forever [max_iter=N] [as <var>]:` → `type=loop.infinite`。
+- `break [when …]`／`continue [when …]` → 循环控制信号；须在循环体内
+  （顶层写直接编译错）；不支持 `on_fail`（无失败语义，出现即错）。
 - 体内 `{{var}}` 为当轮项；`tab` 禁用，缩进跳层报错。
 
 ## 5. 问 AI（`ask`）
@@ -76,7 +82,7 @@ timeout_minutes <正整数>   # 缺省 60（引擎默认）
 
 → `type=ai_decision`。**问题文本进 `context` 首位**（引擎只读
 `context`，问题丢了等于白问）；`with` 追加上下文引用；
-`options` 必填非空（＝`available_actions`）。`uncertain` 时走
+`options` 必填（可空列表＝引擎默认）；`uncertain` 时走
 `escalate`（引擎行为）。
 
 ## 6. 子流程（`run`）与日志（`log`）
@@ -150,3 +156,14 @@ max_actions 30
 
 > 约定：` ```afl ` 为示意片段（含占位符，不可编译）；
 > ` ```afl-ok ` 为完整可运行例，CI 逐块编译＋`build_process` 校验。
+
+## 11. 打印机（规范形式，D1）
+
+`print_text`：process-dict → 规范 `.afl`。用途：画布回写、YAML 迁移。
+往返保证：`parse(print(parse(x))) ≡ parse(x)`（dict 恒等，测试锁定）。
+
+- 头默认值恒显式（`max_actions`/`timeout_minutes` 写全值，所见即所运行）。
+- 参数按字母序；`target` 置首；`code.python` 恒用 `script` 糖。
+- 有损清单（宁可报错不伪造）：`title` 不在 dict 里，不打印；
+  未知 `type` 直接报错；老式 `body_action`（无 `body_steps`）就地升级
+  为单步体（语义等价，引擎同路径）。

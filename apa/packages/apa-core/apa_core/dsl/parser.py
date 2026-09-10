@@ -14,8 +14,9 @@ from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
 
-class DslError(Exception):
-    """带行号的编译错误。"""
+class DslError(ValueError):
+    """带行号的编译错误。ValueError 子类：RPC 映射为 invalid_params
+    而非 internal_error——用户写错了，不是服务器坏了。"""
 
     def __init__(self, message: str, *, line: int = 0, text: str = ""):
         self.line = line
@@ -120,6 +121,39 @@ class LogStep:
 
 
 @dataclass
+class BreakStep:
+    id: Optional[str]
+    condition: Optional[str]
+    line: int
+
+
+@dataclass
+class ContinueStep:
+    id: Optional[str]
+    condition: Optional[str]
+    line: int
+
+
+@dataclass
+class RepeatStep:
+    id: Optional[str]
+    count: Any
+    start: Any
+    output_as: Optional[str]
+    body: List[Any]
+    line: int
+
+
+@dataclass
+class ForeverStep:
+    id: Optional[str]
+    max_iter: Optional[int]
+    output_as: Optional[str]
+    body: List[Any]
+    line: int
+
+
+@dataclass
 class HandlerDef:
     name: str
     body: List[Any]
@@ -136,7 +170,8 @@ class Program:
     handlers: List[HandlerDef] = field(default_factory=list)
 
 
-Step = (ActionStep, ForStep, WhileStep, AskStep, RunStep, ScriptStep, LogStep)
+Step = (ActionStep, ForStep, WhileStep, AskStep, RunStep, ScriptStep,
+        LogStep, BreakStep, ContinueStep, RepeatStep, ForeverStep)
 
 _IDENT = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
 RESERVED_KEYS = {"expect"}   # 引擎有、v1 未开放：明说，不静默吞
@@ -269,6 +304,9 @@ def _parse_value(text: str, quoted: bool, line: int, raw: str) -> Any:
     t = text if quoted else text.strip()
     if quoted:
         return t
+    if t == "null":
+        # YAML 有 null，AFL 也得有——否则 round-trip 丢语义
+        return None
     if len(t) >= 2 and t[0] == t[-1] and t[0] in ("'", '"'):
         # 容器内部残留引号：JSON 直觉——引号即字符串，不再推断类型
         return t[1:-1]
@@ -354,7 +392,8 @@ def _valid_ident(name: str) -> bool:
 def _is_verb(word: str) -> bool:
     """动词位判定：关键字或带点动作名。"""
     return word in ("for", "while", "ask", "run", "script", "log",
-                    "handler", "flow", "on") or "." in word
+                    "handler", "flow", "on", "break", "continue",
+                    "repeat", "forever") or "." in word
 
 
 def _split_id(words: List[str], lineno: int, raw: str) -> tuple:
@@ -476,12 +515,15 @@ class _Parser:
     def _strip_script_colon(self, stripped: str, lineno: int,
                               raw: str) -> Optional[str]:
         """script 头尾随冒号 → 剥掉按独占步解析
-        （用户十有八九会写冒号）；非 script 返回 None
-        （走正常块分支，该报错报错）。"""
+        （用户十有八九会写冒号）；id 取裸写/`@`两形（与 _split_id 同口径）。
+        非 script 返回 None（走正常块分支，该报错报错）。"""
         body = stripped[:-1].rstrip()
         toks = _scan(body, lineno, raw)
         words = [t.text for t in toks]
-        j = 1 if words and words[0].startswith("@") else 0
+        try:
+            _, j = _split_id(words, lineno, raw)
+        except DslError:
+            return None
         if j < len(words) and words[j] == "script":
             return body
         return None
@@ -510,12 +552,13 @@ class _Parser:
         if i >= len(words):
             raise DslError("块头缺关键字", line=lineno, text=text)
         kw = words[i]
-        if kw not in ("handler", "for", "while"):
-            if kw in ("flow", "on", "ask", "run", "script", "log"):
+        if kw not in ("handler", "for", "while", "repeat", "forever"):
+            if kw in ("flow", "on", "ask", "run", "script", "log",
+                      "break", "continue"):
                 raise DslError(f"{kw} 是独占步/头关键字，不能作块头",
                                line=lineno, text=text)
-            raise DslError(f"块关键字须为 for/while/handler，得 {kw!r}",
-                           line=lineno, text=text)
+            raise DslError("块关键字须为 for/while/repeat/forever/handler，"
+                           f"得 {kw!r}", line=lineno, text=text)
         # 先验头再收体：坏关键字不应被体错误掩盖；script 等独占步
         # 即使带冒号也不进块分支（由调用方预判）。
         self.pos += 1
@@ -530,9 +573,14 @@ class _Parser:
                     f"handler 体必须恰为一个步骤（得 {len(body)} 个）",
                     line=lineno, text=text)
             return HandlerDef(name=rest[0], body=body, line=lineno)
-        node = self._parse_for(node_id, words[i + 1:], lineno, text) \
-            if kw == "for" else \
-            self._parse_while(node_id, words[i + 1:], lineno, text)
+        if kw == "for":
+            node = self._parse_for(node_id, words[i + 1:], lineno, text)
+        elif kw == "while":
+            node = self._parse_while(node_id, words[i + 1:], lineno, text)
+        elif kw == "repeat":
+            node = self._parse_repeat(node_id, words[i + 1:], lineno, text)
+        else:  # forever（上文已验集合）
+            node = self._parse_forever(node_id, words[i + 1:], lineno, text)
         node.body = body
         return node
 
@@ -603,6 +651,63 @@ class _Parser:
         return ForStep(id=node_id, var=var, source=rest[0],
                        output_as=output_as, body=[], line=lineno)
 
+    def _parse_repeat(self, node_id: Optional[str], words: List[str],
+                      lineno: int, raw: str) -> RepeatStep:
+        # repeat <count> [from <start>] [as <var>]  (count 可为 {{ref}})
+        if not words:
+            raise DslError("repeat 写法：`repeat <次数> [from <起>] "
+                           "[as <var>]:`", line=lineno, text=raw)
+        count = _parse_value(words[0], False, lineno, raw)
+        rest = words[1:]
+        start: Any = 0
+        output_as = None
+        while rest:
+            if rest[0] == "from":
+                if len(rest) < 2:
+                    raise DslError("from 后缺起始值", line=lineno, text=raw)
+                start = _parse_value(rest[1], False, lineno, raw)
+                rest = rest[2:]
+                continue
+            if rest[0] == "as":
+                if len(rest) < 2:
+                    raise DslError("as 后缺名", line=lineno, text=raw)
+                output_as = rest[1]
+                rest = rest[2:]
+                continue
+            raise DslError(f"repeat 行多余片段 {rest[0]!r}", line=lineno,
+                           text=raw)
+        return RepeatStep(id=node_id, count=count, start=start,
+                          output_as=output_as, body=[], line=lineno)
+
+    def _parse_forever(self, node_id: Optional[str], words: List[str],
+                       lineno: int, raw: str) -> ForeverStep:
+        # forever [max_iter=N] [as <var>]
+        max_iter = None
+        output_as = None
+        rest = list(words)
+        while rest:
+            if rest[0].startswith("max_iter="):
+                try:
+                    max_iter = int(rest[0].split("=", 1)[1])
+                except ValueError:
+                    raise DslError("max_iter 须为正整数", line=lineno,
+                                   text=raw)
+                if max_iter < 1:
+                    raise DslError("max_iter 须为正整数", line=lineno,
+                                   text=raw)
+                rest = rest[1:]
+                continue
+            if rest[0] == "as":
+                if len(rest) < 2:
+                    raise DslError("as 后缺名", line=lineno, text=raw)
+                output_as = rest[1]
+                rest = rest[2:]
+                continue
+            raise DslError(f"forever 行多余片段 {rest[0]!r}（只要 "
+                           f"max_iter/as）", line=lineno, text=raw)
+        return ForeverStep(id=node_id, max_iter=max_iter,
+                           output_as=output_as, body=[], line=lineno)
+
     def _parse_while(self, node_id: Optional[str], words: List[str],
                      lineno: int, raw: str) -> WhileStep:
         # EXPR... max_iter=N [as NAME]
@@ -638,7 +743,8 @@ class _Parser:
     def _parse_simple(self, lineno: int, stripped: str,
                       raw: str) -> Any:
         if stripped.endswith(":"):
-            raise DslError("独占步不能以 : 结尾（: 只属于 for/while/handler）",
+            raise DslError("独占步不能以 : 结尾"
+                           "（: 只属于 for/while/repeat/forever/handler）",
                            line=lineno, text=raw)
         toks = _scan(stripped, lineno, raw)
         node_id, i = _split_id([t.text for t in toks], lineno, raw)
@@ -678,7 +784,29 @@ class _Parser:
                 toks, i, lineno, raw, {})
             return LogStep(id=node_id, message=msg, output_as=output_as,
                            condition=condition, goto=goto, line=lineno)
-        if verb in ("for", "while", "handler", "flow", "on"):
+        if verb in ("break", "continue"):
+            # 循环控制信号：只取可选 when（取到行尾）；on_fail 无失败语义，
+            # 出现即错，不静默吞。
+            condition = None
+            if i < len(toks):
+                w, q = toks[i].text, toks[i].quoted
+                if w != "when" or q:
+                    raise DslError(
+                        f"{verb} 只接受 `when` 修饰，得 {w!r}",
+                        line=lineno, text=raw)
+                rest = toks[i + 1:]
+                if any(t.text == "on_fail" and not t.quoted for t in rest):
+                    raise DslError(
+                        f"{verb} 不支持 on_fail（控制信号无失败语义）",
+                        line=lineno, text=raw)
+                condition = " ".join(t.raw for t in rest)
+                if not condition:
+                    raise DslError("when 后缺表达式", line=lineno,
+                                   text=raw)
+            cls = BreakStep if verb == "break" else ContinueStep
+            return cls(id=node_id, condition=condition, line=lineno)
+        if verb in ("for", "while", "repeat", "forever",
+                    "handler", "flow", "on"):
             raise DslError(f"{verb} 是块/头关键字，不能作独占步",
                            line=lineno, text=raw)
         if "." not in verb:
@@ -825,8 +953,8 @@ class _Parser:
                 continue
             if w.startswith("options="):
                 v = _parse_value(w.split("=", 1)[1], False, lineno, raw)
-                if not isinstance(v, list) or not v:
-                    raise DslError("options 须为非空列表", line=lineno,
+                if not isinstance(v, list):
+                    raise DslError("options 须为列表", line=lineno,
                                    text=raw)
                 options = v
                 i += 1

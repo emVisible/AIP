@@ -49,9 +49,11 @@ handler quota:
     only_one_log "超限"     # handler 体恰一个步骤
 ```
 
-- `for`：`for <var> in <ref>`，体内 `{{var}}`。
+- `for`：`for <var> in <ref>`，体内 `{{var}}`；`repeat <N> [from <起>] [as <var>]:`
+  次数循环；`forever [max_iter=N]:` 无限循环（预算兜底）；`break`/`continue`
+  只在循环体内（可带 `when`，无 `on_fail`）。
 - `while`：`max_iter` 强制（防死循环）。
-- `ask`：问题进 `context` 首位；`options` 必填非空；`uncertain` 走 escalate。
+- `ask`：问题进 `context` 首位；`options` 必填（可空）；`uncertain` 走 escalate。
 - `script`：只 `python`（`js` 编译错）；`timeout` 秒；`nosandbox` 仅调试。
 - `log "消息"` 普通步骤，修饰子句照用。
 
@@ -59,7 +61,7 @@ handler quota:
 
 1. 首行 `flow <id>`；动词全名；块以冒号结尾、体缩进。
 2. 每个 `on_fail` 目标都存在（步骤/handler/escalate）。
-3. `ask` 有非空 `options`；`while` 有 `max_iter`；`handler` 体唯一。
+3. `ask` 有 `options`；`while` 有 `max_iter`；`handler` 体唯一；`break` 在循环内。
 4. 引用的 `{{steps.X.Y}}` 中 X 是前文 id 或 as 名。
 5. 不确定时宁可多写 id，不要省。
 

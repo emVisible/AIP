@@ -11,8 +11,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Set
 
-from .parser import (ActionStep, AskStep, DslError, ForStep, HandlerDef,
-                     LogStep, Program, RunStep, ScriptStep, WhileStep)
+from .parser import (ActionStep, AskStep, BreakStep, ContinueStep, DslError,
+                     ForeverStep, ForStep, HandlerDef, LogStep, Program,
+                     RepeatStep, RunStep, ScriptStep, WhileStep)
 
 
 class _Compiler:
@@ -46,15 +47,17 @@ class _Compiler:
             "id": self.prog.head.id,
             "mode": "process",
             "trigger": dict(self.prog.trigger),
+            # 默认显式落盘（引擎同值）：所见即所运行，不玩“缺省魔法”
+            "max_actions": (self.prog.max_actions if self.prog.max_actions
+                            is not None else 100),
+            "timeout_minutes": (self.prog.timeout_minutes
+                                if self.prog.timeout_minutes is not None
+                                else 60),
             "steps": [self._emit(s) for s in self.prog.steps],
             "error_handlers": {
                 h.name: self._emit(h.body[0]) for h in self.prog.handlers
             },
         }
-        if self.prog.max_actions is not None:
-            proc["max_actions"] = self.prog.max_actions
-        if self.prog.timeout_minutes is not None:
-            proc["timeout_minutes"] = self.prog.timeout_minutes
         return {"process": proc}
 
     # -- 第一遍 --
@@ -64,7 +67,11 @@ class _Compiler:
             raise DslError(f"{what} id 重复：{name!r}", line=line)
         self.seen_ids.add(name)
 
-    def _number(self, node: Any, top: bool) -> None:
+    def _number(self, node: Any, top: bool, in_loop: bool = False) -> None:
+        if isinstance(node, (BreakStep, ContinueStep)) and not in_loop:
+            raise DslError(
+                f"{'break' if isinstance(node, BreakStep) else 'continue'} "
+                f"须在循环体内（顶层无循环可跳）", line=node.line)
         if getattr(node, "id", None):
             kind = "顶层步骤" if top else "嵌套步骤"
             self._claim(node.id, node.line, what=kind)
@@ -74,8 +81,10 @@ class _Compiler:
             self._claim(node.id, node.line)
         if top:
             self.goto_targets.add(node.id)
+        inner = isinstance(node, (ForStep, WhileStep, RepeatStep,
+                                  ForeverStep))
         for b in getattr(node, "body", []) or []:
-            self._number(b, top=False)
+            self._number(b, top=False, in_loop=in_loop or inner)
 
     def _collect_goto(self, node: Any) -> None:
         g = getattr(node, "goto", None)
@@ -151,6 +160,38 @@ class _Compiler:
                 d["condition"] = cond
             if node.goto:
                 d["on_failure"] = {"goto": node.goto}
+            return d
+        if isinstance(node, BreakStep):
+            d = {"id": node.id, "type": "loop.break"}
+            cond = (node.condition or "").strip()
+            if cond:
+                d["condition"] = cond
+            return d
+        if isinstance(node, ContinueStep):
+            d = {"id": node.id, "type": "loop.continue"}
+            cond = (node.condition or "").strip()
+            if cond:
+                d["condition"] = cond
+            return d
+        if isinstance(node, RepeatStep):
+            d = self._base(node)
+            d["type"] = "for_times"
+            params: Dict[str, Any] = {"count": node.count}
+            if node.start != 0 and node.start is not None:
+                params["start"] = node.start
+            if node.output_as:
+                params["item_var"] = node.output_as
+            d["params"] = params
+            d["body_steps"] = [self._emit(b) for b in node.body]
+            return d
+        if isinstance(node, ForeverStep):
+            d = self._base(node)
+            d["type"] = "loop.infinite"
+            params = {}
+            if node.max_iter is not None:
+                params["max_iterations"] = node.max_iter
+            d["params"] = params
+            d["body_steps"] = [self._emit(b) for b in node.body]
             return d
         raise DslError(f"未知节点：{type(node).__name__}")
 

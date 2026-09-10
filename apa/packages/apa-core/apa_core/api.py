@@ -431,6 +431,29 @@ def create_app(
         spill_test_response(result)
         return result
 
+    def _rpc_afl_compile(p: dict):
+        """AFL 文本 → 表单（经 YAML 复用 to_form；DslError 是 ValueError，
+        自动映射 invalid_params）。"""
+        import yaml as _y
+
+        from .dsl import compile_text
+        from .process import build_process
+        data = compile_text(str(p.get("afl", "")))
+        build_process(data)  # 全量校验（重 id/C3/类型）
+        return server.process_to_form(
+            _y.safe_dump(data, allow_unicode=True, sort_keys=False))
+
+    def _rpc_afl_print(p: dict):
+        """YAML → 规范 AFL 文本（D2 画布回写通道）。"""
+        import yaml as _y
+
+        from .dsl import print_text
+        try:
+            data = _y.safe_load(str(p.get("yaml", "")))
+        except _y.YAMLError as e:
+            raise ValueError(f"YAML 解析失败：{e}")
+        return {"afl": print_text(data)}
+
     @app.post("/api/studio/rpc")
     async def studio_rpc(req: Request):
         """信封：{id, method, params} → {id, ok, result|error}。
@@ -466,6 +489,8 @@ def create_app(
                     "yaml": server.process_from_form(p.get("form") or {})},
                 "yaml.to_form": lambda p: server.process_to_form(
                     str(p.get("yaml", ""))),
+                "afl.compile": _rpc_afl_compile,
+                "afl.print": _rpc_afl_print,
                 "settings.get": lambda p: {
                     "version": svc.settings.current.version,
                     "settings": svc.settings.get(),

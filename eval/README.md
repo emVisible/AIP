@@ -33,6 +33,16 @@ python3 -m eval.calibrate --samples /path/to/your.jsonl --out eval/calibration.j
 不写入，运行时按 T=1 出厂值。sidecar 按文件 mtime 热重载，无需重启。
 **合成样本只验链路，不提交 calibration.json**——拟合只吃真实样本。
 
+## 标签沉淀（export：resolve 即标注）
+
+```bash
+python3 -m eval.export --out eval/samples.jsonl
+```
+
+从 `data/reviews.json` 导出：自动决议与人工决议转 `expected`，
+`pending` 跳过；meta 过凭据 key。飞轮起点：每天的 resolve 自动攒成
+拟合/微调原料。500+ 条后开微调，在此之前只做温度拟合。
+
 ## 把样本给我
 
 直接发文件或粘贴 JSONL，每类（过/拦/转人工）各 10 条以上最有价值。

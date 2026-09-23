@@ -4,30 +4,37 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Counts, ReviewRecord, SidecarInfo, api, subscribeEvents } from './api'
 import StatusBar from './StatusBar'
 import Timeline from './Timeline'
-import { Card, EmptyState, KIND_ZH, Mono, StateTag, TimeText } from './components/ui'
+import { Card, EmptyState, Mono, StateTag, TimeText, kindName } from './components/ui'
+import { LangCtx, StrKey, useLang, useT } from './i18n'
+import { SAMPLES } from './samples'
 import './styles.css'
 
 type Filter = '' | 'pending' | 'approved' | 'rejected'
-const FILTERS: { key: Filter; label: string }[] = [
-  { key: 'pending', label: '待审' },
-  { key: 'approved', label: '已通过' },
-  { key: 'rejected', label: '已驳回' },
-  { key: '', label: '全部' },
+const FILTER_KEYS: { key: Filter; label: StrKey }[] = [
+  { key: 'pending', label: 'f_pending' },
+  { key: 'approved', label: 'f_approved' },
+  { key: 'rejected', label: 'f_rejected' },
+  { key: '', label: 'f_all' },
 ]
 const KINDS = ['article', 'comment', 'product', 'ticket', 'expense', 'other']
 type Sidecar = (SidecarInfo & { ok: boolean; engine: string }) | null
 
-export default function App() {
+function Shell() {
+  const [lang, setLang] = useLang()
+  const t = useT()
   const [filter, setFilter] = useState<Filter>('pending')
   const [items, setItems] = useState<ReviewRecord[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [checked, setChecked] = useState<Set<string>>(new Set())
   const [counts, setCounts] = useState<Counts>({ pending: 0, approved: 0, rejected: 0 })
+  const [today, setToday] = useState<Counts>({ pending: 0, approved: 0, rejected: 0 })
   const [engine, setEngine] = useState('…')
   const [sidecar, setSidecar] = useState<Sidecar>(null)
   const [lastLatency, setLastLatency] = useState<number | null>(null)
   const [connected, setConnected] = useState(false)
   const [toast, setToast] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [batching, setBatching] = useState(false)
   const [progress, setProgress] = useState<Record<string, string>>({})
   const [form, setForm] = useState({ kind: 'article', title: '', body: '' })
   const filterRef = useRef(filter)
@@ -43,6 +50,7 @@ export default function App() {
     setEngine(h.engine)
     setSidecar(h.sidecar)
     setCounts(s.counts)
+    if (s.today) setToday(s.today)
     setConnected(true)
   }, [])
 
@@ -56,12 +64,15 @@ export default function App() {
         if (type === 'hello') {
           const c = data.counts as Counts | undefined
           if (c) setCounts(c)
+          const todayCounts = (data as { today?: Counts }).today
+          if (todayCounts) setToday(todayCounts)
           setConnected(true)
           return
         }
         if (type === 'stats') {
-          const c = data as unknown as { counts: Counts }
+          const c = data as unknown as { counts: Counts; today?: Counts }
           if (c.counts) setCounts(c.counts)
+          if (c.today) setToday(c.today)
           return
         }
         if (type === 'accepted' || type === 'running') {
@@ -101,6 +112,7 @@ export default function App() {
 
   useEffect(() => {
     loadQueue(filter).catch(() => setConnected(false))
+    setChecked(new Set())
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter])
 
@@ -121,7 +133,7 @@ export default function App() {
     api
       .contextGet(selected.item.body_ref, ['body'])
       .then((r) => setFullBody(r.data.body ?? ''))
-      .catch(() => setFullBody('（全文加载失败）'))
+      .catch(() => setFullBody(t('body_failed')))
       .finally(() => setBodyLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])
@@ -131,12 +143,39 @@ export default function App() {
     setTimeout(() => setToast(''), 2200)
   }
 
+  const doResolve = async (id: string, outcome: 'approve' | 'reject') => {
+    await api.resolve(id, outcome)
+  }
+
   const resolve = async (outcome: 'approve' | 'reject') => {
     if (!selected) return
-    await api.resolve(selected.item.id, outcome)
-    flash(outcome === 'approve' ? '已通过' : '已驳回')
+    await doResolve(selected.item.id, outcome)
+    flash(outcome === 'approve' ? t('toast_done_approve') : t('toast_done_reject'))
     setSelectedId(null)
     loadQueue(filterRef.current).catch(() => {})
+  }
+
+  const batchResolve = async (outcome: 'approve' | 'reject') => {
+    if (checked.size === 0 || batching) return
+    setBatching(true)
+    try {
+      await Promise.all([...checked].map((id) => doResolve(id, outcome)))
+      flash(t('batch_done'))
+      setChecked(new Set())
+      setSelectedId(null)
+      loadQueue(filterRef.current).catch(() => {})
+    } finally {
+      setBatching(false)
+    }
+  }
+
+  const toggleCheck = (id: string) => {
+    setChecked((prev) => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
   }
 
   const submit = async (e: React.FormEvent) => {
@@ -147,7 +186,13 @@ export default function App() {
       const rec = await api.submit(form.kind, form.title, form.body)
       if (rec.decision.latency_ms >= 0) setLastLatency(rec.decision.latency_ms)
       setForm({ kind: 'article', title: '', body: '' })
-      flash(rec.state === 'pending' ? '已提交，转人工' : rec.state === 'approved' ? '已提交，自动通过' : '已提交，自动驳回')
+      flash(
+        rec.state === 'pending'
+          ? t('toast_pending')
+          : rec.state === 'approved'
+            ? t('toast_approved')
+            : t('toast_rejected'),
+      )
       setSelectedId(rec.item.id)
       loadQueue(filterRef.current).catch(() => {})
     } finally {
@@ -155,13 +200,46 @@ export default function App() {
     }
   }
 
+  const fillSample = (id: string) => {
+    const s = SAMPLES.find((x) => x.id === id)
+    if (!s) return
+    setForm({ kind: s.kind, title: s.title[lang], body: s.body[lang] })
+  }
+
+  // 快捷键：j/k 移动，a 通过，r 驳回（输入框内不触发）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) return
+      if (e.key === 'j' || e.key === 'k') {
+        if (items.length === 0) return
+        const idx = items.findIndex((i) => i.item.id === selectedId)
+        const next =
+          e.key === 'j'
+            ? items[Math.min(items.length - 1, idx + 1)]
+            : items[Math.max(0, idx - 1 < 0 ? 0 : idx - 1)]
+        if (next) setSelectedId(next.item.id)
+      } else if ((e.key === 'a' || e.key === 'r') && selected && selected.state === 'pending') {
+        resolve(e.key === 'a' ? 'approve' : 'reject').catch(() => {})
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, selectedId, selected?.state])
   return (
     <div className="layout">
-      <header>
+      <header className="brand">
+        <img src="/logo.svg" alt="Clearance" className="mark" />
         <div>
-          <h1>Clearance 放行</h1>
-          <span className="sub">AIP 的产品实现 · 通用后台审核</span>
+          <h1>
+            {t('title')} <span className="wordmark">{t('titleEn')}</span>
+          </h1>
+          <span className="sub">{t('sub')}</span>
         </div>
+        <button className="lang-toggle" onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}>
+          {t('toggle_lang')}
+        </button>
       </header>
 
       <StatusBar
@@ -170,13 +248,14 @@ export default function App() {
         sidecar={sidecar}
         lastLatency={lastLatency}
         counts={counts}
+        today={today}
       />
-      {!connected && <div className="error">后端未连接（先跑 ./start.sh），5 秒后重试。</div>}
+      {!connected && <div className="error">{t('err_backend')}</div>}
 
       <div className="main">
         <Card className="queue">
           <nav>
-            {FILTERS.map((f) => (
+            {FILTER_KEYS.map((f) => (
               <button
                 key={f.key || 'all'}
                 className={filter === f.key ? 'active' : ''}
@@ -185,10 +264,23 @@ export default function App() {
                   setSelectedId(null)
                 }}
               >
-                {f.label}
+                {t(f.label)}
               </button>
             ))}
           </nav>
+          {filter === 'pending' && checked.size > 0 && (
+            <div className="batchbar">
+              <span>
+                {t('batch_bar')} {checked.size}
+              </span>
+              <button disabled={batching} onClick={() => batchResolve('approve')}>
+                {t('batch_approve')}
+              </button>
+              <button disabled={batching} onClick={() => batchResolve('reject')}>
+                {t('batch_reject')}
+              </button>
+            </div>
+          )}
           <ul>
             <AnimatePresence initial={false}>
               {items.map((r) => (
@@ -202,10 +294,18 @@ export default function App() {
                   className={selectedId === r.item.id ? 'sel' : ''}
                   onClick={() => setSelectedId(r.item.id)}
                 >
-                  <StateTag state={r.state} />
-                  <span className="kind">{KIND_ZH[r.item.kind] ?? r.item.kind}</span>
+                  {filter === 'pending' && r.state === 'pending' && (
+                    <input
+                      type="checkbox"
+                      checked={checked.has(r.item.id)}
+                      onChange={() => toggleCheck(r.item.id)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  )}
+                  <StateTag state={r.state} lang={lang} />
+                  <span className="kind">{kindName(lang, r.item.kind)}</span>
                   <span className="title" title={r.item.title}>
-                    {r.item.title || '(无标题)'}
+                    {r.item.title || t('no_title')}
                   </span>
                   <TimeText ts={r.item.ts} />
                   <span className="conf">{r.decision.confidence.toFixed(2)}</span>
@@ -213,7 +313,7 @@ export default function App() {
               ))}
             </AnimatePresence>
           </ul>
-          {items.length === 0 && <EmptyState icon={<Inbox size={16} />} text="空队列——从右边提交第一条吧。" />}
+          {items.length === 0 && <EmptyState icon={<Inbox size={16} />} text={t('empty_queue')} />}
         </Card>
 
         <Card className="detail">
@@ -226,13 +326,14 @@ export default function App() {
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18 }}
               >
-                <h2>{selected.item.title || '(无标题)'}</h2>
+                <h2>{selected.item.title || t('no_title')}</h2>
                 <p className="meta">
-                  {KIND_ZH[selected.item.kind] ?? selected.item.kind} ·{' '}
-                  <Mono text={selected.item.id} /> · <TimeText ts={selected.item.ts} />
+                  {kindName(lang, selected.item.kind)} · <Mono text={selected.item.id} /> ·{' '}
+                  <TimeText ts={selected.item.ts} />
                 </p>
-                <pre>{bodyLoading ? '全文加载中…' : (fullBody ?? '')}</pre>
+                <pre>{bodyLoading ? t('loading_body') : (fullBody ?? '')}</pre>
                 <Timeline record={selected} running={progress[selected.item.id] === 'running'} />
+                <p className="meta">{t('reasons_note')}</p>
                 <ul className="reasons">
                   {selected.decision.reasons.map((x, i) => (
                     <li key={i}>{x}</li>
@@ -241,16 +342,16 @@ export default function App() {
                 {selected.state === 'pending' ? (
                   <div className="actions">
                     <button className="ok" onClick={() => resolve('approve')}>
-                      通过
+                      {t('btn_approve')}
                     </button>
                     <button className="bad" onClick={() => resolve('reject')}>
-                      驳回
+                      {t('btn_reject')}
                     </button>
                   </div>
                 ) : (
                   <p className="meta">
-                    已{selected.state === 'approved' ? '通过' : '驳回'}
-                    {selected.resolved_by ? ` · by ${selected.resolved_by}` : ''}
+                    {selected.state === 'approved' ? t('done_approve') : t('done_reject')}
+                    {selected.resolved_by ? ` · ${t('by')} ${selected.resolved_by}` : ''}
                   </p>
                 )}
               </motion.div>
@@ -262,35 +363,51 @@ export default function App() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
               >
-                左侧选一条查看链路 / 人审。
+                {t('empty_detail')}
               </motion.p>
             )}
           </AnimatePresence>
           <hr />
           <h3>
-            <Send size={14} /> 提交审核
+            <Send size={14} /> {t('form_title')}
           </h3>
+          <div className="samples">
+            <span className="samples-label">{t('samples_title')}</span>
+            <div className="chips">
+              {SAMPLES.map((s) => (
+                <button key={s.id} className="chip" onClick={() => fillSample(s.id)}>
+                  {s.title[lang]}
+                </button>
+              ))}
+              <button
+                className="chip ghost"
+                onClick={() => setForm({ kind: 'article', title: '', body: '' })}
+              >
+                {t('btn_clear')}
+              </button>
+            </div>
+          </div>
           <form onSubmit={submit}>
             <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
               {KINDS.map((k) => (
                 <option key={k} value={k}>
-                  {KIND_ZH[k]}（{k}）
+                  {kindName(lang, k)}（{k}）
                 </option>
               ))}
             </select>
             <input
-              placeholder="标题"
+              placeholder={t('form_title_ph')}
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
             />
             <textarea
-              placeholder="正文"
+              placeholder={t('form_body_ph')}
               rows={4}
               value={form.body}
               onChange={(e) => setForm({ ...form, body: e.target.value })}
             />
             <button type="submit" disabled={submitting}>
-              {submitting ? '判定中…' : '提交'}
+              {submitting ? t('btn_submitting') : t('btn_submit')}
             </button>
           </form>
         </Card>
@@ -309,5 +426,14 @@ export default function App() {
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+export default function App() {
+  const [lang, setLang] = useLang()
+  return (
+    <LangCtx.Provider value={{ lang, setLang }}>
+      <Shell />
+    </LangCtx.Provider>
   )
 }

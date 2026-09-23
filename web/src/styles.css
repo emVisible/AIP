@@ -32,6 +32,45 @@ header h1 {
   font-size: 22px;
   letter-spacing: 0.5px;
 }
+header.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+  overflow: hidden;
+}
+header.brand::after {
+  content: '';
+  position: absolute;
+  right: -30px;
+  top: -46px;
+  width: 150px;
+  height: 150px;
+  background: url('/logo.svg') no-repeat center / contain;
+  opacity: 0.05;
+  pointer-events: none;
+}
+.mark {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+.wordmark {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+  letter-spacing: 2px;
+}
+.lang-toggle {
+  margin-left: auto;
+  border: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 12.5px;
+  cursor: pointer;
+  z-index: 1;
+}
 .sub {
   color: var(--muted);
   font-size: 13px;
@@ -109,6 +148,13 @@ header h1 {
 .badge.warn {
   background: var(--warn-bg);
   color: var(--warn);
+}
+.badge.today {
+  background: #e7ebfa;
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .error {
   background: var(--bad-bg);
@@ -422,8 +468,7 @@ form textarea:focus {
 }
 
 /* toast */
-.toast {
-  position: fixed;
+.toast {  position: fixed;
   bottom: 26px;
   left: 50%;
   background: var(--accent);
@@ -435,4 +480,67 @@ form textarea:focus {
   gap: 7px;
   font-size: 13.5px;
   box-shadow: 0 6px 24px rgba(35, 37, 43, 0.25);
+}
+
+/* samples chips */
+.samples {
+  margin: 4px 0 10px;
+}
+.samples-label {
+  font-size: 12px;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 6px;
+}
+.chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.chip {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip:hover {
+  border-color: #9db1e8;
+}
+.chip.ghost {
+  background: transparent;
+  color: var(--muted);
+}
+
+/* batch bar */
+.batchbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #e7ebfa;
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+}
+.batchbar button {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.batchbar button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.queue li input[type='checkbox'] {
+  flex-shrink: 0;
+  accent-color: var(--accent);
 }

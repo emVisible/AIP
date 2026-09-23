@@ -65,7 +65,9 @@ export const api = {
   queue: (state = '') =>
     req<{ ok: boolean; items: ReviewRecord[] }>(`/api/queue${state ? `?state=${state}` : ''}`),
   stats: () =>
-    req<{ ok: boolean; counts: Counts; total: number; engine: string }>('/api/stats'),
+    req<{ ok: boolean; counts: Counts; total: number; engine: string; today?: Counts }>(
+      '/api/stats',
+    ),
   submit: (kind: string, title: string, body: string) =>
     req<ReviewRecord>('/api/review/submit', {
       method: 'POST',

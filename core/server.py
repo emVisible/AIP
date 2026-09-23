@@ -82,11 +82,21 @@ def _sidecar_health() -> dict | None:
 
 
 def _counts(store: ReviewStore) -> dict:
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
     counts = {"pending": 0, "approved": 0, "rejected": 0}
+    today_counts = {"pending": 0, "approved": 0, "rejected": 0}
     items = store.queue("")
     for r in items:
         counts[r["state"]] = counts.get(r["state"], 0) + 1
-    return {"counts": counts, "total": len(items)}
+        ts = (r.get("item") or {}).get("ts", 0)
+        try:
+            day = _dt.datetime.fromtimestamp(ts / 1000).date().isoformat()
+        except (ValueError, TypeError, OSError):
+            day = ""
+        if day == today and r["state"] in today_counts:
+            today_counts[r["state"]] += 1
+    return {"counts": counts, "total": len(items), "today": today_counts}
 
 
 def make_handler(store: ReviewStore, hub: EventHub):

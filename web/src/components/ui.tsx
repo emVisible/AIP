@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { Check, Copy } from 'lucide-react'
 import React, { useState } from 'react'
+import { Lang, kindName, stateName } from '../i18n'
 
 /**
  * 高频复用组件套件。溢出安全是硬契约：
@@ -11,28 +12,16 @@ import React, { useState } from 'react'
 
 export type Tone = '' | 'ok' | 'warn' | 'bad'
 
-export const KIND_ZH: Record<string, string> = {
-  article: '文章',
-  comment: '评论',
-  product: '商品',
-  ticket: '工单',
-  expense: '报销',
-  other: '其他',
-}
-
-export const STATE_ZH: Record<string, string> = {
-  pending: '待审',
-  approved: '通过',
-  rejected: '驳回',
-}
+export { kindName, stateName }
+export type { Lang }
 
 export function Card({ className = '', children }: { className?: string; children: React.ReactNode }) {
   return <div className={`card ${className}`}>{children}</div>
 }
 
-export function StateTag({ state }: { state: string }) {
+export function StateTag({ state, lang }: { state: string; lang: Lang }) {
   const tone = state === 'approved' ? 'ok' : state === 'rejected' ? 'bad' : 'warn'
-  return <span className={`tag ${tone}`}>{STATE_ZH[state] ?? state}</span>
+  return <span className={`tag ${tone}`}>{stateName(lang, state)}</span>
 }
 
 export function ConfBar({ value, tone = '' }: { value: number; tone?: Tone }) {

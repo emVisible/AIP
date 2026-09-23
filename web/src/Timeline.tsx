@@ -2,11 +2,13 @@ import { motion } from 'framer-motion'
 import { Check, FileInput, GitBranch, Scale, ShieldCheck, X } from 'lucide-react'
 import React from 'react'
 import { ReviewRecord } from './api'
+import { useT } from './i18n'
 import { ConfBar } from './components/ui'
 
 /** 单条记录的链路时间线：提交 → 路由 → 判定 → 网关 → 终态。
  *  running 为 true 时判定节点呼吸脉冲（模型推理中）。 */
 export default function Timeline({ record, running = false }: { record: ReviewRecord; running?: boolean }) {
+  const t = useT()
   const d = record.decision
   const steps: {
     icon: React.ReactNode
@@ -18,25 +20,25 @@ export default function Timeline({ record, running = false }: { record: ReviewRe
   }[] = [
     {
       icon: <FileInput size={14} />,
-      title: '提交',
+      title: t('tl_submit'),
       desc: `${record.item.kind} · ${record.item.id}`,
       tone: '',
     },
     {
       icon: <GitBranch size={14} />,
-      title: '路由',
+      title: t('tl_route'),
       desc: d.route_model
         ? `${d.route_model} · ${d.latency_ms}ms`
         : d.engine === 'heuristic'
-          ? 'heuristic（无路由）'
-          : '路由信息缺失',
+          ? t('no_route')
+          : t('route_missing'),
       tone: '',
     },
     {
       icon: <Scale size={14} />,
-      title: '判定',
+      title: t('tl_decide'),
       desc:
-        (running ? '模型推理中… · ' : '') +
+        (running ? t('running') + ' · ' : '') +
         `${d.action} · conf ${d.confidence.toFixed(2)}` +
         (d.usage && (d.usage.input_tokens || d.usage.output_tokens)
           ? ` · ${(d.usage.input_tokens ?? 0) + (d.usage.output_tokens ?? 0)} tokens`
@@ -47,8 +49,8 @@ export default function Timeline({ record, running = false }: { record: ReviewRe
     },
     {
       icon: <ShieldCheck size={14} />,
-      title: '网关',
-      desc: record.via === 'auto' ? '自动放行（置信度过线）' : `转人工（${record.via ?? 'policy'}）`,
+      title: t('tl_gateway'),
+      desc: record.via === 'auto' ? t('via_auto') : `${t('via_to_human')}（${record.via ?? 'policy'}）`,
       tone: record.via === 'auto' ? 'ok' : 'warn',
     },
     {
@@ -60,11 +62,11 @@ export default function Timeline({ record, running = false }: { record: ReviewRe
         ) : (
           <Check size={14} />
         ),
-      title: '终态',
+      title: t('tl_final'),
       desc:
         record.state === 'pending'
-          ? '等待人工'
-          : `${record.state === 'approved' ? '通过' : '驳回'}${record.resolved_by ? ` · ${record.resolved_by}` : ''}`,
+          ? t('waiting_human')
+          : `${record.state === 'approved' ? t('done_approve') : t('done_reject')}${record.resolved_by ? ` · ${t('by')} ${record.resolved_by}` : ''}`,
       tone:
         record.state === 'approved' ? 'ok' : record.state === 'rejected' ? 'bad' : 'warn',
     },

@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
-import { Activity, Bot, Cpu, WifiOff } from 'lucide-react'
+import { Activity, Bot, CalendarDays, Cpu, WifiOff } from 'lucide-react'
 import { Counts, SidecarInfo } from './api'
+import { useT } from './i18n'
 
 interface Props {
   connected: boolean
@@ -8,12 +9,21 @@ interface Props {
   sidecar: (SidecarInfo & { ok: boolean; engine: string }) | null
   lastLatency: number | null
   counts: Counts
+  today: Counts
 }
 
-export default function StatusBar({ connected, engine, sidecar, lastLatency, counts }: Props) {
+export default function StatusBar({
+  connected,
+  engine,
+  sidecar,
+  lastLatency,
+  counts,
+  today,
+}: Props) {
+  const t = useT()
   const laya = engine === 'laya:sidecar' && sidecar
   const lamp = !connected ? 'off' : laya ? 'on' : 'degraded'
-  const lampLabel = !connected ? '后端失联' : laya ? 'Laya 在线' : 'heuristic 兜底'
+  const lampLabel = !connected ? t('lamp_off') : laya ? t('lamp_ok') : t('lamp_degraded')
   return (
     <motion.div
       className="statusbar"
@@ -30,16 +40,28 @@ export default function StatusBar({ connected, engine, sidecar, lastLatency, cou
       </span>
       {laya && sidecar && (
         <span className="stat">
-          <Cpu size={13} /> {sidecar.device} · {sidecar.loaded.join('+') || '预热中'}
+          <Cpu size={13} /> {sidecar.device} · {sidecar.loaded.join('+') || '…'}
         </span>
       )}
       {lastLatency !== null && lastLatency >= 0 && (
-        <span className="stat">最近判定 {lastLatency}ms</span>
+        <span className="stat">
+          {t('recent_latency')} {lastLatency}
+          {t('ms')}
+        </span>
       )}
       <span className="counts">
-        <span className="badge warn">待审 {counts.pending}</span>
-        <span className="badge ok">通过 {counts.approved}</span>
-        <span className="badge bad">驳回 {counts.rejected}</span>
+        <span className="badge warn">
+          {t('c_pending')} {counts.pending}
+        </span>
+        <span className="badge ok">
+          {t('c_approved')} {counts.approved}
+        </span>
+        <span className="badge bad">
+          {t('c_rejected')} {counts.rejected}
+        </span>
+        <span className="badge today">
+          <CalendarDays size={11} /> {t('c_today')} {today.pending + today.approved + today.rejected}
+        </span>
       </span>
     </motion.div>
   )

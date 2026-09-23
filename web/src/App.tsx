@@ -381,6 +381,7 @@ function Shell() {
             {selected ? (
               <motion.div
                 key={selected.item.id}
+                className="detail-scroll"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -438,6 +439,7 @@ function Shell() {
           ) : (
             <motion.div
               key="submit-pane"
+              className="detail-scroll"
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.18 }}

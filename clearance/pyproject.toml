@@ -2,11 +2,15 @@
 name = "clearance"
 version = "0.1.0"
 description = "Clearance（放行）：Laya-native 通用后台审核网关，AIP 的产品实现"
+readme = "README.md"
 requires-python = ">=3.10"
+dependencies = []
 
 [project.optional-dependencies]
 laya = ["laya"]
-server = ["fastapi", "uvicorn"]
+
+[tool.uv]
+package = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

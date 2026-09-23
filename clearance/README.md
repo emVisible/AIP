@@ -25,7 +25,16 @@ clearance/
 └── data/              运行时产物（gitignored）
 ```
 
-## 运行（零安装）
+## 运行（一键启动）
+
+```bash
+./start.sh   # 前端 :5173 + 后端 :8686，Ctrl-C 全停
+```
+
+要求：`python3` + `node` + `pnpm`（后端优先走 `uv run --no-sync`，
+无 uv 自动回落系统 python；后端 stdlib 零依赖，不联网也能起）。
+
+## 手动运行
 
 ```bash
 cd clearance
@@ -34,6 +43,19 @@ python3 -m clearance_core.cli demo          # 3 条样例走完全链路
 python3 -m clearance_core.cli submit --kind article --title "示例" --body "正文..."
 python3 -m clearance_core.cli queue --state pending
 python3 -m clearance_core.cli resolve --id <id> --outcome approve --actor admin
+```
+
+后端 HTTP（给前端用，同样 stdlib）：
+
+```bash
+python3 -m clearance_core.server --port 8686   # /api/health|queue|stats|review/submit|review/<id>/resolve
+```
+
+前端（`web/`，pnpm + Vite + React + TS）：
+
+```bash
+cd web && pnpm install && pnpm dev    # :5173，/api 代理到 :8686
+pnpm build                            # tsc + vite 生产构建
 ```
 
 ## 调优（eval）

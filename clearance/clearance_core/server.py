@@ -1,0 +1,134 @@
+"""Clearance HTTP API（stdlib only，无第三方依赖）。
+
+    python3 -m clearance_core.server [--port 8686] [--data ./data]
+
+端点：
+    GET  /api/health
+    GET  /api/queue?state=pending|approved|rejected
+    POST /api/review/submit   {kind,title,body,meta?}
+    POST /api/review/<id>/resolve  {outcome: approve|reject, actor?}
+    GET  /api/stats
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from dataclasses import asdict
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse, parse_qs
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from clearance_core.decide import engine_name  # noqa: E402
+from clearance_core.store import ReviewStore  # noqa: E402
+
+VERSION = "0.1.0"
+
+
+def _send(handler: BaseHTTPRequestHandler, code: int, obj: dict) -> None:
+    body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+    handler.send_response(code)
+    handler.send_header("Content-Type", "application/json; charset=utf-8")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.send_header("Access-Control-Allow-Origin", "*")
+    handler.send_header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+    handler.send_header("Access-Control-Allow-Headers", "Content-Type")
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def make_handler(store: ReviewStore):
+    class Handler(BaseHTTPRequestHandler):
+        server_version = "Clearance/0.1"
+
+        def log_message(self, fmt, *args):  # 安静日志
+            sys.stderr.write("clearance: " + fmt % args + "\n")
+
+        def _read_json(self) -> dict:
+            length = int(self.headers.get("Content-Length") or 0)
+            if not length:
+                return {}
+            try:
+                return json.loads(self.rfile.read(length).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                raise ValueError("invalid JSON body")
+
+        def do_OPTIONS(self):
+            _send(self, 204, {})
+
+        def do_GET(self):
+            parsed = urlparse(self.path)
+            if parsed.path == "/api/health":
+                _send(self, 200, {"ok": True, "engine": engine_name(),
+                                  "version": VERSION})
+            elif parsed.path == "/api/queue":
+                state = parse_qs(parsed.query).get("state", [""])[0]
+                if state not in ("", "pending", "approved", "rejected"):
+                    _send(self, 400, {"ok": False, "error": "bad state"})
+                    return
+                _send(self, 200, {"ok": True, "items": store.queue(state)})
+            elif parsed.path == "/api/stats":
+                items = store.queue("")
+                counts = {"pending": 0, "approved": 0, "rejected": 0}
+                for r in items:
+                    counts[r["state"]] = counts.get(r["state"], 0) + 1
+                _send(self, 200, {"ok": True, "counts": counts,
+                                  "total": len(items), "engine": engine_name()})
+            else:
+                _send(self, 404, {"ok": False, "error": "not found"})
+
+        def do_POST(self):
+            parsed = urlparse(self.path)
+            try:
+                payload = self._read_json()
+            except ValueError as e:
+                _send(self, 400, {"ok": False, "error": str(e)})
+                return
+            if parsed.path == "/api/review/submit":
+                rec = store.submit(str(payload.get("kind", "other")),
+                                   str(payload.get("title", "")),
+                                   str(payload.get("body", "")),
+                                   payload.get("meta") or {})
+                _send(self, 200, {"ok": True, **asdict(rec)})
+            elif parsed.path.startswith("/api/review/") and parsed.path.endswith("/resolve"):
+                rid = parsed.path[len("/api/review/"):-len("/resolve")]
+                try:
+                    rec = store.resolve(rid, payload.get("outcome", ""),
+                                        str(payload.get("actor", "admin")))
+                except KeyError:
+                    _send(self, 404, {"ok": False, "error": "review not found"})
+                    return
+                except ValueError as e:
+                    _send(self, 400, {"ok": False, "error": str(e)})
+                    return
+                _send(self, 200, {"ok": True, **rec})
+            else:
+                _send(self, 404, {"ok": False, "error": "not found"})
+
+    return Handler
+
+
+def serve(port: int = 8686, data_dir: str = "") -> ThreadingHTTPServer:
+    data_dir = data_dir or os.environ.get("CLEARANCE_DATA_DIR", "") or os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
+    store = ReviewStore(data_dir)
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(store))
+    print(f"Clearance API on http://127.0.0.1:{port} (data={data_dir} engine={engine_name()})",
+          flush=True)
+    return server
+
+
+def main() -> int:
+    p = argparse.ArgumentParser()
+    p.add_argument("--port", type=int,
+                   default=int(os.environ.get("PORT", "8686")))
+    p.add_argument("--data", default="")
+    a = p.parse_args()
+    serve(a.port, a.data).serve_forever()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

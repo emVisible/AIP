@@ -7,10 +7,8 @@ build/
 *.egg-info/
 node_modules/
 package-lock.json
-benchmarks/result.json
 .env
 .DS_Store
-uv.lock
 
 # 上游研究仓库（本地只读参考，不入产品库）
 reference/harness-codex/

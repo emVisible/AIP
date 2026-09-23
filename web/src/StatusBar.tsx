@@ -12,6 +12,20 @@ interface Props {
   today: Counts
 }
 
+function Num({ v }: { v: number }) {
+  return (
+    <motion.span
+      key={v}
+      initial={{ y: 6, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.25 }}
+      style={{ display: 'inline-block', fontVariantNumeric: 'tabular-nums' }}
+    >
+      {v}
+    </motion.span>
+  )
+}
+
 export default function StatusBar({
   connected,
   engine,
@@ -51,16 +65,17 @@ export default function StatusBar({
       )}
       <span className="counts">
         <span className="badge warn">
-          {t('c_pending')} {counts.pending}
+          {t('c_pending')} <Num v={counts.pending} />
         </span>
         <span className="badge ok">
-          {t('c_approved')} {counts.approved}
+          {t('c_approved')} <Num v={counts.approved} />
         </span>
         <span className="badge bad">
-          {t('c_rejected')} {counts.rejected}
+          {t('c_rejected')} <Num v={counts.rejected} />
         </span>
         <span className="badge today">
-          <CalendarDays size={11} /> {t('c_today')} {today.pending + today.approved + today.rejected}
+          <CalendarDays size={11} /> {t('c_today')}{' '}
+          <Num v={today.pending + today.approved + today.rejected} />
         </span>
       </span>
     </motion.div>

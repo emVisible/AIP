@@ -66,6 +66,9 @@ const DICT = {
     loading_body: '全文加载中…',
     body_failed: '（全文加载失败）',
     conf_label: '置信度',
+    tab_detail: '详情',
+    tab_submit: '提交',
+    kind_all: '全部类型',
     doc_title: '清放行 Clearance｜中文后台审核网关',
   },
   en: {
@@ -131,6 +134,9 @@ const DICT = {
     loading_body: 'Loading full text…',
     body_failed: '(failed to load full text)',
     conf_label: 'confidence',
+    tab_detail: 'Detail',
+    tab_submit: 'Submit',
+    kind_all: 'All kinds',
     doc_title: 'Clearance｜Chinese Review Gateway',
   },
 } as const

@@ -23,6 +23,8 @@ function Shell() {
   const [lang, setLang] = useLang()
   const t = useT()
   const [filter, setFilter] = useState<Filter>('pending')
+  const [kindFilter, setKindFilter] = useState<string>('')
+  const [tab, setTab] = useState<'detail' | 'submit'>('detail')
   const [items, setItems] = useState<ReviewRecord[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [checked, setChecked] = useState<Set<string>>(new Set())
@@ -116,6 +118,10 @@ function Shell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter])
 
+  useEffect(() => {
+    setChecked(new Set())
+  }, [kindFilter])
+
   // 标签页标题随语言同步（浏览器 tab 也是 UI）
   useEffect(() => {
     document.title = t('doc_title')
@@ -123,6 +129,7 @@ function Shell() {
   }, [lang])
 
   const selected = items.find((i) => i.item.id === selectedId) ?? null
+  const visibleItems = kindFilter ? items.filter((i) => i.item.kind === kindFilter) : items
   const [fullBody, setFullBody] = useState<string | null>(null)
   const [bodyLoading, setBodyLoading] = useState(false)
 
@@ -200,6 +207,7 @@ function Shell() {
             : t('toast_rejected'),
       )
       setSelectedId(rec.item.id)
+      setTab('detail')
       loadQueue(filterRef.current).catch(() => {})
     } finally {
       setSubmitting(false)
@@ -218,13 +226,16 @@ function Shell() {
       const el = document.activeElement
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT')) return
       if (e.key === 'j' || e.key === 'k') {
-        if (items.length === 0) return
-        const idx = items.findIndex((i) => i.item.id === selectedId)
+        if (visibleItems.length === 0) return
+        const idx = visibleItems.findIndex((i) => i.item.id === selectedId)
         const next =
           e.key === 'j'
-            ? items[Math.min(items.length - 1, idx + 1)]
-            : items[Math.max(0, idx - 1 < 0 ? 0 : idx - 1)]
-        if (next) setSelectedId(next.item.id)
+            ? visibleItems[Math.min(visibleItems.length - 1, idx + 1)]
+            : visibleItems[Math.max(0, idx - 1 < 0 ? 0 : idx - 1)]
+        if (next) {
+          setSelectedId(next.item.id)
+          setTab('detail')
+        }
       } else if ((e.key === 'a' || e.key === 'r') && selected && selected.state === 'pending') {
         resolve(e.key === 'a' ? 'approve' : 'reject').catch(() => {})
       }
@@ -232,9 +243,9 @@ function Shell() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, selectedId, selected?.state])
+  }, [visibleItems, selectedId, selected?.state])
   return (
-    <div className="layout">
+    <div className="layout" data-lang={lang}>
       <header className="brand">
         <img src="/logo.svg" alt="Clearance" className="mark" />
         <div className="lockup">
@@ -279,6 +290,23 @@ function Shell() {
               </button>
             ))}
           </nav>
+          <div className="chips kindrow">
+            <button
+              className={`chip${kindFilter === '' ? ' active' : ''}`}
+              onClick={() => setKindFilter('')}
+            >
+              {t('kind_all')}
+            </button>
+            {KINDS.map((k) => (
+              <button
+                key={k}
+                className={`chip${kindFilter === k ? ' active' : ''}`}
+                onClick={() => setKindFilter(kindFilter === k ? '' : k)}
+              >
+                {kindName(lang, k)}
+              </button>
+            ))}
+          </div>
           {filter === 'pending' && checked.size > 0 && (
             <div className="batchbar">
               <span>
@@ -293,8 +321,8 @@ function Shell() {
             </div>
           )}
           <ul>
-            <AnimatePresence initial={false}>
-              {items.map((r) => (
+            <AnimatePresence initial={false} mode="popLayout">
+              {visibleItems.map((r) => (
                 <motion.li
                   key={r.item.id}
                   layout
@@ -303,7 +331,10 @@ function Shell() {
                   exit={{ opacity: 0, x: -12 }}
                   transition={{ duration: 0.22 }}
                   className={selectedId === r.item.id ? 'sel' : ''}
-                  onClick={() => setSelectedId(r.item.id)}
+                  onClick={() => {
+                    setSelectedId(r.item.id)
+                    setTab('detail')
+                  }}
                 >
                   {filter === 'pending' && r.state === 'pending' && (
                     <input
@@ -324,11 +355,26 @@ function Shell() {
               ))}
             </AnimatePresence>
           </ul>
-          {items.length === 0 && <EmptyState icon={<Inbox size={16} />} text={t('empty_queue')} />}
+          {visibleItems.length === 0 && (
+            <EmptyState icon={<Inbox size={16} />} text={t('empty_queue')} />
+          )}
         </Card>
 
         <Card className="detail">
-          <AnimatePresence mode="wait">
+          <div className="tabs">
+            {(['detail', 'submit'] as const).map((k) => (
+              <button
+                key={k}
+                className={tab === k ? 'active' : ''}
+                onClick={() => setTab(k)}
+              >
+                {t(k === 'detail' ? 'tab_detail' : 'tab_submit')}
+                {tab === k && <motion.span layoutId="tab-ink" className="ink" />}
+              </button>
+            ))}
+          </div>
+          {tab === 'detail' ? (
+            <AnimatePresence mode="wait">
             {selected ? (
               <motion.div
                 key={selected.item.id}
@@ -342,7 +388,15 @@ function Shell() {
                   {kindName(lang, selected.item.kind)} · <Mono text={selected.item.id} /> ·{' '}
                   <TimeText ts={selected.item.ts} />
                 </p>
-                <pre>{bodyLoading ? t('loading_body') : (fullBody ?? '')}</pre>
+                {bodyLoading ? (
+                  <div className="shimmer" aria-label={t('loading_body')}>
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                ) : (
+                  <pre>{fullBody ?? ''}</pre>
+                )}
                 <Timeline record={selected} running={progress[selected.item.id] === 'running'} />
                 <p className="meta">{t('reasons_note')}</p>
                 <ul className="reasons">
@@ -378,7 +432,13 @@ function Shell() {
               </motion.p>
             )}
           </AnimatePresence>
-          <hr />
+          ) : (
+            <motion.div
+              key="submit-pane"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.18 }}
+            >
           <h3>
             <Send size={14} /> {t('form_title')}
           </h3>
@@ -421,6 +481,8 @@ function Shell() {
               {submitting ? t('btn_submitting') : t('btn_submit')}
             </button>
           </form>
+            </motion.div>
+          )}
         </Card>
       </div>
 
@@ -436,6 +498,10 @@ function Shell() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <footer className="foot">
+        {t('title')} · v{__GIT_HASH__} · {engine}
+      </footer>
     </div>
   )
 }

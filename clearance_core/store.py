@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 from dataclasses import asdict
+from time import time
 
 from . import gateway
 from .decide import decide
@@ -31,8 +32,20 @@ class ReviewStore:
             json.dump(self._db, f, ensure_ascii=False, indent=1)
         os.replace(tmp, self.db_path)
 
-    def submit(self, kind: str, title: str, body: str, meta: dict | None = None) -> ReviewRecord:
+    def submit(self, kind: str, title: str, body: str, meta: dict | None = None,
+               on_progress=None) -> ReviewRecord:
+        """on_progress(type, payload)：accepted → running → terminal 进度事件。
+
+        只走 SSE，不进审计（审计保持终态-only）。调用方无回调即静默。
+        """
         item = ReviewItem(new_id("rev"), kind, title, body, meta or {})
+
+        def emit(ptype: str):
+            if on_progress:
+                on_progress(ptype, {"id": item.id, "ts": int(time() * 1000)})
+
+        emit("accepted")
+        emit("running")
         decision = decide(item)
         final_action, via = gateway.route(decision.action, decision.confidence)
         ok, verdict = gateway.validate_action(final_action, {"review_id": item.id})
@@ -42,15 +55,19 @@ class ReviewStore:
         rec = ReviewRecord(item, decision, state)
         if state == "pending":
             decision.action = NEEDS_REVIEW
+        progress = ["accepted", "running", "terminal"]
         self._db[item.id] = {
             "item": asdict(item),
             "decision": asdict(decision),
             "state": state,
             "via": via,
             "verdict": verdict,
+            "progress": progress,
+            "terminal_at": int(time() * 1000),
             "resolved_by": "",
             "resolved_outcome": "",
         }
+        emit("terminal")
         gateway.audit_log(self.audit_path, {
             "event": "review.submitted",
             "review_id": item.id, "kind": kind,

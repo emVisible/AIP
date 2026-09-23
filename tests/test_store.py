@@ -6,6 +6,18 @@ from clearance_core.store import ReviewStore
 
 
 class TestStore(unittest.TestCase):
+    def test_progress_sequence(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = ReviewStore(d)
+            seen = []
+            rec = s.submit("article", "t", "明早停水",
+                           {}, on_progress=lambda t, p: seen.append((t, p["id"])))
+            self.assertEqual([t for t, _ in seen], ["accepted", "running", "terminal"])
+            self.assertTrue(all(pid == rec.item.id for _, pid in seen))
+            stored = [r for r in s.queue("") if r["item"]["id"] == rec.item.id][0]
+            self.assertEqual(stored["progress"], ["accepted", "running", "terminal"])
+            self.assertGreater(stored["terminal_at"], 0)
+
     def test_roundtrip(self):
         with tempfile.TemporaryDirectory() as d:
             s = ReviewStore(d)

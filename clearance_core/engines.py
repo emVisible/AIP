@@ -105,7 +105,8 @@ def _sidecar_url() -> str:
 
 
 def _sidecar_timeout() -> float:
-    return float(os.environ.get("LAYA_SIDECAR_TIMEOUT", "5"))
+    # 冷启动/MPS 首推可达数秒，前端有 running 脉冲兜住等待体验
+    return float(os.environ.get("LAYA_SIDECAR_TIMEOUT", "15"))
 
 
 class LayaSidecarEngine(Engine):

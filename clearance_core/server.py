@@ -166,7 +166,8 @@ def make_handler(store: ReviewStore, hub: EventHub):
                 rec = store.submit(str(payload.get("kind", "other")),
                                    str(payload.get("title", "")),
                                    str(payload.get("body", "")),
-                                   payload.get("meta") or {})
+                                   payload.get("meta") or {},
+                                   on_progress=lambda t, d: hub.publish(t, d))
                 hub.publish("submitted", {"id": rec.item.id, "state": rec.state,
                                           **_counts(store)})
                 hub.publish("stats", _counts(store))

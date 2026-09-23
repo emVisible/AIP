@@ -173,6 +173,10 @@ nav button:active,
 form button:active {
   transform: scale(0.97);
 }
+form button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
 nav button.active {
   background: var(--accent);
   color: #fff;
@@ -335,6 +339,9 @@ ul {
 }
 .timeline .dot.ok {
   background: var(--ok);
+}
+.timeline .dot.pulse {
+  animation: pulse 1s ease-in-out infinite;
 }
 .timeline .dot.warn {
   background: #d19a1f;

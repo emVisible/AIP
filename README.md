@@ -79,7 +79,7 @@ python3 -m eval.calibrate --samples eval/samples.jsonl --out eval/calibration.js
 | 环境变量 Env | 默认 Default | 含义 |
 |---|---|---|
 | `ENGINE_ORDER` | rules,laya:sidecar,jev,heuristic | 级联顺序 |
-| `LAYA_SIDECAR_URL` / `LAYA_SIDECAR_TIMEOUT` | 127.0.0.1:8685 / 5s | sidecar 地址与超时 |
+| `LAYA_SIDECAR_URL` / `LAYA_SIDECAR_TIMEOUT` | 127.0.0.1:8685 / 15s | sidecar 地址与超时（冷启动首推慢，宁宽） |
 | `TYPESAFE_API_KEY` / `JEV_MODEL` | 空 / jev-latest | Jev 云端 key 与模型 |
 | `LAYA_DEFAULT` / `LAYA_PRELOAD` / `LAYA_HEAD_MAX_LEN` | multilingual / 英+多 / 空 | 路由默认 / 预热列表 / 选项预算 |
 | `MODEL_DIR` / `CALIBRATION_FILE` | Hub 官方 / eval/calibration.json | 微调 checkpoint / 温度表（热重载） |

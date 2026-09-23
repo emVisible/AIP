@@ -90,7 +90,7 @@ export function subscribeEvents(
       /* 忽略坏帧 */
     }
   }
-  ;['hello', 'submitted', 'resolved', 'stats'].forEach((t) =>
+  ;['hello', 'accepted', 'running', 'terminal', 'submitted', 'resolved', 'stats'].forEach((t) =>
     es.addEventListener(t, handler as EventListener),
   )
   es.onerror = () => onError()

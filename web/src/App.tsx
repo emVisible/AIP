@@ -27,6 +27,8 @@ export default function App() {
   const [lastLatency, setLastLatency] = useState<number | null>(null)
   const [connected, setConnected] = useState(false)
   const [toast, setToast] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [progress, setProgress] = useState<Record<string, string>>({})
   const [form, setForm] = useState({ kind: 'article', title: '', body: '' })
   const filterRef = useRef(filter)
   filterRef.current = filter
@@ -61,6 +63,20 @@ export default function App() {
           const c = data as unknown as { counts: Counts }
           if (c.counts) setCounts(c.counts)
           return
+        }
+        if (type === 'accepted' || type === 'running') {
+          const id = (data as { id?: string }).id
+          if (id) setProgress((p) => ({ ...p, [id]: type }))
+          return
+        }
+        if (type === 'terminal') {
+          const id = (data as { id?: string }).id
+          if (id)
+            setProgress((p) => {
+              const n = { ...p }
+              delete n[id]
+              return n
+            })
         }
         loadQueue(filterRef.current).catch(() => setConnected(false))
         loadMeta().catch(() => setConnected(false))
@@ -105,12 +121,18 @@ export default function App() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.title.trim() && !form.body.trim()) return
-    const rec = await api.submit(form.kind, form.title, form.body)
-    if (rec.decision.latency_ms >= 0) setLastLatency(rec.decision.latency_ms)
-    setForm({ kind: 'article', title: '', body: '' })
-    flash(rec.state === 'pending' ? '已提交，转人工' : rec.state === 'approved' ? '已提交，自动通过' : '已提交，自动驳回')
-    loadQueue(filterRef.current).catch(() => {})
+    if ((!form.title.trim() && !form.body.trim()) || submitting) return
+    setSubmitting(true)
+    try {
+      const rec = await api.submit(form.kind, form.title, form.body)
+      if (rec.decision.latency_ms >= 0) setLastLatency(rec.decision.latency_ms)
+      setForm({ kind: 'article', title: '', body: '' })
+      flash(rec.state === 'pending' ? '已提交，转人工' : rec.state === 'approved' ? '已提交，自动通过' : '已提交，自动驳回')
+      setSelectedId(rec.item.id)
+      loadQueue(filterRef.current).catch(() => {})
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -190,7 +212,7 @@ export default function App() {
                   <Mono text={selected.item.id} /> · <TimeText ts={selected.item.ts} />
                 </p>
                 <pre>{selected.item.body}</pre>
-                <Timeline record={selected} />
+                <Timeline record={selected} running={progress[selected.item.id] === 'running'} />
                 <ul className="reasons">
                   {selected.decision.reasons.map((x, i) => (
                     <li key={i}>{x}</li>
@@ -247,7 +269,9 @@ export default function App() {
               value={form.body}
               onChange={(e) => setForm({ ...form, body: e.target.value })}
             />
-            <button type="submit">提交</button>
+            <button type="submit" disabled={submitting}>
+              {submitting ? '判定中…' : '提交'}
+            </button>
           </form>
         </Card>
       </div>

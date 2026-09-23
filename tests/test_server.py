@@ -116,9 +116,8 @@ class TestServer(unittest.TestCase):
         code, created = _call("POST", self.url("/api/review/submit"),
                               {"kind": "article", "title": "t", "body": "明早停水"})
         self.assertEqual(code, 200)
-        etype, ev = read_event()
-        self.assertEqual(etype, "submitted")
-        self.assertEqual(ev["id"], created["item"]["id"])
+        seq = [read_event()[0] for _ in range(4)]
+        self.assertEqual(seq, ["accepted", "running", "terminal", "submitted"])
         conn.close()
 
 

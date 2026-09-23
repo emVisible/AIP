@@ -1,12 +1,21 @@
 import { motion } from 'framer-motion'
 import { Check, FileInput, GitBranch, Scale, ShieldCheck, X } from 'lucide-react'
+import React from 'react'
 import { ReviewRecord } from './api'
 import { ConfBar } from './components/ui'
 
-/** 单条记录的链路时间线：提交 → 路由 → 判定 → 网关 → 终态 */
-export default function Timeline({ record }: { record: ReviewRecord }) {
+/** 单条记录的链路时间线：提交 → 路由 → 判定 → 网关 → 终态。
+ *  running 为 true 时判定节点呼吸脉冲（模型推理中）。 */
+export default function Timeline({ record, running = false }: { record: ReviewRecord; running?: boolean }) {
   const d = record.decision
-  const steps = [
+  const steps: {
+    icon: React.ReactNode
+    title: string
+    desc: string
+    tone: string
+    bar?: number
+    pulse?: boolean
+  }[] = [
     {
       icon: <FileInput size={14} />,
       title: '提交',
@@ -27,12 +36,14 @@ export default function Timeline({ record }: { record: ReviewRecord }) {
       icon: <Scale size={14} />,
       title: '判定',
       desc:
+        (running ? '模型推理中… · ' : '') +
         `${d.action} · conf ${d.confidence.toFixed(2)}` +
         (d.usage && (d.usage.input_tokens || d.usage.output_tokens)
           ? ` · ${(d.usage.input_tokens ?? 0) + (d.usage.output_tokens ?? 0)} tokens`
           : ''),
       tone: d.action === 'review.reject' ? 'bad' : d.action === 'review.approve' ? 'ok' : 'warn',
       bar: d.confidence,
+      pulse: running,
     },
     {
       icon: <ShieldCheck size={14} />,
@@ -67,7 +78,7 @@ export default function Timeline({ record }: { record: ReviewRecord }) {
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: i * 0.06, duration: 0.25 }}
         >
-          <span className={`dot ${s.tone}`}>{s.icon}</span>
+          <span className={`dot ${s.tone}${s.pulse ? ' pulse' : ''}`}>{s.icon}</span>
           <div>
             <div className="t-title">{s.title}</div>
             <div className="t-desc">{s.desc}</div>

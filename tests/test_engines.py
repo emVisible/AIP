@@ -5,7 +5,7 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from clearance_core.engines import (
+from core.engines import (
     EngineUnavailable,
     availability,
     cascade,
@@ -13,7 +13,7 @@ from clearance_core.engines import (
     map_typed_answers,
     order,
 )
-from clearance_core.models import ReviewItem, new_id
+from core.models import ReviewItem, new_id
 
 
 def item(title, body, kind="comment", meta=None):

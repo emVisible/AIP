@@ -1,7 +1,7 @@
 """calibration 数学契约：T=1 恒为候选，拟合永不差于出厂；坏输入原样返回。"""
 import unittest
 
-from clearance_core.calibration import (
+from core.calibration import (
     fit_temperature_binary,
     fit_temperature_categorical,
     rescale_answer,

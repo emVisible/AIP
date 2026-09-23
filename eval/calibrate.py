@@ -21,9 +21,9 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from clearance_core.calibration import (  # noqa: E402
+from core.calibration import (  # noqa: E402
     fit_temperature_binary, fit_temperature_categorical)
-from clearance_core.questions import build_review_questions  # noqa: E402
+from core.questions import build_review_questions  # noqa: E402
 from eval.sweep import load_samples  # noqa: E402
 
 SIDECAR = os.environ.get("LAYA_SIDECAR_URL", "http://127.0.0.1:8685")

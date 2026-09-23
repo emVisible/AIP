@@ -34,7 +34,7 @@ from urllib.parse import urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 try:
-    from clearance_core.calibration import load_table, rescale_answers
+    from core.calibration import load_table, rescale_answers
     _HAS_CAL = True
 except Exception as _cal_err:  # 主产品缺席时 sidecar 照常跑，只是无校准
     print(f"sidecar: calibration math unavailable ({_cal_err}); serving raw", flush=True)

@@ -13,10 +13,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from clearance_core import gateway  # noqa: E402
-from clearance_core.decide import decide  # noqa: E402
-from clearance_core.engines import EngineUnavailable, get as get_engine  # noqa: E402
-from clearance_core.models import ReviewItem, new_id  # noqa: E402
+from core import gateway  # noqa: E402
+from core.decide import decide  # noqa: E402
+from core.engines import EngineUnavailable, get as get_engine  # noqa: E402
+from core.models import ReviewItem, new_id  # noqa: E402
 
 EXPECT2FINAL = {"approve": "review.approve", "reject": "review.reject",
                 "review": "human.task.create"}
@@ -86,7 +86,7 @@ def main() -> int:
     p.add_argument("--list-engines", action="store_true")
     a = p.parse_args()
     if a.list_engines:
-        from clearance_core.engines import availability
+        from core.engines import availability
         print(json.dumps(availability(), ensure_ascii=False, indent=1))
         return 0
     if not a.samples:

@@ -1,8 +1,8 @@
 """heuristic 决策契约：引擎诚实标注，不确定转人工。"""
 import os
 import unittest
-from clearance_core.decide import decide, engine_name
-from clearance_core.models import ReviewItem, new_id
+from core.decide import decide, engine_name
+from core.models import ReviewItem, new_id
 
 
 def item(title, body, kind="comment"):

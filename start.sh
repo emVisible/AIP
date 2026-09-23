@@ -37,7 +37,7 @@ else
 fi
 
 # ② 后端 API（stdlib，主产品秒起）
-run_py -m clearance_core.server --port "$PORT" &
+run_py -m core.server --port "$PORT" &
 PIDS="$PIDS $!"
 
 # ③ 前端 dev

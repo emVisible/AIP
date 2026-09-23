@@ -1,6 +1,6 @@
 """Clearance HTTP API（stdlib only，无第三方依赖）。
 
-    python3 -m clearance_core.server [--port 8686] [--data ./data]
+    python3 -m core.server [--port 8686] [--data ./data]
 
 端点：
     GET  /api/health                      # 引擎 + sidecar 明细（device/loaded）
@@ -26,9 +26,9 @@ from urllib.parse import urlparse, parse_qs
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from clearance_core.decide import engine_name  # noqa: E402
-from clearance_core.engines import _sidecar_url  # noqa: E402
-from clearance_core.store import ReviewStore  # noqa: E402
+from core.decide import engine_name  # noqa: E402
+from core.engines import _sidecar_url  # noqa: E402
+from core.store import ReviewStore  # noqa: E402
 
 VERSION = "0.1.0"
 

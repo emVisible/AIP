@@ -2,7 +2,7 @@
 import tempfile
 import unittest
 
-from clearance_core.store import ReviewStore
+from core.store import ReviewStore
 
 
 class TestStore(unittest.TestCase):

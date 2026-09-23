@@ -1,7 +1,7 @@
 """网关契约：幻觉动作拒绝、C4 凭据拦截、低置信转人工。"""
 import unittest
 
-from clearance_core import gateway
+from core import gateway
 
 
 class TestGateway(unittest.TestCase):

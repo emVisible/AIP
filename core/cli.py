@@ -8,8 +8,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from clearance_core.decide import engine_name  # noqa: E402
-from clearance_core.store import ReviewStore  # noqa: E402
+from core.decide import engine_name  # noqa: E402
+from core.store import ReviewStore  # noqa: E402
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 

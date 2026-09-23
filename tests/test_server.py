@@ -8,8 +8,8 @@ import unittest
 import urllib.error
 import urllib.request
 
-from clearance_core.server import EventHub, make_handler
-from clearance_core.store import ReviewStore
+from core.server import EventHub, make_handler
+from core.store import ReviewStore
 from http.server import ThreadingHTTPServer
 import http.client
 

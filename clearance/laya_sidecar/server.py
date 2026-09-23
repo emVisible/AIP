@@ -5,14 +5,22 @@
 
 端点：
     GET  /health
-    POST /decide  {kind?, text?, state?, questions?}
-                  → {ok, answers, routing, latency_ms, device, engine}
+    POST /decide  {kind?, text?, state?, questions, lang_guess?}
+                  → {ok, answers, routing, shortlisted, latency_ms, device, engine}
 
 环境变量：
-    SIDECAR_PORT   监听端口（默认 8685）
-    MODEL_DIR      覆盖 checkpoint（本地微调产物目录或 Hub repo，默认官方包）
-    LAYA_LAZY=1    跳过启动预热，首次 /decide 时加载（默认启动即 preload）
+    SIDECAR_PORT    监听端口（默认 8685）
+    MODEL_DIR       覆盖 checkpoint（本地微调产物目录或 Hub repo，默认官方包）
+    LAYA_DEFAULT    路由默认 checkpoint（默认 multilingual：中文优先）
+    LAYA_LAZY=1     跳过启动预热，首次 /decide 时加载（默认启动即 preload）
     LAYA_MAX_LOADED 常驻 checkpoint 数（默认 2：english + multilingual）
+    LAYA_HEAD_MAX_LEN 覆盖选项 token 预算（默认不覆盖；高基数时官方建议调大
+                      或走 shortlist，本服务超 20 项自动 shortlist）
+    SHORTLIST_K     shortlist 保留数（默认 20）
+
+实现对照（laya 官方 API，vendored 于 reference/laya）：
+    Router(default, lang_guess) / router.predict(..., lang_guess)
+    laya.predict_shortlist(router, state, questions, embed_fn, k)
 """
 from __future__ import annotations
 
@@ -24,11 +32,11 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
-SHORTLIST_K = 20
-
 _router = None
 _device = "unknown"
 _loaded: list = []
+_default = os.environ.get("LAYA_DEFAULT", "multilingual")
+_shortlist_k = int(os.environ.get("SHORTLIST_K", "20"))
 
 
 def _router_singleton(preload: bool):
@@ -36,10 +44,13 @@ def _router_singleton(preload: bool):
     if _router is not None:
         return _router
     from laya import Router
-    max_loaded = int(os.environ.get("LAYA_MAX_LOADED", "2"))
-    _router = Router(max_loaded=max_loaded)
+    _router = Router(default=_default,
+                     max_loaded=int(os.environ.get("LAYA_MAX_LOADED", "2")))
     if preload:
-        _router.preload(["english", "multilingual"])
+        want = [m.strip() for m in
+                os.environ.get("LAYA_PRELOAD", "english,multilingual").split(",")
+                if m.strip()]
+        _router.preload(want)
         _loaded = list(_router.loaded)
         try:
             _device = str(_router.load("english").device)
@@ -48,35 +59,52 @@ def _router_singleton(preload: bool):
     return _router
 
 
-def _maybe_shortlist(router, state, questions: dict) -> dict:
-    """任一 choice 选项超 20 时自动 shortlist（laya 高基数约束），否则原样。"""
+def _apply_head_budget(router, model: str) -> None:
+    override = os.environ.get("LAYA_HEAD_MAX_LEN", "")
+    if not override:
+        return
     try:
-        from laya import embed_fn_from_agent  # type: ignore
-        from laya.shortlist import shortlist_choice  # type: ignore
-    except Exception:
-        return questions
-    out = dict(questions)
-    agent = router.load(router.route(state, questions)["model"])
-    for qid, q in questions.items():
-        crit = (q.get("criteria") or {})
-        if q.get("type") == "choice" and len(crit) > SHORTLIST_K:
-            keep = shortlist_choice(state, crit, embed_fn_from_agent(agent),
-                                    k=SHORTLIST_K)
-            nq = dict(q)
-            nq["criteria"] = {k: crit[k] for k in keep if k in crit}
-            out[qid] = nq
-    return out
+        agent = router.load(model)
+        agent.cfg["head_max_len"] = int(override)
+    except Exception as e:
+        print(f"sidecar: head_max_len override failed: {e}", flush=True)
 
 
-def decide_once(state, questions: dict) -> dict:
+def _needs_shortlist(questions: dict) -> bool:
+    return any(isinstance(q, dict) and q.get("type") == "choice"
+               and len(q.get("criteria") or {}) > _shortlist_k
+               for q in questions.values())
+
+
+def decide_once(state, questions: dict, lang_guess=None) -> dict:
     t0 = time.time()
     router = _router_singleton(preload=False)
-    questions = _maybe_shortlist(router, state, questions)
-    res = router.predict(state, questions)
+    import inspect as _inspect
+    route_kw: dict = {}
+    if lang_guess and "lang_guess" in _inspect.signature(router.route).parameters:
+        route_kw["lang_guess"] = lang_guess
+    routed = router.route(state, questions, **route_kw)
+    model = routed["model"]
+    _apply_head_budget(router, model)
+    shortlisted = False
+    predict_kw: dict = {}
+    if "lang_guess" in _inspect.signature(router.predict).parameters:
+        predict_kw["lang_guess"] = lang_guess
+    if _needs_shortlist(questions):
+        from laya import embed_fn_from_agent, predict_shortlist
+        agent = router.load(model)
+        res = predict_shortlist(router, state, questions,
+                                embed_fn_from_agent(agent),
+                                k=_shortlist_k, model=model,
+                                **predict_kw)
+        shortlisted = True
+    else:
+        res = router.predict(state, questions, **predict_kw)
     global _loaded
     _loaded = list(router.loaded)
     return {"ok": True, "answers": res.get("answers", {}),
             "routing": res.get("routing", {}),
+            "shortlisted": shortlisted,
             "latency_ms": int((time.time() - t0) * 1000),
             "device": _device, "engine": "laya"}
 
@@ -91,7 +119,7 @@ def _send(h: BaseHTTPRequestHandler, code: int, obj: dict) -> None:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "LayaSidecar/0.1"
+    server_version = "LayaSidecar/0.2"
 
     def log_message(self, fmt, *args):
         sys.stderr.write("sidecar: " + fmt % args + "\n")
@@ -100,6 +128,7 @@ class Handler(BaseHTTPRequestHandler):
         if urlparse(self.path).path == "/health":
             _send(self, 200, {"ok": True, "engine": "laya",
                               "device": _device, "loaded": _loaded,
+                              "default": _default,
                               "model_dir": os.environ.get("MODEL_DIR", "hub-default")})
         else:
             _send(self, 404, {"ok": False, "error": "not found"})
@@ -121,7 +150,8 @@ class Handler(BaseHTTPRequestHandler):
             _send(self, 400, {"ok": False, "error": "questions required"})
             return
         try:
-            _send(self, 200, decide_once(state, questions))
+            _send(self, 200, decide_once(state, questions,
+                                         lang_guess=payload.get("lang_guess")))
         except Exception as e:
             _send(self, 500, {"ok": False, "error": f"{type(e).__name__}: {e}"})
 
@@ -130,13 +160,13 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--port", type=int,
                    default=int(os.environ.get("SIDECAR_PORT", "8685")))
-    p.add_argument("--preload", action="store_true", default=True)
     p.add_argument("--lazy", action="store_true", default=False)
     a = p.parse_args()
     lazy = a.lazy or os.environ.get("LAYA_LAZY", "") == "1"
     try:
         _router_singleton(preload=not lazy)
-        print(f"sidecar: router ready (loaded={_loaded} device={_device})", flush=True)
+        print(f"sidecar: router ready (loaded={_loaded} device={_device} default={_default})",
+              flush=True)
     except Exception as e:
         print(f"sidecar: preload failed ({e}); lazy mode, first /decide will load",
               flush=True)

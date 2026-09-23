@@ -72,6 +72,7 @@ def heuristic_decide(item: ReviewItem) -> Decision:
 
 def sidecar_decide(item: ReviewItem, questions: dict | None = None) -> Decision:
     res = _post("/decide", {"kind": item.kind, "text": item.text,
+                            "lang_guess": (item.meta or {}).get("lang"),
                             "questions": questions or build_review_questions()},
                 SIDECAR_TIMEOUT)
     if not res.get("ok"):
@@ -79,7 +80,8 @@ def sidecar_decide(item: ReviewItem, questions: dict | None = None) -> Decision:
     ans = res.get("answers", {})
     routing = res.get("routing", {})
     latency = res.get("latency_ms", -1)
-    reasons = [f"laya via sidecar model={routing.get('model')} {latency}ms"]
+    reasons = [f"laya via sidecar model={routing.get('model')} {latency}ms",
+                 "note: confidence uncalibrated until temperature fit"]
 
     def noul(q: str) -> float:
         try:

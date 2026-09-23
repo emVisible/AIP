@@ -220,7 +220,13 @@ def serve(port: int = 8686, data_dir: str = "") -> ThreadingHTTPServer:
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
     store = ReviewStore(data_dir)
     hub = EventHub()
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(store, hub))
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(store, hub))
+    except OSError as e:
+        print(f"Clearance API: 端口 {port} 被占用（{e}）。"
+              f"先停掉旧进程：lsof -ti:{port} | xargs kill，或换 PORT 再起。",
+              flush=True)
+        raise SystemExit(1)
     print(f"Clearance API on http://127.0.0.1:{port} (data={data_dir} engine={engine_name()})",
           flush=True)
     return server

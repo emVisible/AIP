@@ -34,6 +34,9 @@
 NO_SIDECAR=1 ./start.sh    # 跳过 sidecar，纯 heuristic 秒起
 ```
 
+端口被占时脚本会直接 abort 并给出 pid（不再半吊子启动）：
+`lsof -ti:<port> | xargs kill`，或 `./start.sh --force` 一并重起。
+
 要求：`python3` + `node` + `pnpm`（后端优先 `uv run --no-sync`，
 无 uv 自动回落系统 python；主产品 stdlib 零依赖，不联网也能起）。
 

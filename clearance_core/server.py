@@ -7,6 +7,7 @@
     GET  /api/queue?state=pending|approved|rejected
     POST /api/review/submit   {kind,title,body,meta?}
     POST /api/review/<id>/resolve  {outcome: approve|reject, actor?}
+    POST /api/context/get     {ref, fields} — CoD 真读写，禁 ["*"]
     GET  /api/stats
     GET  /api/events                      # SSE：hello 快照 + submitted/resolved/stats
 """
@@ -162,7 +163,18 @@ def make_handler(store: ReviewStore, hub: EventHub):
             except ValueError as e:
                 _send(self, 400, {"ok": False, "error": str(e)})
                 return
-            if parsed.path == "/api/review/submit":
+            if parsed.path == "/api/context/get":
+                try:
+                    out = store.context_get(str(payload.get("ref", "")),
+                                            payload.get("fields", []))
+                except ValueError as e:
+                    _send(self, 400, {"ok": False, "error": str(e)})
+                    return
+                except OSError:
+                    _send(self, 404, {"ok": False, "error": "context not found"})
+                    return
+                _send(self, 200, {"ok": True, **out})
+            elif parsed.path == "/api/review/submit":
                 rec = store.submit(str(payload.get("kind", "other")),
                                    str(payload.get("title", "")),
                                    str(payload.get("body", "")),

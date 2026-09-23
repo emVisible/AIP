@@ -31,6 +31,20 @@ def clean_meta(meta: dict) -> dict:
             if not _CRED_KEY.search(str(k)) and not _CRED_KEY.search(str(v))}
 
 
+def _resolve_body(item: dict, data_dir: str) -> str:
+    if item.get("body"):
+        return item["body"]
+    ref = item.get("body_ref", "")
+    if ref and re.fullmatch(r"ctx_[A-Za-z0-9_]+\.body", ref):
+        try:
+            with open(os.path.join(data_dir, "blobs", ref + ".txt"),
+                      encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            pass
+    return ""
+
+
 def export_samples(data_dir: str) -> tuple[list, dict]:
     path = os.path.join(data_dir, "reviews.json")
     try:
@@ -53,7 +67,7 @@ def export_samples(data_dir: str) -> tuple[list, dict]:
             continue
         rows.append({"kind": item.get("kind", "other"),
                      "title": item.get("title", ""),
-                     "body": item.get("body", ""),
+                     "body": _resolve_body(item, data_dir),
                      "expected": expected,
                      "meta": clean_meta(item.get("meta") or {})})
     return rows, {"pending": pending, "exported": len(rows)}

@@ -80,6 +80,30 @@ class TestServer(unittest.TestCase):
                         {"outcome": "approve"})
         self.assertEqual(code, 404)
 
+    def test_context_get_roundtrip(self):
+        import os as _os
+        _os.environ["COD_BLOB_THRESHOLD"] = "10"
+        try:
+            code, body = _call("POST", self.url("/api/review/submit"),
+                               {"kind": "article", "title": "长文",
+                                "body": "正文内容。正文内容。正文内容。"})
+            self.assertEqual(code, 200)
+            ref = body["item"]["body_ref"]
+            self.assertTrue(ref)
+            self.assertEqual(body["item"]["body"], "")
+            code, out = _call("POST", self.url("/api/context/get"),
+                              {"ref": ref, "fields": ["body"]})
+            self.assertEqual(code, 200)
+            self.assertIn("正文内容", out["data"]["body"])
+            code, _ = _call("POST", self.url("/api/context/get"),
+                            {"ref": ref, "fields": ["*"]})
+            self.assertEqual(code, 400)
+            code, _ = _call("POST", self.url("/api/context/get"),
+                            {"ref": "ctx_nope.body", "fields": ["body"]})
+            self.assertEqual(code, 404)
+        finally:
+            _os.environ.pop("COD_BLOB_THRESHOLD", None)
+
     def test_stats(self):
         code, body = _call("GET", self.url("/api/stats"))
         self.assertEqual(code, 200)

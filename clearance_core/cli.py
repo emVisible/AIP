@@ -48,8 +48,18 @@ def cmd_queue(a) -> int:
     return 0
 
 
-def cmd_demo(_a) -> int:
-    s = _store()
+def cmd_context(a) -> int:
+    import json as _json
+    try:
+        out = _store().context_get(a.ref, a.fields.split(","))
+    except (ValueError, OSError) as e:
+        print(f"ERROR: {e}")
+        return 1
+    print(_json.dumps(out, ensure_ascii=False, indent=1)[:2000])
+    return 0
+
+
+def cmd_demo(_a) -> int:    s = _store()
     samples = [
         ("article", "小区停水通知", "明早 8 点到 12 点停水维护，请提前储水。", {}),
         ("comment", "限时返利", "点击链接免费领取 888 元，刷单日结加微信。", {}),
@@ -85,6 +95,11 @@ def main() -> int:
 
     d = sub.add_parser("demo")
     d.set_defaults(fn=cmd_demo)
+
+    c = sub.add_parser("context-get")
+    c.add_argument("--ref", required=True)
+    c.add_argument("--fields", default="body")
+    c.set_defaults(fn=cmd_context)
 
     a = p.parse_args()
     return a.fn(a)

@@ -23,6 +23,7 @@ class ReviewItem:
     body: str = ""
     meta: dict = field(default_factory=dict)
     ts: int = field(default_factory=lambda: int(time() * 1000))
+    body_ref: str = ""  # 非空即引用：正文存 blobs/，本字段为空（CoD）
 
     @property
     def text(self) -> str:

@@ -105,6 +105,26 @@ export default function App() {
   }, [filter])
 
   const selected = items.find((i) => i.item.id === selectedId) ?? null
+  const [fullBody, setFullBody] = useState<string | null>(null)
+  const [bodyLoading, setBodyLoading] = useState(false)
+
+  // CoD：正文引用化时按需拉全文，首屏只摘要
+  useEffect(() => {
+    setFullBody(null)
+    if (!selected) return
+    if (selected.item.body) {
+      setFullBody(selected.item.body)
+      return
+    }
+    if (!selected.item.body_ref) return
+    setBodyLoading(true)
+    api
+      .contextGet(selected.item.body_ref, ['body'])
+      .then((r) => setFullBody(r.data.body ?? ''))
+      .catch(() => setFullBody('（全文加载失败）'))
+      .finally(() => setBodyLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId])
 
   const flash = (msg: string) => {
     setToast(msg)
@@ -211,7 +231,7 @@ export default function App() {
                   {KIND_ZH[selected.item.kind] ?? selected.item.kind} ·{' '}
                   <Mono text={selected.item.id} /> · <TimeText ts={selected.item.ts} />
                 </p>
-                <pre>{selected.item.body}</pre>
+                <pre>{bodyLoading ? '全文加载中…' : (fullBody ?? '')}</pre>
                 <Timeline record={selected} running={progress[selected.item.id] === 'running'} />
                 <ul className="reasons">
                   {selected.decision.reasons.map((x, i) => (

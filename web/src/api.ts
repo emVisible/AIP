@@ -5,6 +5,7 @@ export interface ReviewItem {
   kind: string
   title: string
   body: string
+  body_ref: string
   meta: Record<string, unknown>
   ts: number
 }
@@ -74,6 +75,11 @@ export const api = {
     req<ReviewRecord>(`/api/review/${id}/resolve`, {
       method: 'POST',
       body: JSON.stringify({ outcome, actor: 'web' }),
+    }),
+  contextGet: (ref: string, fields: string[] = ['body']) =>
+    req<{ ok: boolean; ref: string; data: Record<string, string> }>('/api/context/get', {
+      method: 'POST',
+      body: JSON.stringify({ ref, fields }),
     }),
 }
 

@@ -1,5 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react'
-import { api, ReviewRecord } from './api'
+import { AnimatePresence, motion } from 'framer-motion'
+import { CheckCircle2, Inbox, Send } from 'lucide-react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { Counts, ReviewRecord, SidecarInfo, api, subscribeEvents } from './api'
+import StatusBar from './StatusBar'
+import Timeline from './Timeline'
 import './styles.css'
 
 type Filter = '' | 'pending' | 'approved' | 'rejected'
@@ -10,65 +14,122 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: '', label: '全部' },
 ]
 const KINDS = ['article', 'comment', 'product', 'ticket', 'expense', 'other']
+type Sidecar = (SidecarInfo & { ok: boolean; engine: string }) | null
 
 export default function App() {
   const [filter, setFilter] = useState<Filter>('pending')
   const [items, setItems] = useState<ReviewRecord[]>([])
-  const [selected, setSelected] = useState<ReviewRecord | null>(null)
-  const [stats, setStats] = useState<{ counts: Record<string, number>; engine: string } | null>(null)
-  const [error, setError] = useState('')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [counts, setCounts] = useState<Counts>({ pending: 0, approved: 0, rejected: 0 })
+  const [engine, setEngine] = useState('…')
+  const [sidecar, setSidecar] = useState<Sidecar>(null)
+  const [lastLatency, setLastLatency] = useState<number | null>(null)
+  const [connected, setConnected] = useState(false)
+  const [toast, setToast] = useState('')
   const [form, setForm] = useState({ kind: 'article', title: '', body: '' })
+  const filterRef = useRef(filter)
+  filterRef.current = filter
 
-  const refresh = useCallback(async () => {
-    try {
-      const [q, s] = await Promise.all([api.queue(filter), api.stats()])
-      setItems(q.items)
-      setStats({ counts: s.counts, engine: s.engine })
-      setError('')
-      if (selected) {
-        const still = q.items.find((i) => i.item.id === selected.item.id) ?? null
-        setSelected(still)
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+  const loadQueue = useCallback(async (f: Filter) => {
+    const q = await api.queue(f)
+    setItems(q.items)
+  }, [])
+
+  const loadMeta = useCallback(async () => {
+    const [h, s] = await Promise.all([api.health(), api.stats()])
+    setEngine(h.engine)
+    setSidecar(h.sidecar)
+    setCounts(s.counts)
+    setConnected(true)
+  }, [])
+
+  // 首屏 + SSE 实时流（断线回落 5s 轮询）
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null
+    loadQueue(filterRef.current).catch(() => setConnected(false))
+    loadMeta().catch(() => setConnected(false))
+    const off = subscribeEvents(
+      (type, data) => {
+        if (type === 'hello') {
+          const c = data.counts as Counts | undefined
+          if (c) setCounts(c)
+          setConnected(true)
+          return
+        }
+        if (type === 'stats') {
+          const c = data as unknown as { counts: Counts }
+          if (c.counts) setCounts(c.counts)
+          return
+        }
+        loadQueue(filterRef.current).catch(() => setConnected(false))
+        loadMeta().catch(() => setConnected(false))
+      },
+      () => {
+        setConnected(false)
+        if (!timer) {
+          timer = setInterval(() => {
+            loadQueue(filterRef.current)
+              .then(loadMeta)
+              .catch(() => setConnected(false))
+          }, 5000)
+        }
+      },
+    )
+    return () => {
+      off()
+      if (timer) clearInterval(timer)
     }
-  }, [filter, selected?.item.id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
-    refresh()
+    loadQueue(filter).catch(() => setConnected(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter])
+
+  const selected = items.find((i) => i.item.id === selectedId) ?? null
+
+  const flash = (msg: string) => {
+    setToast(msg)
+    setTimeout(() => setToast(''), 2200)
+  }
 
   const resolve = async (outcome: 'approve' | 'reject') => {
     if (!selected) return
     await api.resolve(selected.item.id, outcome)
-    setSelected(null)
-    refresh()
+    flash(outcome === 'approve' ? '已通过' : '已驳回')
+    setSelectedId(null)
+    loadQueue(filterRef.current).catch(() => {})
   }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.title.trim() && !form.body.trim()) return
-    await api.submit(form.kind, form.title, form.body)
+    const rec = await api.submit(form.kind, form.title, form.body)
+    if (rec.decision.latency_ms >= 0) setLastLatency(rec.decision.latency_ms)
     setForm({ kind: 'article', title: '', body: '' })
-    refresh()
+    flash(rec.state === 'pending' ? '已提交，转人工' : rec.state === 'approved' ? '已提交，自动通过' : '已提交，自动驳回')
+    loadQueue(filterRef.current).catch(() => {})
   }
 
   return (
     <div className="layout">
       <header>
-        <h1>Clearance 放行</h1>
-        <span className="sub">AIP 的产品实现 · 通用后台审核</span>
-        {stats && (
-          <span className="badges">
-            <span className="badge">engine: {stats.engine}</span>
-            <span className="badge warn">待审 {stats.counts.pending ?? 0}</span>
-            <span className="badge ok">通过 {stats.counts.approved ?? 0}</span>
-            <span className="badge bad">驳回 {stats.counts.rejected ?? 0}</span>
-          </span>
-        )}
+        <div>
+          <h1>Clearance 放行</h1>
+          <span className="sub">AIP 的产品实现 · 通用后台审核</span>
+        </div>
       </header>
-      {error && <div className="error">后端未连接（先跑 start.sh）：{error}</div>}
+
+      <StatusBar
+        connected={connected}
+        engine={engine}
+        sidecar={sidecar}
+        lastLatency={lastLatency}
+        counts={counts}
+      />
+      {!connected && <div className="error">后端未连接（先跑 ./start.sh），5 秒后重试。</div>}
+
       <div className="main">
         <section className="queue">
           <nav>
@@ -78,7 +139,7 @@ export default function App() {
                 className={filter === f.key ? 'active' : ''}
                 onClick={() => {
                   setFilter(f.key)
-                  setSelected(null)
+                  setSelectedId(null)
                 }}
               >
                 {f.label}
@@ -86,57 +147,85 @@ export default function App() {
             ))}
           </nav>
           <ul>
-            {items.map((r) => (
-              <li
-                key={r.item.id}
-                className={selected?.item.id === r.item.id ? 'sel' : ''}
-                onClick={() => setSelected(r)}
-              >
-                <span className={`state ${r.state}`}>{r.state}</span>
-                <span className="kind">{r.item.kind}</span>
-                <span className="title">{r.item.title || '(无标题)'}</span>
-                <span className="conf">{r.decision.confidence.toFixed(2)}</span>
-              </li>
-            ))}
+            <AnimatePresence initial={false}>
+              {items.map((r) => (
+                <motion.li
+                  key={r.item.id}
+                  layout
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, x: -12 }}
+                  transition={{ duration: 0.22 }}
+                  className={selectedId === r.item.id ? 'sel' : ''}
+                  onClick={() => setSelectedId(r.item.id)}
+                >
+                  <span className={`state ${r.state}`}>
+                    {r.state === 'pending' ? '待审' : r.state === 'approved' ? '通过' : '驳回'}
+                  </span>
+                  <span className="kind">{r.item.kind}</span>
+                  <span className="title">{r.item.title || '(无标题)'}</span>
+                  <span className="conf">{r.decision.confidence.toFixed(2)}</span>
+                </motion.li>
+              ))}
+            </AnimatePresence>
           </ul>
-          {items.length === 0 && <p className="empty">空队列——从右边提交第一条吧。</p>}
-        </section>
-        <section className="detail">
-          {selected ? (
-            <>
-              <h2>{selected.item.title || '(无标题)'}</h2>
-              <p className="meta">
-                {selected.item.kind} · {selected.item.id} · conf{' '}
-                {selected.decision.confidence.toFixed(2)} · {selected.decision.engine} ·{' '}
-                {selected.decision.action}
-              </p>
-              <pre>{selected.item.body}</pre>
-              <ul className="reasons">
-                {selected.decision.reasons.map((x, i) => (
-                  <li key={i}>{x}</li>
-                ))}
-              </ul>
-              {selected.state === 'pending' ? (
-                <div className="actions">
-                  <button className="ok" onClick={() => resolve('approve')}>
-                    通过
-                  </button>
-                  <button className="bad" onClick={() => resolve('reject')}>
-                    驳回
-                  </button>
-                </div>
-              ) : (
-                <p className="meta">
-                  已{selected.state === 'approved' ? '通过' : '驳回'}
-                  {selected.resolved_by ? ` · by ${selected.resolved_by}` : ''}
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="empty">左侧选一条查看详情 / 人审。</p>
+          {items.length === 0 && (
+            <p className="empty">
+              <Inbox size={16} /> 空队列——从右边提交第一条吧。
+            </p>
           )}
+        </section>
+
+        <section className="detail">
+          <AnimatePresence mode="wait">
+            {selected ? (
+              <motion.div
+                key={selected.item.id}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18 }}
+              >
+                <h2>{selected.item.title || '(无标题)'}</h2>
+                <pre>{selected.item.body}</pre>
+                <Timeline record={selected} />
+                <ul className="reasons">
+                  {selected.decision.reasons.map((x, i) => (
+                    <li key={i}>{x}</li>
+                  ))}
+                </ul>
+                {selected.state === 'pending' ? (
+                  <div className="actions">
+                    <button className="ok" onClick={() => resolve('approve')}>
+                      通过
+                    </button>
+                    <button className="bad" onClick={() => resolve('reject')}>
+                      驳回
+                    </button>
+                  </div>
+                ) : (
+                  <p className="meta">
+                    已{selected.state === 'approved' ? '通过' : '驳回'}
+                    {selected.resolved_by ? ` · by ${selected.resolved_by}` : ''}
+                  </p>
+                )}
+              </motion.div>
+            ) : (
+              <motion.p
+                key="empty"
+                className="empty"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                左侧选一条查看链路 / 人审。
+              </motion.p>
+            )}
+          </AnimatePresence>
           <hr />
-          <h3>提交审核</h3>
+          <h3>
+            <Send size={14} /> 提交审核
+          </h3>
           <form onSubmit={submit}>
             <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
               {KINDS.map((k) => (
@@ -160,6 +249,19 @@ export default function App() {
           </form>
         </section>
       </div>
+
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            className="toast"
+            initial={{ opacity: 0, y: 16, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: 8, x: '-50%' }}
+          >
+            <CheckCircle2 size={15} /> {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

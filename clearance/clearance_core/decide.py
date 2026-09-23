@@ -80,7 +80,8 @@ def sidecar_decide(item: ReviewItem, questions: dict | None = None) -> Decision:
     ans = res.get("answers", {})
     routing = res.get("routing", {})
     latency = res.get("latency_ms", -1)
-    reasons = [f"laya via sidecar model={routing.get('model')} {latency}ms",
+    route_model = routing.get("model", "")
+    reasons = [f"laya via sidecar model={route_model} {latency}ms",
                  "note: confidence uncalibrated until temperature fit"]
 
     def noul(q: str) -> float:
@@ -107,15 +108,19 @@ def sidecar_decide(item: ReviewItem, questions: dict | None = None) -> Decision:
 
     if max(p_fraud, p_toxic) >= AUTO_THRESHOLD:
         return Decision(AUTO_REJECT, max(p_fraud, p_toxic), "laya:sidecar",
-                        reasons + [f"fraud={p_fraud:.2f} toxic={p_toxic:.2f}"], "L2")
+                        reasons + [f"fraud={p_fraud:.2f} toxic={p_toxic:.2f}"], "L2",
+                        latency, route_model)
     if p_spam >= AUTO_THRESHOLD:
         return Decision(AUTO_REJECT, p_spam, "laya:sidecar",
-                        reasons + [f"spam={p_spam:.2f}"], "L2")
+                        reasons + [f"spam={p_spam:.2f}"], "L2",
+                        latency, route_model)
     if p_sens >= 0.5 or sev >= 1.5 or cat in ("sensitive", "fraud", "abuse"):
         conf = max(p_sens, min(sev / 2.0, 1.0), cat_conf)
         return Decision(NEEDS_REVIEW, conf, "laya:sidecar",
-                        reasons + [f"sensitive={p_sens:.2f} severity={sev:.2f}"], "L1")
-    return Decision(AUTO_APPROVE, max(cat_conf, 0.5), "laya:sidecar", reasons, "L1")
+                        reasons + [f"sensitive={p_sens:.2f} severity={sev:.2f}"], "L1",
+                        latency, route_model)
+    return Decision(AUTO_APPROVE, max(cat_conf, 0.5), "laya:sidecar", reasons, "L1",
+                    latency, route_model)
 
 
 def decide(item: ReviewItem, questions: dict | None = None) -> Decision:

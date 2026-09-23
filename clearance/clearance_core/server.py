@@ -3,28 +3,60 @@
     python3 -m clearance_core.server [--port 8686] [--data ./data]
 
 端点：
-    GET  /api/health
+    GET  /api/health                      # 引擎 + sidecar 明细（device/loaded）
     GET  /api/queue?state=pending|approved|rejected
     POST /api/review/submit   {kind,title,body,meta?}
     POST /api/review/<id>/resolve  {outcome: approve|reject, actor?}
     GET  /api/stats
+    GET  /api/events                      # SSE：hello 快照 + submitted/resolved/stats
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import queue as queue_mod
 import sys
+import threading
+import urllib.request
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from clearance_core.decide import engine_name  # noqa: E402
+from clearance_core.decide import SIDECAR_URL, engine_name  # noqa: E402
 from clearance_core.store import ReviewStore  # noqa: E402
 
 VERSION = "0.1.0"
+
+
+class EventHub:
+    """内存 SSE 订阅中心：submit/resolve 后广播，断线自动清理。"""
+
+    def __init__(self):
+        self._subs: list = []
+        self._lock = threading.Lock()
+
+    def subscribe(self):
+        q: queue_mod.Queue = queue_mod.Queue()
+        with self._lock:
+            self._subs.append(q)
+        return q
+
+    def unsubscribe(self, q) -> None:
+        with self._lock:
+            if q in self._subs:
+                self._subs.remove(q)
+
+    def publish(self, etype: str, data: dict) -> None:
+        with self._lock:
+            subs = list(self._subs)
+        for q in subs:
+            try:
+                q.put_nowait({"type": etype, "data": data})
+            except queue_mod.Full:
+                pass
 
 
 def _send(handler: BaseHTTPRequestHandler, code: int, obj: dict) -> None:
@@ -39,9 +71,25 @@ def _send(handler: BaseHTTPRequestHandler, code: int, obj: dict) -> None:
     handler.wfile.write(body)
 
 
-def make_handler(store: ReviewStore):
+def _sidecar_health() -> dict | None:
+    try:
+        with urllib.request.urlopen(SIDECAR_URL + "/health", timeout=0.5) as r:
+            return json.load(r)
+    except Exception:
+        return None
+
+
+def _counts(store: ReviewStore) -> dict:
+    counts = {"pending": 0, "approved": 0, "rejected": 0}
+    items = store.queue("")
+    for r in items:
+        counts[r["state"]] = counts.get(r["state"], 0) + 1
+    return {"counts": counts, "total": len(items)}
+
+
+def make_handler(store: ReviewStore, hub: EventHub):
     class Handler(BaseHTTPRequestHandler):
-        server_version = "Clearance/0.1"
+        server_version = "Clearance/0.2"
 
         def log_message(self, fmt, *args):  # 安静日志
             sys.stderr.write("clearance: " + fmt % args + "\n")
@@ -62,7 +110,8 @@ def make_handler(store: ReviewStore):
             parsed = urlparse(self.path)
             if parsed.path == "/api/health":
                 _send(self, 200, {"ok": True, "engine": engine_name(),
-                                  "version": VERSION})
+                                  "version": VERSION,
+                                  "sidecar": _sidecar_health()})
             elif parsed.path == "/api/queue":
                 state = parse_qs(parsed.query).get("state", [""])[0]
                 if state not in ("", "pending", "approved", "rejected"):
@@ -70,14 +119,40 @@ def make_handler(store: ReviewStore):
                     return
                 _send(self, 200, {"ok": True, "items": store.queue(state)})
             elif parsed.path == "/api/stats":
-                items = store.queue("")
-                counts = {"pending": 0, "approved": 0, "rejected": 0}
-                for r in items:
-                    counts[r["state"]] = counts.get(r["state"], 0) + 1
-                _send(self, 200, {"ok": True, "counts": counts,
-                                  "total": len(items), "engine": engine_name()})
+                _send(self, 200, {"ok": True, **_counts(store),
+                                  "engine": engine_name()})
+            elif parsed.path == "/api/events":
+                self._serve_sse()
             else:
                 _send(self, 404, {"ok": False, "error": "not found"})
+
+        def _serve_sse(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            q = hub.subscribe()
+            try:
+                hello = {"engine": engine_name(), **_counts(store)}
+                self.wfile.write(
+                    f"event: hello\ndata: {json.dumps(hello)}\n\n".encode())
+                self.wfile.flush()
+                while True:
+                    try:
+                        ev = q.get(timeout=15)
+                        self.wfile.write(
+                            f"event: {ev['type']}\ndata: "
+                            f"{json.dumps(ev['data'], ensure_ascii=False)}\n\n"
+                            .encode())
+                    except queue_mod.Empty:
+                        self.wfile.write(b": ping\n\n")
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, ValueError, OSError):
+                pass
+            finally:
+                hub.unsubscribe(q)
 
         def do_POST(self):
             parsed = urlparse(self.path)
@@ -91,6 +166,9 @@ def make_handler(store: ReviewStore):
                                    str(payload.get("title", "")),
                                    str(payload.get("body", "")),
                                    payload.get("meta") or {})
+                hub.publish("submitted", {"id": rec.item.id, "state": rec.state,
+                                          **_counts(store)})
+                hub.publish("stats", _counts(store))
                 _send(self, 200, {"ok": True, **asdict(rec)})
             elif parsed.path.startswith("/api/review/") and parsed.path.endswith("/resolve"):
                 rid = parsed.path[len("/api/review/"):-len("/resolve")]
@@ -103,6 +181,9 @@ def make_handler(store: ReviewStore):
                 except ValueError as e:
                     _send(self, 400, {"ok": False, "error": str(e)})
                     return
+                hub.publish("resolved", {"id": rid, "state": rec["state"],
+                                         **_counts(store)})
+                hub.publish("stats", _counts(store))
                 _send(self, 200, {"ok": True, **rec})
             else:
                 _send(self, 404, {"ok": False, "error": "not found"})
@@ -114,7 +195,8 @@ def serve(port: int = 8686, data_dir: str = "") -> ThreadingHTTPServer:
     data_dir = data_dir or os.environ.get("CLEARANCE_DATA_DIR", "") or os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
     store = ReviewStore(data_dir)
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(store))
+    hub = EventHub()
+    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(store, hub))
     print(f"Clearance API on http://127.0.0.1:{port} (data={data_dir} engine={engine_name()})",
           flush=True)
     return server

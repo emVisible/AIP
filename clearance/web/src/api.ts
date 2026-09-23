@@ -15,6 +15,8 @@ export interface Decision {
   engine: string
   reasons: string[]
   risk: string
+  latency_ms: number
+  route_model: string
 }
 
 export interface ReviewRecord {
@@ -24,6 +26,26 @@ export interface ReviewRecord {
   via?: string
   resolved_by?: string
   resolved_outcome?: string
+}
+
+export interface SidecarInfo {
+  device: string
+  loaded: string[]
+  default: string
+  model_dir: string
+}
+
+export interface Health {
+  ok: boolean
+  engine: string
+  version: string
+  sidecar: (SidecarInfo & { ok: boolean; engine: string }) | null
+}
+
+export interface Counts {
+  pending: number
+  approved: number
+  rejected: number
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -37,13 +59,11 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => req<{ ok: boolean; engine: string; version: string }>('/api/health'),
+  health: () => req<Health>('/api/health'),
   queue: (state = '') =>
     req<{ ok: boolean; items: ReviewRecord[] }>(`/api/queue${state ? `?state=${state}` : ''}`),
   stats: () =>
-    req<{ ok: boolean; counts: Record<string, number>; total: number; engine: string }>(
-      '/api/stats',
-    ),
+    req<{ ok: boolean; counts: Counts; total: number; engine: string }>('/api/stats'),
   submit: (kind: string, title: string, body: string) =>
     req<ReviewRecord>('/api/review/submit', {
       method: 'POST',
@@ -54,4 +74,24 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ outcome, actor: 'web' }),
     }),
+}
+
+/** SSE 订阅：hello 快照 + submitted/resolved/stats 事件；返回取消函数。 */
+export function subscribeEvents(
+  onEvent: (type: string, data: Record<string, unknown>) => void,
+  onError: () => void,
+): () => void {
+  const es = new EventSource('/api/events')
+  const handler = (e: MessageEvent) => {
+    try {
+      onEvent((e as MessageEvent & { type: string }).type || 'message', JSON.parse(e.data))
+    } catch {
+      /* 忽略坏帧 */
+    }
+  }
+  ;['hello', 'submitted', 'resolved', 'stats'].forEach((t) =>
+    es.addEventListener(t, handler as EventListener),
+  )
+  es.onerror = () => onError()
+  return () => es.close()
 }

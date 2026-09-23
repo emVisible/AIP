@@ -6,9 +6,10 @@ import unittest
 import urllib.error
 import urllib.request
 
-from clearance_core.server import make_handler
+from clearance_core.server import EventHub, make_handler
 from clearance_core.store import ReviewStore
 from http.server import ThreadingHTTPServer
+import http.client
 
 
 def _call(method, url, payload=None):
@@ -27,7 +28,8 @@ class TestServer(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         store = ReviewStore(cls.tmp.name)
-        cls.srv = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(store))
+        cls.srv = ThreadingHTTPServer(("127.0.0.1", 0),
+                                      make_handler(store, EventHub()))
         cls.port = cls.srv.server_address[1]
         cls.t = threading.Thread(target=cls.srv.serve_forever, daemon=True)
         cls.t.start()
@@ -73,6 +75,42 @@ class TestServer(unittest.TestCase):
         code, body = _call("GET", self.url("/api/stats"))
         self.assertEqual(code, 200)
         self.assertIn("counts", body)
+
+    def test_health_has_sidecar_field(self):
+        code, body = _call("GET", self.url("/api/health"))
+        self.assertEqual(code, 200)
+        self.assertIn("sidecar", body)  # 无 sidecar 时为 None，在场时为明细
+
+    def test_sse_hello_then_submit(self):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        conn.request("GET", "/api/events")
+        resp = conn.getresponse()
+        self.assertEqual(resp.status, 200)
+        self.assertIn("text/event-stream", resp.getheader("Content-Type"))
+
+        def read_event():
+            etype, data = "", ""
+            while True:
+                line = resp.readline().decode().strip()
+                if line.startswith("event:"):
+                    etype = line[6:].strip()
+                elif line.startswith("data:"):
+                    data = line[5:].strip()
+                    return etype, json.loads(data)
+                elif line == "" and etype:
+                    continue
+
+        etype, hello = read_event()
+        self.assertEqual(etype, "hello")
+        self.assertIn("counts", hello)
+
+        code, created = _call("POST", self.url("/api/review/submit"),
+                              {"kind": "article", "title": "t", "body": "明早停水"})
+        self.assertEqual(code, 200)
+        etype, ev = read_event()
+        self.assertEqual(etype, "submitted")
+        self.assertEqual(ev["id"], created["item"]["id"])
+        conn.close()
 
 
 if __name__ == "__main__":

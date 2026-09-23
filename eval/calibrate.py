@@ -1,6 +1,5 @@
 """拟合各问题温度 T：持出样本 NLL 最小。
 
-    cd clearance
     python3 -m eval.calibrate --samples eval/samples_example.jsonl
     python3 -m eval.calibrate --samples /path/to/your.jsonl --out eval/calibration.json
 

@@ -15,7 +15,7 @@ reference/harness-codex/
 reference/harness-deepseek/
 reference/laya/
 
-# Clearance 通用审核网关运行时产物
-clearance/data/*.jsonl
-clearance/data/*.json
-!clearance/data/.gitkeep
+# Clearance 运行时产物
+data/*.jsonl
+data/*.json
+!data/.gitkeep

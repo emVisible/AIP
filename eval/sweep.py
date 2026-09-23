@@ -1,7 +1,6 @@
 """阈值 sweep：无副作用（只调 decide + route，不写 store），stdlib only。
 
 用法：
-    cd clearance
     python3 -m eval.sweep eval/samples_example.jsonl
     python3 -m eval.sweep /path/to/your_samples.jsonl --thresholds 0.7,0.8,0.85,0.9
 """

@@ -14,8 +14,7 @@
 ## 运行
 
 ```bash
-cd clearance
-python3 -m eval.sweep eval/samples_example.jsonl   # 自带 8 条合成样本，验证链路
+python3 -m eval.sweep eval/samples_example.jsonl  # 自带 8 条合成样本，验证链路
 python3 -m eval.sweep /path/to/your_samples.jsonl  # 你的真实样本
 ```
 

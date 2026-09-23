@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Activity, Bot, CalendarDays, Cpu, WifiOff } from 'lucide-react'
+import { Bot, CalendarDays, Cpu } from 'lucide-react'
 import { Counts, SidecarInfo } from './api'
 import { useT } from './i18n'
 
@@ -10,20 +10,6 @@ interface Props {
   lastLatency: number | null
   counts: Counts
   today: Counts
-}
-
-function Num({ v }: { v: number }) {
-  return (
-    <motion.span
-      key={v}
-      initial={{ y: 6, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.25 }}
-      style={{ display: 'inline-block', fontVariantNumeric: 'tabular-nums' }}
-    >
-      {v}
-    </motion.span>
-  )
 }
 
 export default function StatusBar({
@@ -41,12 +27,12 @@ export default function StatusBar({
   return (
     <motion.div
       className="statusbar"
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.25 }}
     >
       <span className={`lamp ${lamp}`}>
-        {!connected ? <WifiOff size={13} /> : <Activity size={13} />}
+        <span className="sq" />
         {lampLabel}
       </span>
       <span className="stat">
@@ -63,21 +49,46 @@ export default function StatusBar({
           {t('ms')}
         </span>
       )}
-      <span className="counts">
-        <span className="badge warn">
-          {t('c_pending')} <Num v={counts.pending} />
+      <span className="ro">
+        <span className="k">{t('c_pending')}</span>
+        <span className="v">
+          <Num v={counts.pending} />
         </span>
-        <span className="badge ok">
-          {t('c_approved')} <Num v={counts.approved} />
+      </span>
+      <span className="ro">
+        <span className="k">{t('c_approved')}</span>
+        <span className="v">
+          <Num v={counts.approved} />
         </span>
-        <span className="badge bad">
-          {t('c_rejected')} <Num v={counts.rejected} />
+      </span>
+      <span className="ro">
+        <span className="k">{t('c_rejected')}</span>
+        <span className="v">
+          <Num v={counts.rejected} />
         </span>
-        <span className="badge today">
-          <CalendarDays size={11} /> {t('c_today')}{' '}
+      </span>
+      <span className="ro">
+        <span className="k">
+          <CalendarDays size={11} /> {t('c_today')}
+        </span>
+        <span className="v">
           <Num v={today.pending + today.approved + today.rejected} />
         </span>
       </span>
     </motion.div>
+  )
+}
+
+function Num({ v }: { v: number }) {
+  return (
+    <motion.span
+      key={v}
+      initial={{ y: 6, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ duration: 0.2 }}
+      style={{ display: 'inline-block', fontVariantNumeric: 'tabular-nums' }}
+    >
+      {v}
+    </motion.span>
   )
 }

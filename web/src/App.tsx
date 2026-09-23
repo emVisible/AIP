@@ -264,6 +264,7 @@ function Shell() {
         </div>
       </header>
 
+      <div className="ledger">
       <StatusBar
         connected={connected}
         engine={engine}
@@ -484,6 +485,7 @@ function Shell() {
             </motion.div>
           )}
         </Card>
+      </div>
       </div>
 
       <AnimatePresence>

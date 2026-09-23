@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Check, Copy } from 'lucide-react'
+import { Check, Clock, Copy, X } from 'lucide-react'
 import React, { useState } from 'react'
 import { Lang, kindName, stateName } from '../i18n'
 
@@ -21,7 +21,13 @@ export function Card({ className = '', children }: { className?: string; childre
 
 export function StateTag({ state, lang }: { state: string; lang: Lang }) {
   const tone = state === 'approved' ? 'ok' : state === 'rejected' ? 'bad' : 'warn'
-  return <span className={`tag ${tone}`}>{stateName(lang, state)}</span>
+  const Icon = state === 'approved' ? Check : state === 'rejected' ? X : Clock
+  return (
+    <span className={`tag ${tone}`}>
+      <Icon size={11} />
+      {stateName(lang, state)}
+    </span>
+  )
 }
 
 export function ConfBar({ value, tone = '' }: { value: number; tone?: Tone }) {

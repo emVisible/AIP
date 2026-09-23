@@ -17,6 +17,7 @@ export interface Decision {
   risk: string
   latency_ms: number
   route_model: string
+  usage: Record<string, number>
 }
 
 export interface ReviewRecord {

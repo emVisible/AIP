@@ -33,11 +33,12 @@ class ReviewItem:
 class Decision:
     action: str  # review.approve | review.reject | human.task.create
     confidence: float
-    engine: str  # laya:sidecar | heuristic
+    engine: str  # rules | laya:sidecar | jev | heuristic
     reasons: list = field(default_factory=list)
     risk: str = "L1"
-    latency_ms: int = -1  # 端到端判定耗时（sidecar 实测；heuristic 为 -1）
-    route_model: str = ""  # laya 路由到的 checkpoint（english/multilingual）
+    latency_ms: int = -1  # 端到端判定耗时（实测；heuristic/rules 为 -1）
+    route_model: str = ""  # 路由到的 checkpoint / 云端模型版本
+    usage: dict = field(default_factory=dict)  # 云端计费：{input_tokens, output_tokens}
 
 
 @dataclass

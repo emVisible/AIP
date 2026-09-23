@@ -25,7 +25,8 @@ from urllib.parse import urlparse, parse_qs
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from clearance_core.decide import _sidecar_url, engine_name  # noqa: E402
+from clearance_core.decide import engine_name  # noqa: E402
+from clearance_core.engines import _sidecar_url  # noqa: E402
 from clearance_core.store import ReviewStore  # noqa: E402
 
 VERSION = "0.1.0"

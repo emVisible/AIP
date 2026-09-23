@@ -26,7 +26,11 @@ export default function Timeline({ record }: { record: ReviewRecord }) {
     {
       icon: <Scale size={14} />,
       title: '判定',
-      desc: `${d.action} · conf ${d.confidence.toFixed(2)}`,
+      desc:
+        `${d.action} · conf ${d.confidence.toFixed(2)}` +
+        (d.usage && (d.usage.input_tokens || d.usage.output_tokens)
+          ? ` · ${(d.usage.input_tokens ?? 0) + (d.usage.output_tokens ?? 0)} tokens`
+          : ''),
       tone: d.action === 'review.reject' ? 'bad' : d.action === 'review.approve' ? 'ok' : 'warn',
       bar: d.confidence,
     },

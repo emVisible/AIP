@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from clearance_core import gateway  # noqa: E402
 from clearance_core.decide import decide  # noqa: E402
+from clearance_core.engines import EngineUnavailable, get as get_engine  # noqa: E402
 from clearance_core.models import ReviewItem, new_id  # noqa: E402
 
 EXPECT2FINAL = {"approve": "review.approve", "reject": "review.reject",
@@ -35,13 +36,26 @@ def load_samples(path: str) -> list:
     return rows
 
 
-def run(rows: list, threshold: float) -> dict:
+def run(rows: list, threshold: float, decide_fn=None) -> dict:
+    decide_fn = decide_fn or decide
     correct = auto = human = auto_err = 0
     errs = []
     for i, r in enumerate(rows):
         item = ReviewItem(new_id("ev"), r.get("kind", "other"),
                           r.get("title", ""), r.get("body", ""))
-        d = decide(item)
+        try:
+            d = decide_fn(item)
+        except EngineUnavailable as e:
+            errs.append((i, f"engine_down: {e}", r["title"][:30]))
+            human += 1
+            if r["expected"] == "review":
+                correct += 1
+            continue
+        if d is None:  # 单引擎弃权按转人工计
+            human += 1
+            if r["expected"] == "review":
+                correct += 1
+            continue
         final, _ = gateway.route(d.action, d.confidence, threshold)
         want = EXPECT2FINAL[r["expected"]]
         if final == "human.task.create":
@@ -66,17 +80,30 @@ def run(rows: list, threshold: float) -> dict:
 
 def main() -> int:
     p = argparse.ArgumentParser()
-    p.add_argument("samples")
+    p.add_argument("samples", nargs="?")
     p.add_argument("--thresholds", default="0.70,0.75,0.80,0.85,0.90,0.95")
+    p.add_argument("--engine", default="",
+                   help="单引擎横评（rules|laya:sidecar|jev|heuristic），空=级联")
+    p.add_argument("--list-engines", action="store_true")
     a = p.parse_args()
+    if a.list_engines:
+        from clearance_core.engines import availability
+        print(json.dumps(availability(), ensure_ascii=False, indent=1))
+        return 0
+    if not a.samples:
+        p.error("samples 必填（--list-engines 除外）")
+    decide_fn = None
+    engine_label = "cascade"
+    if a.engine:
+        decide_fn = get_engine(a.engine).decide
+        engine_label = a.engine
     rows = load_samples(a.samples)
-    from clearance_core.decide import engine_name  # noqa: E402
-    print(f"samples={len(rows)} engine={engine_name()}")
+    print(f"samples={len(rows)} engine={engine_label}")
     print(f"{'thr':>6} {'acc':>6} {'auto':>6} {'human':>6} {'auto_err':>9}")
     best = None
     results = []
     for t in [float(x) for x in a.thresholds.split(",")]:
-        r = run(rows, t)
+        r = run(rows, t, decide_fn)
         results.append(r)
         print(f"{t:>6.2f} {r['accuracy']:>6.2f} {r['auto_rate']:>6.2f} "
               f"{r['human_rate']:>6.2f} {r['auto_errors']:>9d}")

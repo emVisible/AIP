@@ -8,7 +8,7 @@
 | AIP 概念 | Clearance 实现 |
 |---|---|
 | Event（已发生的语义事实） | `POST /api/review/submit` → `ReviewItem{kind,title,body,meta}`（`store.py`），`data ≤ 4KB` |
-| Decision（引擎内决策，非消息） | `decide()`（`decide.py`）：sidecar Laya 快判，缺席降级 heuristic |
+| Decision（引擎内决策，非消息） | `cascade()`（`engines.py`）：`rules→laya:sidecar→jev→heuristic`，首个 Decision 胜出；Decision Engine 是真插槽（C1），不是写死的 Laya 调用 |
 | Action（具名能力调用） | 7 动作注册表 `REGISTRY`（`gateway.py`）：`review.approve/reject/defer`、`human.task.create`、`context.get`、`notify.send`、`session.complete` |
 | Result（客观结果） | `state: approved/rejected/pending` + `audit.jsonl` 只追加审计流（`store.py` + `gateway.audit_log`） |
 

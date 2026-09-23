@@ -20,7 +20,9 @@ const KINDS = ['article', 'comment', 'product', 'ticket', 'expense', 'other']
 type Sidecar = (SidecarInfo & { ok: boolean; engine: string }) | null
 
 function Shell() {
-  const [lang, setLang] = useLang()
+  // 唯一语言状态在 App 的 Provider 里；此处只消费，禁止再 useLang() 自建状态
+  // （双状态曾导致 toggle 只切一半——kind 名动、t() 不动）
+  const { lang, setLang } = React.useContext(LangCtx)
   const t = useT()
   const [filter, setFilter] = useState<Filter>('pending')
   const [kindFilter, setKindFilter] = useState<string>('')

@@ -48,6 +48,20 @@ for (const k of used) {
     bad++;
   }
 }
+
+// 语言状态单源：useLang() 只许在 App.tsx 出現一次（Provider 持有），
+// 其余组件一律 useContext(LangCtx)/useT() 消费。双状态曾导致切换只切一半。
+let owners = [];
+for (const file of walk(ROOT)) {
+  if (file.endsWith('/i18n.ts')) continue; // 定义处除外
+  const src = readFileSync(file, 'utf8');
+  const n = (src.match(/useLang\(\)/g) || []).length;
+  if (n > 0) owners.push(`${file.split('/').pop()} x${n}`);
+}
+if (owners.length !== 1 || !owners[0].startsWith('App.tsx')) {
+  console.log(`lang state must live only in App.tsx, found: ${owners.join(', ')}`);
+  bad++;
+}
 if (bad > 0) {
   console.log(`\ni18n-lint: ${bad} problem(s)`);
   process.exit(1);

@@ -36,40 +36,45 @@ header.brand {
   display: flex;
   align-items: center;
   gap: 12px;
-  position: relative;
-  overflow: hidden;
-}
-header.brand::after {
-  content: '';
-  position: absolute;
-  right: -30px;
-  top: -46px;
-  width: 150px;
-  height: 150px;
-  background: url('/logo.svg') no-repeat center / contain;
-  opacity: 0.05;
-  pointer-events: none;
 }
 .mark {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   flex-shrink: 0;
+}
+.lockup {
+  min-width: 0;
+}
+.lockup h1 {
+  white-space: nowrap;
+}
+.seg {
+  margin-left: auto;
+  display: flex;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px;
+  flex-shrink: 0;
+}
+.seg button {
+  border: 0;
+  background: transparent;
+  border-radius: 999px;
+  padding: 4px 13px;
+  font-size: 12.5px;
+  cursor: pointer;
+  color: var(--muted);
+}
+.seg button.active {
+  background: var(--accent);
+  color: #fff;
 }
 .wordmark {
   font-size: 13px;
   font-weight: 400;
   color: var(--muted);
   letter-spacing: 2px;
-}
-.lang-toggle {
-  margin-left: auto;
-  border: 1px solid var(--line);
-  background: var(--card);
-  border-radius: 999px;
-  padding: 5px 14px;
-  font-size: 12.5px;
-  cursor: pointer;
-  z-index: 1;
 }
 .sub {
   color: var(--muted);
@@ -191,6 +196,7 @@ header.brand::after {
 .queue ul {
   max-height: 560px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 .detail {
   max-height: calc(100vh - 230px);

@@ -116,6 +116,12 @@ function Shell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter])
 
+  // 标签页标题随语言同步（浏览器 tab 也是 UI）
+  useEffect(() => {
+    document.title = t('doc_title')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang])
+
   const selected = items.find((i) => i.item.id === selectedId) ?? null
   const [fullBody, setFullBody] = useState<string | null>(null)
   const [bodyLoading, setBodyLoading] = useState(false)
@@ -231,15 +237,20 @@ function Shell() {
     <div className="layout">
       <header className="brand">
         <img src="/logo.svg" alt="Clearance" className="mark" />
-        <div>
+        <div className="lockup">
           <h1>
             {t('title')} <span className="wordmark">{t('titleEn')}</span>
           </h1>
           <span className="sub">{t('sub')}</span>
         </div>
-        <button className="lang-toggle" onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}>
-          {t('toggle_lang')}
-        </button>
+        <div className="seg" role="group" aria-label="language">
+          <button className={lang === 'zh' ? 'active' : ''} onClick={() => setLang('zh')}>
+            中
+          </button>
+          <button className={lang === 'en' ? 'active' : ''} onClick={() => setLang('en')}>
+            EN
+          </button>
+        </div>
       </header>
 
       <StatusBar

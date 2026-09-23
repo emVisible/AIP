@@ -65,7 +65,8 @@ const DICT = {
     no_title: '(无标题)',
     loading_body: '全文加载中…',
     body_failed: '（全文加载失败）',
-    toggle_lang: 'EN',
+    conf_label: '置信度',
+    doc_title: '清放行 Clearance｜中文后台审核网关',
   },
   en: {
     title: 'Clearance',
@@ -129,7 +130,8 @@ const DICT = {
     no_title: '(untitled)',
     loading_body: 'Loading full text…',
     body_failed: '(failed to load full text)',
-    toggle_lang: '中文',
+    conf_label: 'confidence',
+    doc_title: 'Clearance｜Chinese Review Gateway',
   },
 } as const
 

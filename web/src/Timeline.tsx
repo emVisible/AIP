@@ -2,13 +2,14 @@ import { motion } from 'framer-motion'
 import { Check, FileInput, GitBranch, Scale, ShieldCheck, X } from 'lucide-react'
 import React from 'react'
 import { ReviewRecord } from './api'
-import { useT } from './i18n'
+import { LangCtx, kindName, useT } from './i18n'
 import { ConfBar } from './components/ui'
 
 /** 单条记录的链路时间线：提交 → 路由 → 判定 → 网关 → 终态。
  *  running 为 true 时判定节点呼吸脉冲（模型推理中）。 */
 export default function Timeline({ record, running = false }: { record: ReviewRecord; running?: boolean }) {
   const t = useT()
+  const { lang } = React.useContext(LangCtx)
   const d = record.decision
   const steps: {
     icon: React.ReactNode
@@ -21,7 +22,7 @@ export default function Timeline({ record, running = false }: { record: ReviewRe
     {
       icon: <FileInput size={14} />,
       title: t('tl_submit'),
-      desc: `${record.item.kind} · ${record.item.id}`,
+      desc: `${kindName(lang, record.item.kind)} · ${record.item.id}`,
       tone: '',
     },
     {
@@ -39,7 +40,7 @@ export default function Timeline({ record, running = false }: { record: ReviewRe
       title: t('tl_decide'),
       desc:
         (running ? t('running') + ' · ' : '') +
-        `${d.action} · conf ${d.confidence.toFixed(2)}` +
+        `${d.action} · ${t('conf_label')} ${d.confidence.toFixed(2)}` +
         (d.usage && (d.usage.input_tokens || d.usage.output_tokens)
           ? ` · ${(d.usage.input_tokens ?? 0) + (d.usage.output_tokens ?? 0)} tokens`
           : ''),

@@ -18,7 +18,7 @@
                       或走 shortlist，本服务超 20 项自动 shortlist）
     SHORTLIST_K     shortlist 保留数（默认 20）
 
-实现对照（laya 官方 API，vendored 于 reference/laya）：
+实现对照（laya 官方 API，vendored 于 vendor/laya）：
     Router(default, lang_guess) / router.predict(..., lang_guess)
     laya.predict_shortlist(router, state, questions, embed_fn, k)
 """

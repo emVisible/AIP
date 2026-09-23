@@ -92,9 +92,7 @@ python3 -m eval.calibrate --samples eval/samples.jsonl --out eval/calibration.js
 ```
 ├── core/               引擎插槽 + 网关 + 存储 + 服务
 ├── vendor/
-├── vendor/
 │   ├── laya_sidecar/   Laya 独立决策服务（torch 隔离，代码跟踪）
-│   └── laya/           上游 checkout（只读，忽略）
 │   └── laya/           上游 checkout（只读，忽略）
 ├── eval/               sweep + 拟合 + 沉淀 + 样本
 ├── web/                前端（pnpm + Vite + React + TS）

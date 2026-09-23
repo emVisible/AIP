@@ -5,4 +5,4 @@
 {"body": "你这个垃圾小编，去死吧，杀了你。", "expected": "reject", "kind": "comment", "title": "谩骂"}
 {"body": "我的密码是123456，请帮我找回账号。", "expected": "review", "kind": "article", "title": "账号申诉"}
 {"body": "这篇报道引用了内部文件，涉及身份证号等个人信息，请复核。", "expected": "review", "kind": "article", "title": "爆料投稿"}
-{"body": " priesthood and the ministry of reconciliation in community service work and charity fundraising for local parishes", "expected": "approve", "kind": "article", "title": "Community charity note"}
+{"body": "Priesthood and the ministry of reconciliation in community service work and charity fundraising for local parishes", "expected": "approve", "kind": "article", "title": "Community charity note"}

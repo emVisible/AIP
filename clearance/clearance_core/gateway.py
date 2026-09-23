@@ -41,12 +41,12 @@ def validate_action(name: str, params: dict) -> tuple[bool, str]:
     return True, "permitted"
 
 
-def route(action: str, confidence: float) -> tuple[str, str]:
+def route(action: str, confidence: float, threshold: float = AUTO_THRESHOLD) -> tuple[str, str]:
     """置信度门控：自动动作必须过线，否则一律转人工。"""
     if action in (AUTO_APPROVE, AUTO_REJECT):
-        if confidence >= AUTO_THRESHOLD:
+        if confidence >= threshold:
             return action, "auto"
-        return NEEDS_REVIEW, f"low_confidence {confidence:.2f}<{AUTO_THRESHOLD}"
+        return NEEDS_REVIEW, f"low_confidence {confidence:.2f}<{threshold}"
     return NEEDS_REVIEW, "policy_default"
 
 

@@ -36,6 +36,16 @@ python3 -m clearance_core.cli queue --state pending
 python3 -m clearance_core.cli resolve --id <id> --outcome approve --actor admin
 ```
 
+## 调优（eval）
+
+```bash
+python3 -m eval.sweep eval/samples_example.jsonl  # 自带合成样本，验证链路
+python3 -m eval.sweep /path/to/your_samples.jsonl # 真实样本定阈值
+```
+
+样本格式与脱敏要求见 `eval/README.md`。原则：自动放错比转人工贵，
+宁可 human_rate 高，不可 auto_err > 0。
+
 ## 接 Laya（可选增强）
 
 ```bash

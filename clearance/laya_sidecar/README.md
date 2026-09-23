@@ -26,6 +26,7 @@ uv run --no-sync python server.py
 | `LAYA_HEAD_MAX_LEN` | 不覆盖 | 覆盖选项 token 预算（高基数时调大；超 20 项已自动 shortlist） |
 | `SHORTLIST_K` | 20 | shortlist 保留数（官方 `predict_shortlist` API） |
 | `MODEL_DIR` | Hub 官方包 | 覆盖 checkpoint：本地微调产物目录或 Hub repo |
+| `CALIBRATION_FILE` | `../eval/calibration.json` | 拟合温度表（mtime 热重载；缺席即出厂行为） |
 
 `/decide` 支持 `lang_guess`（语言代码或留空走内置检测），短文本可显式指定。
 `choice` 选项超 20 时自动走官方 shortlist；校准温度拟合完成前，

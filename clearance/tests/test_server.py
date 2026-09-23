@@ -1,5 +1,7 @@
 """server.py 端到端：起临时端口真服务，urllib 走完全链路。"""
+import http.client
 import json
+import os
 import tempfile
 import threading
 import unittest
@@ -26,6 +28,9 @@ def _call(method, url, payload=None):
 class TestServer(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        # 强制走 heuristic：测试不依赖 sidecar 是否在跑
+        cls._old = os.environ.get("LAYA_SIDECAR_URL")
+        os.environ["LAYA_SIDECAR_URL"] = "http://127.0.0.1:1"
         cls.tmp = tempfile.TemporaryDirectory()
         store = ReviewStore(cls.tmp.name)
         cls.srv = ThreadingHTTPServer(("127.0.0.1", 0),
@@ -39,6 +44,10 @@ class TestServer(unittest.TestCase):
         cls.srv.shutdown()
         cls.srv.server_close()
         cls.tmp.cleanup()
+        if cls._old is None:
+            os.environ.pop("LAYA_SIDECAR_URL", None)
+        else:
+            os.environ["LAYA_SIDECAR_URL"] = cls._old
 
     def url(self, p):
         return f"http://127.0.0.1:{self.port}{p}"

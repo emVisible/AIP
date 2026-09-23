@@ -1,6 +1,6 @@
 """heuristic 决策契约：引擎诚实标注，不确定转人工。"""
+import os
 import unittest
-
 from clearance_core.decide import decide, engine_name
 from clearance_core.models import ReviewItem, new_id
 
@@ -10,8 +10,21 @@ def item(title, body, kind="comment"):
 
 
 class TestDecide(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # 强制走 heuristic：测试不依赖 sidecar 是否在跑
+        cls._old = os.environ.get("LAYA_SIDECAR_URL")
+        os.environ["LAYA_SIDECAR_URL"] = "http://127.0.0.1:1"
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls._old is None:
+            os.environ.pop("LAYA_SIDECAR_URL", None)
+        else:
+            os.environ["LAYA_SIDECAR_URL"] = cls._old
+
     def test_engine_label(self):
-        self.assertIn(engine_name(), ("laya", "heuristic"))
+        self.assertIn(engine_name(), ("laya:sidecar", "laya", "heuristic"))
 
     def test_spam_rejected(self):
         d = decide(item("返利", "点击链接免费领取，刷单日结加微信"))

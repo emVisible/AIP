@@ -23,6 +23,17 @@ python3 -m eval.sweep /path/to/your_samples.jsonl  # 你的真实样本
 推荐逻辑：自动判错最少优先，其次准确率——自动放错（approve 了不该过的）
 比转人工贵得多，所以宁可 human_rate 高，不可 auto_err > 0。
 
+## 温度拟合（calibrate）
+
+```bash
+python3 -m eval.calibrate --samples /path/to/your.jsonl --out eval/calibration.json
+```
+
+要求 sidecar 在跑；`expected==review` 的行自动跳过（弃权类不可标定）。
+`category` 需行内 `labels.category` 真值才会拟合。样本少（单边）的 qid
+不写入，运行时按 T=1 出厂值。sidecar 按文件 mtime 热重载，无需重启。
+**合成样本只验链路，不提交 calibration.json**——拟合只吃真实样本。
+
 ## 把样本给我
 
 直接发文件或粘贴 JSONL，每类（过/拦/转人工）各 10 条以上最有价值。

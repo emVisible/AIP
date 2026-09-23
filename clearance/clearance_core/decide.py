@@ -17,8 +17,14 @@ from .models import AUTO_APPROVE, AUTO_REJECT, NEEDS_REVIEW, Decision, ReviewIte
 from .questions import build_review_questions
 
 AUTO_THRESHOLD = 0.85
-SIDECAR_URL = os.environ.get("LAYA_SIDECAR_URL", "http://127.0.0.1:8685")
-SIDECAR_TIMEOUT = float(os.environ.get("LAYA_SIDECAR_TIMEOUT", "5"))
+
+
+def _sidecar_url() -> str:
+    return os.environ.get("LAYA_SIDECAR_URL", "http://127.0.0.1:8685")
+
+
+def _sidecar_timeout() -> float:
+    return float(os.environ.get("LAYA_SIDECAR_TIMEOUT", "5"))
 
 SPAM_HITS = ("中奖", "免费领取", "点击链接", "刷单", "兼职日结", "加微信",
              "free money", "click here", "winner", "crypto giveaway")
@@ -30,14 +36,14 @@ SENSITIVE_HITS = ("密码", "身份证", "银行卡", "翻墙", "password", "ssn
 
 def _post(path: str, payload: dict, timeout: float) -> dict:
     req = urllib.request.Request(
-        SIDECAR_URL + path, data=json.dumps(payload).encode(),
+        _sidecar_url() + path, data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"}, method="POST")
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.load(r)
 
 
 def _get(path: str, timeout: float) -> dict:
-    with urllib.request.urlopen(SIDECAR_URL + path, timeout=timeout) as r:
+    with urllib.request.urlopen(_sidecar_url() + path, timeout=timeout) as r:
         return json.load(r)
 
 
@@ -74,15 +80,18 @@ def sidecar_decide(item: ReviewItem, questions: dict | None = None) -> Decision:
     res = _post("/decide", {"kind": item.kind, "text": item.text,
                             "lang_guess": (item.meta or {}).get("lang"),
                             "questions": questions or build_review_questions()},
-                SIDECAR_TIMEOUT)
+                _sidecar_timeout())
     if not res.get("ok"):
         raise RuntimeError(f"sidecar error: {res.get('error')}")
     ans = res.get("answers", {})
     routing = res.get("routing", {})
     latency = res.get("latency_ms", -1)
     route_model = routing.get("model", "")
-    reasons = [f"laya via sidecar model={route_model} {latency}ms",
-                 "note: confidence uncalibrated until temperature fit"]
+    reasons = [f"laya via sidecar model={route_model} {latency}ms"]
+    if res.get("calibrated"):
+        reasons.append("note: temperature fitted on held-out samples")
+    else:
+        reasons.append("note: confidence uncalibrated until temperature fit")
 
     def noul(q: str) -> float:
         try:

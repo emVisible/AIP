@@ -25,7 +25,7 @@ from urllib.parse import urlparse, parse_qs
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from clearance_core.decide import SIDECAR_URL, engine_name  # noqa: E402
+from clearance_core.decide import _sidecar_url, engine_name  # noqa: E402
 from clearance_core.store import ReviewStore  # noqa: E402
 
 VERSION = "0.1.0"
@@ -73,7 +73,7 @@ def _send(handler: BaseHTTPRequestHandler, code: int, obj: dict) -> None:
 
 def _sidecar_health() -> dict | None:
     try:
-        with urllib.request.urlopen(SIDECAR_URL + "/health", timeout=0.5) as r:
+        with urllib.request.urlopen(_sidecar_url() + "/health", timeout=0.5) as r:
             return json.load(r)
     except Exception:
         return None

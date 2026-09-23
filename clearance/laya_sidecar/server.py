@@ -32,6 +32,14 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+try:
+    from clearance_core.calibration import load_table, rescale_answers
+    _HAS_CAL = True
+except Exception as _cal_err:  # 主产品缺席时 sidecar 照常跑，只是无校准
+    print(f"sidecar: calibration math unavailable ({_cal_err}); serving raw", flush=True)
+    _HAS_CAL = False
+
 _router = None
 _device = "unknown"
 _loaded: list = []
@@ -76,6 +84,30 @@ def _needs_shortlist(questions: dict) -> bool:
                for q in questions.values())
 
 
+_cal_table: dict = {}
+_cal_mtime = -1.0
+
+
+def _calibration_table() -> dict:
+    """拟合温度表（mtime 热重载；缺席/损坏即 {}，出厂行为）。"""
+    global _cal_table, _cal_mtime
+    if not _HAS_CAL:
+        return {}
+    path = os.environ.get("CALIBRATION_FILE", "") or os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "eval", "calibration.json")
+    try:
+        m = os.path.getmtime(path)
+    except OSError:
+        return {}
+    if m != _cal_mtime:
+        _cal_table = load_table(path)
+        _cal_mtime = m
+        if _cal_table:
+            print(f"sidecar: calibration loaded ({len(_cal_table)} questions)", flush=True)
+    return _cal_table
+
+
 def decide_once(state, questions: dict, lang_guess=None) -> dict:
     t0 = time.time()
     router = _router_singleton(preload=False)
@@ -102,9 +134,12 @@ def decide_once(state, questions: dict, lang_guess=None) -> dict:
         res = router.predict(state, questions, **predict_kw)
     global _loaded
     _loaded = list(router.loaded)
-    return {"ok": True, "answers": res.get("answers", {}),
+    answers, calibrated = rescale_answers(res.get("answers", {}), _calibration_table()) \
+        if _HAS_CAL else (res.get("answers", {}), False)
+    return {"ok": True, "answers": answers,
             "routing": res.get("routing", {}),
             "shortlisted": shortlisted,
+            "calibrated": calibrated,
             "latency_ms": int((time.time() - t0) * 1000),
             "device": _device, "engine": "laya"}
 

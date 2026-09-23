@@ -25,8 +25,8 @@ PIDS=""
 
 # ① Laya sidecar（独立 venv，重依赖隔离；失败则主 API 自动 heuristic）
 if [ "${NO_SIDECAR:-0}" != "1" ] && [ -n "$UV" ]; then
-  if (cd laya_sidecar && uv sync >/dev/null 2>&1); then
-    (cd laya_sidecar && exec uv run --no-sync python server.py) &
+  if (cd vendor/laya_sidecar && uv sync >/dev/null 2>&1); then
+    (cd vendor/laya_sidecar && exec uv run --no-sync python server.py) &
     PIDS="$PIDS $!"
     echo "[start] sidecar 启动中 :${SIDECAR_PORT}（首次需下载 checkpoint，约 1GB）"
   else

@@ -1,6 +1,6 @@
 """Decision 入口（薄层）：级联 + 主引擎名。实现见 engines.py。
 
-本文件保持 stdlib only：laya/torch 重依赖只活在 laya_sidecar 进程里，
+本文件保持 stdlib only：laya/torch 重依赖只活在 vendor/laya_sidecar 进程里，
 Jev 走云端 HTTPS。历史函数名保留兼容（heuristic_decide 等）。
 """
 from __future__ import annotations

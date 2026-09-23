@@ -39,7 +39,7 @@ def ask_sidecar(kind: str, text: str, questions: dict) -> dict:
         with urllib.request.urlopen(req, timeout=60) as r:
             res = json.load(r)
     except Exception as e:
-        print(f"ERROR: sidecar 不可达（{e}）。先起 sidecar：cd laya_sidecar && uv run python server.py")
+        print(f"ERROR: sidecar 不可达（{e}）。先起 sidecar：cd vendor/laya_sidecar && uv run python server.py")
         raise SystemExit(1)
     if not res.get("ok"):
         print(f"ERROR: sidecar 失败：{res.get('error')}")

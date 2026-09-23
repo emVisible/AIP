@@ -6,7 +6,7 @@ Clearance 主产品保持 stdlib、秒启动、不联网可跑。
 ## 启动
 
 ```bash
-cd laya_sidecar
+cd vendor/laya_sidecar
 uv sync                       # 首次：建 venv 并装 laya（含 torch，约 2GB，需联网）
 uv run --no-sync python server.py
 ```

@@ -8,3 +8,16 @@ build/
 node_modules/
 package-lock.json
 benchmarks/result.json
+.env
+.DS_Store
+uv.lock
+
+# 上游研究仓库（本地只读参考，不入产品库）
+reference/harness-codex/
+reference/harness-deepseek/
+reference/laya/
+
+# Clearance 通用审核网关运行时产物
+clearance/data/*.jsonl
+clearance/data/*.json
+!clearance/data/.gitkeep

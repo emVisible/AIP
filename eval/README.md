@@ -43,7 +43,7 @@ python3 -m eval.export --out eval/samples.jsonl
 `pending` 跳过；meta 过凭据 key。飞轮起点：每天的 resolve 自动攒成
 拟合/微调原料。500+ 条后开微调，在此之前只做温度拟合。
 
-## 把样本给我
+## 真实样本
 
-直接发文件或粘贴 JSONL，每类（过/拦/转人工）各 10 条以上最有价值。
-拿到后我做三件事：① sweep 定阈值 ② 挑难例进 `tests/` 做回归 ③ 攒 Laya 微调种子。
+JSONL 文件，每类（过/拦/转人工）各 10 条以上最有价值。
+用法：① sweep 定阈值 ② 挑难例进 `tests/` 做回归 ③ 攒微调种子。

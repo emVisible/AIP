@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { Check, FileInput, GitBranch, Scale, ShieldCheck, X } from 'lucide-react'
 import { ReviewRecord } from './api'
+import { ConfBar } from './components/ui'
 
 /** 单条记录的链路时间线：提交 → 路由 → 判定 → 网关 → 终态 */
 export default function Timeline({ record }: { record: ReviewRecord }) {
@@ -66,16 +67,7 @@ export default function Timeline({ record }: { record: ReviewRecord }) {
           <div>
             <div className="t-title">{s.title}</div>
             <div className="t-desc">{s.desc}</div>
-            {s.bar !== undefined && (
-              <div className="confbar">
-                <motion.div
-                  className={`confbar-fill ${s.tone}`}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${Math.round(s.bar * 100)}%` }}
-                  transition={{ duration: 0.5, ease: 'easeOut' }}
-                />
-              </div>
-            )}
+            {s.bar !== undefined && <ConfBar value={s.bar} tone={s.tone as '' | 'ok' | 'warn' | 'bad'} />}
           </div>
         </motion.li>
       ))}

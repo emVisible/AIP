@@ -119,23 +119,36 @@ header h1 {
   font-size: 13px;
 }
 
-/* 主区 */
+/* 主区：子项 min-width:0 是防溢出的铁律（grid/flex 子项默认撑爆） */
 .main {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+  align-items: start;
+}
+.main > * {
+  min-width: 0;
 }
 @media (max-width: 860px) {
   .main {
     grid-template-columns: 1fr;
   }
 }
-section {
+.card {
   background: var(--card);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 14px;
-  min-height: 320px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.queue ul {
+  max-height: 560px;
+  overflow-y: auto;
+}
+.detail {
+  max-height: calc(100vh - 230px);
+  overflow-y: auto;
 }
 nav {
   display: flex;
@@ -184,22 +197,23 @@ ul {
 .queue li.sel {
   background: #e7ebfa;
 }
-.state {
+.tag {
   font-size: 11px;
   padding: 2px 9px;
   border-radius: 999px;
   background: var(--line);
   white-space: nowrap;
+  flex-shrink: 0;
 }
-.state.approved {
+.tag.ok {
   background: var(--ok-bg);
   color: var(--ok);
 }
-.state.rejected {
+.tag.bad {
   background: var(--bad-bg);
   color: var(--bad);
 }
-.state.pending {
+.tag.warn {
   background: var(--warn-bg);
   color: var(--warn);
 }
@@ -207,12 +221,37 @@ ul {
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 .title {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.time {
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  background: var(--bg);
+  border-radius: 5px;
+  padding: 1px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  vertical-align: bottom;
 }
 .conf {
   color: var(--muted);
@@ -228,18 +267,25 @@ ul {
 .detail h2 {
   margin: 2px 0 8px;
   font-size: 18px;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 .detail pre {
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   background: var(--bg);
   padding: 11px 12px;
   border-radius: 8px;
   font-size: 13.5px;
   line-height: 1.65;
+  max-height: 260px;
+  overflow-y: auto;
 }
 .meta {
   color: var(--muted);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 .reasons {
   font-size: 13px;
@@ -248,6 +294,8 @@ ul {
 }
 .reasons li {
   margin: 3px 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* 链路时间线 */
@@ -263,6 +311,10 @@ ul {
   padding-left: 14px;
   margin-left: 7px;
   position: relative;
+}
+.timeline li > div {
+  min-width: 0;
+  flex: 1;
 }
 .timeline .dot {
   position: absolute;

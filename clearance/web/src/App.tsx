@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Counts, ReviewRecord, SidecarInfo, api, subscribeEvents } from './api'
 import StatusBar from './StatusBar'
 import Timeline from './Timeline'
+import { Card, EmptyState, KIND_ZH, Mono, StateTag, TimeText } from './components/ui'
 import './styles.css'
 
 type Filter = '' | 'pending' | 'approved' | 'rejected'
@@ -131,7 +132,7 @@ export default function App() {
       {!connected && <div className="error">后端未连接（先跑 ./start.sh），5 秒后重试。</div>}
 
       <div className="main">
-        <section className="queue">
+        <Card className="queue">
           <nav>
             {FILTERS.map((f) => (
               <button
@@ -159,24 +160,21 @@ export default function App() {
                   className={selectedId === r.item.id ? 'sel' : ''}
                   onClick={() => setSelectedId(r.item.id)}
                 >
-                  <span className={`state ${r.state}`}>
-                    {r.state === 'pending' ? '待审' : r.state === 'approved' ? '通过' : '驳回'}
+                  <StateTag state={r.state} />
+                  <span className="kind">{KIND_ZH[r.item.kind] ?? r.item.kind}</span>
+                  <span className="title" title={r.item.title}>
+                    {r.item.title || '(无标题)'}
                   </span>
-                  <span className="kind">{r.item.kind}</span>
-                  <span className="title">{r.item.title || '(无标题)'}</span>
+                  <TimeText ts={r.item.ts} />
                   <span className="conf">{r.decision.confidence.toFixed(2)}</span>
                 </motion.li>
               ))}
             </AnimatePresence>
           </ul>
-          {items.length === 0 && (
-            <p className="empty">
-              <Inbox size={16} /> 空队列——从右边提交第一条吧。
-            </p>
-          )}
-        </section>
+          {items.length === 0 && <EmptyState icon={<Inbox size={16} />} text="空队列——从右边提交第一条吧。" />}
+        </Card>
 
-        <section className="detail">
+        <Card className="detail">
           <AnimatePresence mode="wait">
             {selected ? (
               <motion.div
@@ -187,6 +185,10 @@ export default function App() {
                 transition={{ duration: 0.18 }}
               >
                 <h2>{selected.item.title || '(无标题)'}</h2>
+                <p className="meta">
+                  {KIND_ZH[selected.item.kind] ?? selected.item.kind} ·{' '}
+                  <Mono text={selected.item.id} /> · <TimeText ts={selected.item.ts} />
+                </p>
                 <pre>{selected.item.body}</pre>
                 <Timeline record={selected} />
                 <ul className="reasons">
@@ -230,7 +232,7 @@ export default function App() {
             <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
               {KINDS.map((k) => (
                 <option key={k} value={k}>
-                  {k}
+                  {KIND_ZH[k]}（{k}）
                 </option>
               ))}
             </select>
@@ -247,7 +249,7 @@ export default function App() {
             />
             <button type="submit">提交</button>
           </form>
-        </section>
+        </Card>
       </div>
 
       <AnimatePresence>

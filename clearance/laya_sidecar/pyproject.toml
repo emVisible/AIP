@@ -1,0 +1,9 @@
+[project]
+name = "clearance-laya-sidecar"
+version = "0.1.0"
+description = "Clearance 的 Laya 独立决策服务（torch 系重依赖隔离在此 venv）"
+requires-python = ">=3.10"
+dependencies = ["laya"]
+
+[tool.uv]
+package = false

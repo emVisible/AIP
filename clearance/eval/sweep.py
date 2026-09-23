@@ -70,7 +70,8 @@ def main() -> int:
     p.add_argument("--thresholds", default="0.70,0.75,0.80,0.85,0.90,0.95")
     a = p.parse_args()
     rows = load_samples(a.samples)
-    print(f"samples={len(rows)} engine={'laya' if __import__('importlib').util.find_spec('laya') else 'heuristic'}")
+    from clearance_core.decide import engine_name  # noqa: E402
+    print(f"samples={len(rows)} engine={engine_name()}")
     print(f"{'thr':>6} {'acc':>6} {'auto':>6} {'human':>6} {'auto_err':>9}")
     best = None
     results = []

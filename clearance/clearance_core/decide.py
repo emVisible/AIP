@@ -1,18 +1,24 @@
-"""决策引擎：有 laya 走 Router 单次前向，无则 heuristic（诚实标注引擎名）。
+"""决策引擎：优先 Laya sidecar（HTTP），缺席诚实降级 heuristic。
 
-Laya 答案格式（见 laya/README）：
+Laya 答案格式：
   choice → answers[q]["choice"], answers[q]["confidence"]
   score  → answers[q]["score"]
   noul   → answers[q]["noul"]  (P(true) ∈ [0,1])
+
+本文件保持 stdlib only：laya/torch 重依赖只活在 laya_sidecar 进程里。
 """
 from __future__ import annotations
 
-import importlib.util
+import json
+import os
+import urllib.request
 
 from .models import AUTO_APPROVE, AUTO_REJECT, NEEDS_REVIEW, Decision, ReviewItem
 from .questions import build_review_questions
 
 AUTO_THRESHOLD = 0.85
+SIDECAR_URL = os.environ.get("LAYA_SIDECAR_URL", "http://127.0.0.1:8685")
+SIDECAR_TIMEOUT = float(os.environ.get("LAYA_SIDECAR_TIMEOUT", "5"))
 
 SPAM_HITS = ("中奖", "免费领取", "点击链接", "刷单", "兼职日结", "加微信",
              "free money", "click here", "winner", "crypto giveaway")
@@ -21,16 +27,18 @@ FRAUD_HITS = ("银行转账", "验证码", "中奖税", "保证金", "解冻费"
               "suspended", "wire transfer")
 SENSITIVE_HITS = ("密码", "身份证", "银行卡", "翻墙", "password", "ssn")
 
-_LAYA_ROUTER = None
-_LAYA_OK = importlib.util.find_spec("laya") is not None
+
+def _post(path: str, payload: dict, timeout: float) -> dict:
+    req = urllib.request.Request(
+        SIDECAR_URL + path, data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.load(r)
 
 
-def _get_router():
-    global _LAYA_ROUTER
-    if _LAYA_ROUTER is None:
-        from laya import Router
-        _LAYA_ROUTER = Router(max_loaded=2)
-    return _LAYA_ROUTER
+def _get(path: str, timeout: float) -> dict:
+    with urllib.request.urlopen(SIDECAR_URL + path, timeout=timeout) as r:
+        return json.load(r)
 
 
 def _hits(text: str, words) -> list:
@@ -38,7 +46,7 @@ def _hits(text: str, words) -> list:
 
 
 def heuristic_decide(item: ReviewItem) -> Decision:
-    """关键词兜底：信号弱，confidence 天花板 0.86 且只在零命中时给过线值。"""
+    """关键词兜底：信号弱，confidence 天花板 0.88，且只在命中明确时给过线值。"""
     text = item.text
     reasons: list[str] = []
     spam = _hits(text, SPAM_HITS)
@@ -59,15 +67,19 @@ def heuristic_decide(item: ReviewItem) -> Decision:
         return Decision(NEEDS_REVIEW, 0.60, "heuristic",
                         ["heuristic: text too long for weak signal"], "L1")
     return Decision(AUTO_APPROVE, 0.86, "heuristic",
-                    ["heuristic: no hits (weak signal, replace with Laya)"], "L1")
+                    ["heuristic: no hits (weak signal, start sidecar for Laya)"], "L1")
 
 
-def laya_decide(item: ReviewItem, questions: dict | None = None) -> Decision:
-    router = _get_router()
-    questions = questions or build_review_questions()
-    res = router.predict({"kind": item.kind, "text": item.text}, questions)
+def sidecar_decide(item: ReviewItem, questions: dict | None = None) -> Decision:
+    res = _post("/decide", {"kind": item.kind, "text": item.text,
+                            "questions": questions or build_review_questions()},
+                SIDECAR_TIMEOUT)
+    if not res.get("ok"):
+        raise RuntimeError(f"sidecar error: {res.get('error')}")
     ans = res.get("answers", {})
-    reasons: list[str] = []
+    routing = res.get("routing", {})
+    latency = res.get("latency_ms", -1)
+    reasons = [f"laya via sidecar model={routing.get('model')} {latency}ms"]
 
     def noul(q: str) -> float:
         try:
@@ -92,28 +104,30 @@ def laya_decide(item: ReviewItem, questions: dict | None = None) -> Decision:
     sev = score("severity")
 
     if max(p_fraud, p_toxic) >= AUTO_THRESHOLD:
-        return Decision(AUTO_REJECT, max(p_fraud, p_toxic), "laya",
+        return Decision(AUTO_REJECT, max(p_fraud, p_toxic), "laya:sidecar",
                         reasons + [f"fraud={p_fraud:.2f} toxic={p_toxic:.2f}"], "L2")
     if p_spam >= AUTO_THRESHOLD:
-        return Decision(AUTO_REJECT, p_spam, "laya",
+        return Decision(AUTO_REJECT, p_spam, "laya:sidecar",
                         reasons + [f"spam={p_spam:.2f}"], "L2")
     if p_sens >= 0.5 or sev >= 1.5 or cat in ("sensitive", "fraud", "abuse"):
         conf = max(p_sens, min(sev / 2.0, 1.0), cat_conf)
-        return Decision(NEEDS_REVIEW, conf, "laya",
+        return Decision(NEEDS_REVIEW, conf, "laya:sidecar",
                         reasons + [f"sensitive={p_sens:.2f} severity={sev:.2f}"], "L1")
-    return Decision(AUTO_APPROVE, max(cat_conf, 0.5), "laya", reasons, "L1")
+    return Decision(AUTO_APPROVE, max(cat_conf, 0.5), "laya:sidecar", reasons, "L1")
 
 
 def decide(item: ReviewItem, questions: dict | None = None) -> Decision:
-    if _LAYA_OK:
-        try:
-            return laya_decide(item, questions)
-        except Exception as e:  # 模型失败不炸链，诚实降级
-            d = heuristic_decide(item)
-            d.reasons.append(f"laya failed, fallback: {e}")
-            return d
-    return heuristic_decide(item)
+    try:
+        return sidecar_decide(item, questions)
+    except Exception as e:  # sidecar 缺席/失败不炸链，诚实降级
+        d = heuristic_decide(item)
+        d.reasons.append(f"sidecar unreachable, fallback: {type(e).__name__}")
+        return d
 
 
 def engine_name() -> str:
-    return "laya" if _LAYA_OK else "heuristic"
+    try:
+        h = _get("/health", timeout=0.3)
+        return "laya:sidecar" if h.get("ok") else "heuristic"
+    except Exception:
+        return "heuristic"

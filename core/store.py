@@ -92,7 +92,9 @@ class ReviewStore:
         decision = decide(item)  # 决策看全文；落盘只留引用（CoD）
         final_action, via = gateway.route(decision.action, decision.confidence)
         ok, verdict = gateway.validate_action(final_action, {"review_id": item.id})
-        assert ok, verdict  # 网关内动作必须合法，否则是代码 bug
+        if not ok:  # 网关内动作必须合法，否则是代码 bug。
+            # 不用 assert：`python -O` 会把真实门禁一起摘掉。
+            raise RuntimeError(f"gateway rejected internal action: {verdict}")
         state = {"review.approve": "approved", "review.reject": "rejected"}.get(
             final_action, "pending")
         body_ref = self._spill_body(item.id, body)

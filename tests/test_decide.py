@@ -1,7 +1,8 @@
 """heuristic 决策契约：引擎诚实标注，不确定转人工。"""
 import os
 import unittest
-from core.decide import decide, engine_name
+from core import gateway
+from core.decide import AUTO_THRESHOLD, decide, engine_name
 from core.models import ReviewItem, new_id
 
 
@@ -42,6 +43,25 @@ class TestDecide(unittest.TestCase):
     def test_clean_approved(self):
         d = decide(item("停水通知", "明早 8 点停水维护，请提前储水"))
         self.assertEqual(d.action, "review.approve")
+
+    def test_fallback_never_auto_approves(self):
+        """兜底引擎只准拦、不准放：放行置信度必须低于自动阈值，门控后转人工。
+
+        降级不得放宽执行边界——红线是 auto_err=0，宁可多转人工。
+        """
+        d = decide(item("停水通知", "明早 8 点停水维护，请提前储水"))
+        self.assertEqual(d.engine, "heuristic")
+        self.assertLess(d.confidence, AUTO_THRESHOLD)
+        final, via = gateway.route(d.action, d.confidence)
+        self.assertEqual(final, "human.task.create")
+        self.assertNotEqual(via, "auto")
+
+    def test_fallback_may_still_auto_block(self):
+        """兜底的拦截方向仍可自动执行：证据弱时拦截只花人工成本。"""
+        d = decide(item("返利", "点击链接免费领取，刷单日结加微信"))
+        self.assertEqual(d.engine, "heuristic")
+        final, via = gateway.route(d.action, d.confidence)
+        self.assertEqual((final, via), ("review.reject", "auto"))
 
 
 if __name__ == "__main__":

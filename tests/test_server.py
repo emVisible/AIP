@@ -11,7 +11,6 @@ import urllib.request
 from core.server import EventHub, make_handler
 from core.store import ReviewStore
 from http.server import ThreadingHTTPServer
-import http.client
 
 
 def _call(method, url, payload=None):

@@ -59,7 +59,8 @@ def cmd_context(a) -> int:
     return 0
 
 
-def cmd_demo(_a) -> int:    s = _store()
+def cmd_demo(_a) -> int:
+    s = _store()
     samples = [
         ("article", "小区停水通知", "明早 8 点到 12 点停水维护，请提前储水。", {}),
         ("comment", "限时返利", "点击链接免费领取 888 元，刷单日结加微信。", {}),

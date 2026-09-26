@@ -20,15 +20,14 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-_CRED_KEY = re.compile(r"(password|passwd|pwd|api[_-]?key|secret|token|身份证|银行卡)",
-                       re.IGNORECASE)
+from core.gateway import CREDENTIAL_RE  # noqa: E402  C4 拒绝清单：全仓唯一定义处
 
 
 def clean_meta(meta: dict) -> dict:
     if not isinstance(meta, dict):
         return {}
     return {k: v for k, v in meta.items()
-            if not _CRED_KEY.search(str(k)) and not _CRED_KEY.search(str(v))}
+            if not CREDENTIAL_RE.search(str(k)) and not CREDENTIAL_RE.search(str(v))}
 
 
 def _resolve_body(item: dict, data_dir: str) -> str:

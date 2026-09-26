@@ -24,7 +24,8 @@ REGISTRY = {
 }
 
 # C4：凭据禁入 payload。L3/L4 本网关不存在，出现即转人工。
-_CRED_RE = re.compile(
+# 全仓唯一一份拒绝清单：eval 出口过滤（export.clean_meta）从此处导入，不另立副本。
+CREDENTIAL_RE = re.compile(
     r"(password|passwd|pwd|api[_-]?key|secret|token|身份证|银行卡|-----BEGIN )",
     re.IGNORECASE,
 )
@@ -36,7 +37,7 @@ def validate_action(name: str, params: dict) -> tuple[bool, str]:
     blob = json.dumps(params, ensure_ascii=False, default=str)
     if len(blob) > 4096:  # CoD-1：事件/参数体 ≤4KB
         return False, "payload_too_large: >4KB, use context.get"
-    if _CRED_RE.search(blob):
+    if CREDENTIAL_RE.search(blob):
         return False, "credential_in_payload: C4 violation"
     return True, "permitted"
 

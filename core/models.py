@@ -36,7 +36,8 @@ class Decision:
     confidence: float
     engine: str  # rules | laya:sidecar | jev | heuristic
     reasons: list = field(default_factory=list)
-    risk: str = "L1"
+    # 风险等级不在此声明：它是「能力」的属性，唯一权威是 gateway.REGISTRY（C3）。
+    # 曾有一个 risk 字段随 Decision 传来，与注册表同语义不同值（approve 报 L1、注册表 L2）。
     latency_ms: int = -1  # 端到端判定耗时（实测；heuristic/rules 为 -1）
     route_model: str = ""  # 路由到的 checkpoint / 云端模型版本
     usage: dict = field(default_factory=dict)  # 云端计费：{input_tokens, output_tokens}

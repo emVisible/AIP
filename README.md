@@ -14,8 +14,9 @@ expensive than human review, so `auto_err` must stay 0.
 3. **AI holds no execution power**: engine output must pass registry validation
    and gating; it cannot be bypassed.
 4. **Confidence gating**: auto-execute only above threshold, otherwise human.
-   With no model engine available, heuristic decides (fail-open by design,
-   offline-first).
+   With no model engine available the heuristic still auto-blocks spam/fraud but
+   never auto-approves — a fallback engine may block, never pass (offline-first,
+   execution fail-closed).
 5. **Everything auditable**: append-only audit log; terminal states
    (`pending` → `approved` / `rejected`) never transition back.
 

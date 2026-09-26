@@ -15,7 +15,6 @@ export interface Decision {
   confidence: number
   engine: string
   reasons: string[]
-  risk: string
   latency_ms: number
   route_model: string
   usage: Record<string, number>

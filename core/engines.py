@@ -18,6 +18,10 @@ from .questions import build_review_questions
 AUTO_THRESHOLD = 0.85
 DEFAULT_ORDER = ("rules", "laya:sidecar", "jev", "heuristic")
 
+# 兜底引擎的放行置信度必须严格低于 AUTO_THRESHOLD：降级不得放宽执行边界。
+# 否则「无模型」状态会事实上变成全自动放行——系统最弱的时刻拥有最大的权限。
+FALLBACK_PASS_CONFIDENCE = round(AUTO_THRESHOLD - 0.25, 2)  # 0.60
+
 _CRED_RULE = ("密码", "身份证", "银行卡", "password", "ssn")
 
 
@@ -67,17 +71,15 @@ def map_typed_answers(ans: dict, *, engine: str, latency_ms: int = -1,
 
     if max(p_fraud, p_toxic) >= AUTO_THRESHOLD:
         return Decision(AUTO_REJECT, max(p_fraud, p_toxic), engine,
-                        reasons + [f"fraud={p_fraud:.2f} toxic={p_toxic:.2f}"],
-                        "L2", **kw)
+                        reasons + [f"fraud={p_fraud:.2f} toxic={p_toxic:.2f}"], **kw)
     if p_spam >= AUTO_THRESHOLD:
         return Decision(AUTO_REJECT, p_spam, engine,
-                        reasons + [f"spam={p_spam:.2f}"], "L2", **kw)
+                        reasons + [f"spam={p_spam:.2f}"], **kw)
     if p_sens >= 0.5 or sev >= 1.5 or cat in ("sensitive", "fraud", "abuse"):
         conf = max(p_sens, min(sev / 2.0, 1.0), cat_conf)
         return Decision(NEEDS_REVIEW, conf, engine,
-                        reasons + [f"sensitive={p_sens:.2f} severity={sev:.2f}"],
-                        "L1", **kw)
-    return Decision(AUTO_APPROVE, max(cat_conf, 0.5), engine, reasons, "L1", **kw)
+                        reasons + [f"sensitive={p_sens:.2f} severity={sev:.2f}"], **kw)
+    return Decision(AUTO_APPROVE, max(cat_conf, 0.5), engine, reasons, **kw)
 
 
 class RulesEngine(Engine):
@@ -88,7 +90,7 @@ class RulesEngine(Engine):
         text = item.text
         if any(w in text for w in _CRED_RULE):
             return Decision(NEEDS_REVIEW, 0.75, "rules",
-                            ["rules: credential-like content, must human review"], "L1")
+                            ["rules: credential-like content, must human review"])
         return None
 
 
@@ -257,7 +259,8 @@ def _hits(text: str, words) -> list:
 
 
 def heuristic_decide(item: ReviewItem) -> Decision:
-    """关键词兜底：信号弱，confidence 天花板 0.88，且只在命中明确时给过线值。"""
+    """关键词兜底：信号弱，只准自动拦、不准自动放（放行走 FALLBACK_PASS_CONFIDENCE，
+    必不过线）。命中明确时才给过线的驳回值——驳回的代价是人工，放行的代价是后果。"""
     text = item.text
     reasons: list[str] = []
     spam = _hits(text, SPAM_HITS)
@@ -267,15 +270,16 @@ def heuristic_decide(item: ReviewItem) -> Decision:
 
     if fraud or toxic:
         reasons += [f"heuristic hit fraud={fraud}", f"heuristic hit toxic={toxic}"]
-        return Decision(AUTO_REJECT, 0.88, "heuristic", reasons, "L2")
+        return Decision(AUTO_REJECT, 0.88, "heuristic", reasons)
     if spam:
         reasons.append(f"heuristic hit spam={spam}")
-        return Decision(AUTO_REJECT, 0.86, "heuristic", reasons, "L2")
+        return Decision(AUTO_REJECT, 0.86, "heuristic", reasons)
     if sens:
         reasons.append(f"heuristic hit sensitive={sens}")
-        return Decision(NEEDS_REVIEW, 0.70, "heuristic", reasons, "L1")
+        return Decision(NEEDS_REVIEW, 0.70, "heuristic", reasons)
     if len(text) > 4000:
         return Decision(NEEDS_REVIEW, 0.60, "heuristic",
-                        ["heuristic: text too long for weak signal"], "L1")
-    return Decision(AUTO_APPROVE, 0.86, "heuristic",
-                    ["heuristic: no hits (weak signal, start sidecar for Laya)"], "L1")
+                        ["heuristic: text too long for weak signal"])
+    return Decision(AUTO_APPROVE, FALLBACK_PASS_CONFIDENCE, "heuristic",
+                    ["heuristic: no hits (weak signal, never auto-passes — "
+                     "start sidecar for Laya)"])
